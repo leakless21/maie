@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Meeting Notes V1",
+  "description": "Structured format for meeting transcripts with categorization tags",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "The title of the meeting",
+      "maxLength": 200
+    },
+    "abstract": {
+      "type": "string",
+      "description": "A brief summary of the meeting's purpose and outcomes",
+      "maxLength": 1000
+    },
+    "main_points": {
+      "type": "array",
+      "description": "Key discussion points covered in the meeting",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 1,
+      "maxItems": 20
+    },
+    "tags": {
+      "type": "array",
+      "description": "Category tags for content classification (FR-6)",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  },
+  "required": ["title", "abstract", "main_points", "tags"],
+  "additionalProperties": false
+}

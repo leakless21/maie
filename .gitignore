@@ -1,0 +1,143 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+*.pyc
+*.pyo
+*.pyd
+.Python
+build/
+dist/
+wheels/
+*.egg-info/
+*.so
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.ENV
+
+# UV package manager
+.uv/
+uv.lock
+
+# Development artifacts
+.pytest_cache/
+.coverage
+htmlcov/
+.cov/
+.coverage.*
+.tox/
+.hypothesis/
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# OS-specific files
+.Trashes
+.Spotlight-V100
+.VolumeIcon.icns
+ehthumbs.db
+Icon?
+desktop.ini
+
+# Sensitive files (as mentioned in security guidelines)
+auth.json
+history.jsonl
+sessions/
+log/
+logs/
+*.log
+*.log.*
+
+# Data directories (should be mounted as volumes)
+data/
+
+# AI/ML models and data
+data/models/
+data/models/chunkformer/
+data/models/llm/
+data/models/whisper/
+*.bin
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.onnx
+*.joblib
+*.pickle
+*.pkl
+
+# Redis data
+data/redis/
+dump.rdb
+*.rdb
+
+# Audio files
+data/audio/
+*.mp3
+*.wav
+*.flac
+*.aac
+*.m4a
+*.ogg
+*.opus
+
+# Docker
+.dockerenv
+.dockerignore
+
+# Environment-specific configuration
+.env
+.env.local
+.env.*.local
+config.json
+*.local
+
+# Build artifacts and temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Testing
+.nyc_output/
+coverage/
+coverage.json
+*.gcda
+*.gcno
+
+# Documentation builds
+docs/_build/
+
+# CI/CD
+.github/workflows/*.yaml.bak
+.gitlab-ci.yml.bak
+
+# Jupyter notebooks
+.ipynb_checkpoints/
+
+# Shell history
+.bash_history
+.zsh_history
+.history
+
+# Python dependency management
+poetry.lock
+Pipfile
+Pipfile.lock
+requirements.txt
+requirements-dev.txt
+
+.github

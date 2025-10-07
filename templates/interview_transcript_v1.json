@@ -1,0 +1,45 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Interview Transcript V1",
+  "description": "Structured format for interview transcripts with categorization tags",
+  "type": "object",
+  "properties": {
+    "interview_summary": {
+      "type": "string",
+      "description": "A comprehensive summary of the interview content",
+      "maxLength": 2000
+    },
+    "key_insights": {
+      "type": "array",
+      "description": "Key insights or findings from the interview",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 1,
+      "maxItems": 15
+    },
+    "participant_sentiment": {
+      "type": "string",
+      "description": "Overall sentiment of the interview participant(s)",
+      "enum": ["positive", "neutral", "negative", "mixed"]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Category tags for content classification (FR-6)",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  },
+  "required": [
+    "interview_summary",
+    "key_insights",
+    "participant_sentiment",
+    "tags"
+  ],
+  "additionalProperties": false
+}

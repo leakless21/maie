@@ -1,0 +1,39 @@
+{# Meeting Notes Template v1 #}
+{% if title %}
+# {{ title }}
+
+{% endif %}
+{% if date %}
+**Date:** {{ date }}
+
+{% endif %}
+{% if participants %}
+**Participants:** {{ participants | join(', ') }}
+
+{% endif %}
+
+## Meeting Summary
+{{ summary }}
+
+## Key Points
+{% for point in key_points %}
+- {{ point }}
+{% endfor %}
+
+## Action Items
+{% if action_items %}
+{% for item in action_items %}
+- [ ] {{ item.description }} (Assigned to: {{ item.assignee }})
+{% endfor %}
+{% else %}
+No action items identified.
+{% endif %}
+
+## Decisions Made
+{% if decisions %}
+{% for decision in decisions %}
+- {{ decision }}
+{% endfor %}
+{% else %}
+No decisions made.
+{% endif %}

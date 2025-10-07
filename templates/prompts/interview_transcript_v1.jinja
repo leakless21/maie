@@ -1,0 +1,52 @@
+{# Interview Transcript Template v1 #}
+{% if title %}
+# {{ title }}
+
+{% endif %}
+{% if interviewee_name %}
+**Interviewee:** {{ interviewee_name }}
+
+{% endif %}
+{% if interviewer_name %}
+**Interviewer:** {{ interviewer_name }}
+
+{% endif %}
+{% if date %}
+**Date:** {{ date }}
+
+{% endif %}
+{% if duration %}
+**Duration:** {{ duration }}
+
+{% endif %}
+
+## Interview Summary
+{{ summary }}
+
+## Key Topics Discussed
+{% for topic in topics %}
+- {{ topic }}
+{% endfor %}
+
+## Important Quotes
+{% if quotes %}
+{% for quote in quotes %}
+> "{{ quote.text }}" - {{ quote.speaker }}
+{% endfor %}
+{% else %}
+No notable quotes identified.
+{% endif %}
+
+## Key Insights
+{% for insight in insights %}
+- {{ insight }}
+{% endfor %}
+
+## Follow-up Questions
+{% if follow_up_questions %}
+{% for question in follow_up_questions %}
+- {{ question }}
+{% endfor %}
+{% else %}
+No follow-up questions noted.
+{% endif %}

@@ -1,0 +1,42 @@
+{# Text Enhancement Prompt Template for LLM-based punctuation and capitalization #}
+
+{%- if not messages -%}
+{%- set messages = [] -%}
+{%- endif -%}
+
+{# System message #}
+{%- if add_generation_prompt and messages | length == 0 -%}
+{{- '' + system_message | default("You are a text enhancement assistant that adds proper punctuation and capitalization to transcribed speech. Add appropriate punctuation, capitalization, and fix any obvious errors while preserving the original meaning and content of the transcript.") -}}
+{%- endif -%}
+
+{# Add system message if provided and at beginning #}
+{%- if system_message and add_generation_prompt and messages | length == 0 -%}
+{{- '' + system_message -}}
+{%- endif -%}
+
+{# Process existing messages or create from text input #}
+{%- if messages | length > 0 -%}
+    {# If messages exist, format them in chat format #}
+    {%- for message in messages -%}
+        {%- if message.role == "system" -%}
+            {{- '' + message.content -}}
+        {%- elif message.role == "user" -%}
+            {{- '' + message.content -}}
+        {%- elif message.role == "assistant" -%}
+            {{- '' + message.content -}}
+        {%- endif -%}
+        {%- if not loop.last -%}{{eos_token}}{%- endif -%}
+    {%- endfor -%}
+{%- else -%}
+    {# Create messages from text input if no messages provided #}
+    {%- if text_input -%}
+        {{- '' + "Please enhance the following transcript by adding proper punctuation and capitalization:\n\n" + text_input -}}
+    {%- endif -%}
+{%- endif -%}
+
+{# Add generation prompt if requested #}
+{%- if add_generation_prompt and messages | length > 0 and messages | last.role != "assistant" -%}
+    {{- eos_token -}}
+{%- elif add_generation_prompt and (messages | length == 0 and text_input) -%}
+    {{- eos_token -}}
+{%- endif -%}

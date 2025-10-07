@@ -1,0 +1,39 @@
+{# Generic Summary Template v1 #}
+{% if title %}
+# {{ title }}
+
+{% endif %}
+{% if source_type %}
+**Source Type:** {{ source_type }}
+
+{% endif %}
+{% if date %}
+**Date:** {{ date }}
+
+{% endif %}
+
+## Summary
+{{ summary }}
+
+## Key Points
+{% for point in key_points %}
+- {{ point }}
+{% endfor %}
+
+## Highlights
+{% if highlights %}
+{% for highlight in highlights %}
+- {{ highlight }}
+{% endfor %}
+{% else %}
+No highlights identified.
+{% endif %}
+
+## Important Details
+{% if important_details %}
+{% for detail in important_details %}
+- {{ detail }}
+{% endfor %}
+{% else %}
+No important details noted.
+{% endif %}
