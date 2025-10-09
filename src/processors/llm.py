@@ -7,6 +7,7 @@ from typing import Any, Dict, Optional
 from src.processors.base import LLMBackend, LLMResult
 from src.processors.prompt.renderer import PromptRenderer
 from src.processors.chat.template_manager import ChatTemplateManager
+from src.tooling.vllm_utils import apply_overrides_to_sampling, normalize_overrides
 
 
 class LLMProcessor(LLMBackend):
@@ -40,43 +41,78 @@ class LLMProcessor(LLMBackend):
     def execute(self, text: str, **kwargs) -> LLMResult:
         """
         Execute LLM processing on text for enhancement and summarization.
-        
-        Args:
-            text: Input text to process
-            **kwargs: Additional backend-specific parameters
-            
-        Returns:
-            LLMResult containing the processed output and metadata
         """
-        task = kwargs.get('task', 'general')
-        
-        if task == 'enhancement':
-            # Load the text enhancement prompt template
-            try:
-                enhancement_prompt_messages = self.prompt_renderer.render(
-                    template_id="text_enhancement_v1",
-                    text_input=text
-                )
-                # For now, use the text directly as the processed text
-                # Actual implementation will use the LLM to process the prompt
-                processed_text = text  # This will be replaced with actual LLM output
-            except Exception as e:
-                # If there's an error with template rendering, return original text
-                processed_text = text
+        task = kwargs.get("task", "general")
+
+        if self.model is None:
+            return LLMResult(
+                text=text,
+                tokens_used=None,
+                model_info={"model_name": "unavailable", "reason": "vLLM not installed"},
+                metadata={"task": task, "fallback": True},
+            )
+
+        prompt_text = text
+
+        candidate_keys = {
+            "temperature",
+            "top_p",
+            "top_k",
+            "min_p",
+            "max_tokens",
+            "max_new_tokens",
+            "stop",
+            "stop_token_ids",
+            "presence_penalty",
+            "frequency_penalty",
+            "repetition_penalty",
+            "seed",
+            "logprobs",
+            "prompt_logprobs",
+        }
+        request_overrides: Dict[str, Any] = {k: kwargs[k] for k in candidate_keys if k in kwargs}
+
+        # Defaults from config per task
+        if task == "enhancement":
+            base_overrides: Dict[str, Any] = {
+                "temperature": settings.llm_enhance_temperature,
+                "top_p": settings.llm_enhance_top_p,
+                "top_k": settings.llm_enhance_top_k,
+                "max_tokens": settings.llm_enhance_max_tokens,
+            }
         else:
-            # For other tasks, return placeholder
-            processed_text = "Placeholder processed text from LLM processor"
-        
-        # Implementation will be added later
-        # For now, return a placeholder result
+            base_overrides = {
+                "temperature": settings.llm_sum_temperature,
+                "top_p": settings.llm_sum_top_p,
+                "top_k": settings.llm_sum_top_k,
+                "max_tokens": settings.llm_sum_max_tokens,
+            }
+
+        # Merge so that explicit request kwargs win over config defaults
+        merged_overrides = {**base_overrides, **request_overrides}
+
+        try:
+            default_sampling = self.model.get_default_sampling_params()  # type: ignore[attr-defined]
+        except Exception:
+            from vllm import SamplingParams  # type: ignore
+            default_sampling = SamplingParams()
+
+        sampling = apply_overrides_to_sampling(default_sampling, merged_overrides)
+
+        try:
+            outputs = self.model.generate([prompt_text], sampling)  # type: ignore[arg-type]
+            generated_text = outputs[0].outputs[0].text if outputs else ""
+        except Exception:
+            generated_text = text
+
         return LLMResult(
-            text=processed_text,
-            tokens_used=100,
+            text=generated_text or text,
+            tokens_used=None,
             model_info={
-                "model_name": "Qwen3-4B-Instruct",
-                "quantization": "AWQ-4bit"
+                "model_name": getattr(self.model, "_model", getattr(self.model, "model", "unknown")),
+                "generation_config": settings.llm_generation_config,
             },
-            metadata={"task": task}
+            metadata={"task": task, "overrides": normalize_overrides(merged_overrides)},
         )
     
     def enhance_text(self, text: str, **kwargs) -> Dict[str, Any]:
