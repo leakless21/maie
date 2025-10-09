@@ -7,7 +7,6 @@ This module contains the main processing logic that executes:
 With proper state management, GPU memory management, and error handling.
 """
 
-import asyncio
 import time
 import traceback
 import torch

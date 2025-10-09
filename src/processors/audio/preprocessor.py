@@ -7,9 +7,7 @@ quality validation, and metadata extraction using ffmpeg/ffprobe.
 import subprocess
 import tempfile
 import os
-from pathlib import Path
 from typing import Dict, Any, Optional
-import wave
 
 
 class AudioPreprocessor:

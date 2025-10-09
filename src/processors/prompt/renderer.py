@@ -1,6 +1,6 @@
 """Prompt renderer for MAIE prompt template system."""
 from typing import Dict, Any, List, Optional
-from jinja2 import Environment, Template
+from jinja2 import Environment
 
 
 class PromptTemplateLoader:  # Forward reference workaround

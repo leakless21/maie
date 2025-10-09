@@ -4,29 +4,17 @@ RQ Worker entry point for the Modular Audio Intelligence Engine (MAIE).
 This module sets up and configures the RQ worker with Redis connection,
 model verification on startup, and proper worker configuration.
 """
-
-import os
 import sys
-import os.path
 from redis import Redis
-from rq import Worker, Queue, Connection
-from typing import Optional
+from rq import Worker
+
+from src.config import settings
 
 
 def setup_redis_connection() -> Redis:
-    """Initialize Redis connection with configuration from environment."""
-    redis_host = os.getenv("REDIS_HOST", "localhost")
-    redis_port = int(os.getenv("REDIS_PORT", "6379"))
-    redis_db = int(os.getenv("REDIS_DB", "0"))  # Use DB 0 for queues per TDD
-    redis_password = os.getenv("REDIS_PASSWORD", None)
-    
-    redis_conn = Redis(
-        host=redis_host,
-        port=redis_port,
-        db=redis_db,
-        password=redis_password,
-        decode_responses=False
-    )
+    """Initialize Redis connection with configuration from centralized settings."""
+    # Create Redis connection from URL
+    redis_conn = Redis.from_url(settings.redis_url, decode_responses=False)
     
     # Verify Redis connection
     try:
@@ -46,28 +34,21 @@ def verify_models() -> bool:
     print("Verifying models are available...")
     
     # Check if required model directories exist (per TDD section 3.7)
-    required_model_paths = [
-        "/data/models/whisper/erax-wow-turbo",
-        "/data/models/chunkformer/large-vie",
-        "/data/models/llm/qwen3-4b-awq"
-    ]
-    
-    # Allow for relative paths during development
-    model_dir = os.getenv("MODEL_DIR", "./data/models")
+    # Use the new config with Path objects
     required_paths = [
-        f"{model_dir}/whisper/erax-wow-turbo",
-        f"{model_dir}/chunkformer/large-vie",
-        f"{model_dir}/llm/qwen3-4b-awq"
+        settings.get_model_path("whisper/erax-wow-turbo"),
+        settings.get_model_path("chunkformer/large-vie"),
+        settings.get_model_path("llm/qwen3-4b-awq")
     ]
     
-    missing = [p for p in required_paths if not os.path.exists(p)]
+    missing = [str(p) for p in required_paths if not p.exists()]
     if missing:
         print(f"Missing models: {missing}. Run scripts/download_models.sh")
         return False
     
     # Verify processor modules are available
     try:
-        from src.processors.asr.factory import ASRFactory
+        from src.processors.asr.factory import ASRProcessorFactory
         from src.processors.llm import LLMProcessor
         print("All required models and modules are available")
         return True
@@ -92,16 +73,16 @@ def start_worker() -> None:
     # Define the queues this worker will listen to
     listen = ['default', 'audio_processing']
     
-    # Create RQ worker with connection
-    with Connection(redis_conn):
-        worker = Worker(
-            map(Queue, listen),
-            name=os.getenv("WORKER_NAME", "maie_worker"),
-            exception_handlers=[]
-        )
-        
-        print(f"Starting worker {worker.name}...")
-        worker.work()
+    # Create RQ worker with connection - use settings for worker name
+    worker = Worker(
+        listen,
+        connection=redis_conn,
+        name=settings.worker_name,
+        exception_handlers=[]
+    )
+    
+    print(f"Starting worker {worker.name}...")
+    worker.work()
 
 
 if __name__ == "__main__":

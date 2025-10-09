@@ -1,6 +1,4 @@
 # Chat template manager for Modular Audio Intelligence Engine
-import os
-import json
 from pathlib import Path
 from typing import Dict, Optional, Any
 from jinja2 import Environment, FileSystemLoader, Template

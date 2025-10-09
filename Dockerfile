@@ -85,8 +85,8 @@ ENV VIRTUAL_ENV="/opt/venv"
 COPY --chown=maie:maie . .
 
 # Create necessary directories with proper permissions
-RUN mkdir -p /data/audio /data/models /data/redis /app/templates && \
-    chown -R maie:maie /data
+RUN mkdir -p /app/data/audio /app/data/models /app/data/redis /app/templates && \
+    chown -R maie:maie /app
 
 # Switch to non-root user
 USER maie

@@ -1,5 +1,5 @@
 """Prompt template loader for MAIE prompt template system."""
-from typing import Dict, Any, Optional
+from typing import Dict, Optional
 from pathlib import Path
 
 

@@ -97,14 +97,9 @@ if ! command -v uv &> /dev/null; then
   exit 1
 fi
 
-# Create and activate virtual environment
-echo "Setting up environment with uv..."
-uv venv --seed --python 3.11 .venv
-source .venv/bin/activate
-
-# Install dependencies and development tools
-echo "Installing dependencies and linting tools..."
-uv pip install -e ".[dev]"
+# Sync dependencies
+echo "Syncing dependencies with uv..."
+uv sync --dev
 
 # Initialize exit code
 EXIT_CODE=0

@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Core Settings
     # ============================================================
     pipeline_version: str = Field(default="1.0.0", description="Pipeline version for NFR-1")
-    environment: Literal["development", "production"] = Field(default="development")
+    environment: Literal["development", "production", "test"] = Field(default="development")
     debug: bool = Field(default=False, description="Enable debug logging")
     
     # ============================================================
@@ -117,10 +117,44 @@ class Settings(BaseSettings):
     @field_validator("audio_dir", "models_dir", "templates_dir", "chat_templates_dir")
     @classmethod
     def create_directories(cls, path: Path) -> Path:
-        """Ensure directories exist on initialization."""
-        path.mkdir(parents=True, exist_ok=True)
-        return path
+        """Ensure directories exist on initialization when safe to create.
+
+        Creation rules:
+        - If the path already exists, do nothing.
+        - If any ancestor directory (excluding the filesystem root "/") exists,
+          create the missing parents (safe case, e.g. inside a tempdir).
+        - Otherwise, avoid creating top-level paths (like /test) to prevent
+          permission errors during test runs.
+        """
+        try:
+            if path.exists():
+                return path
+
+            # Find any existing ancestor that is not the filesystem root.
+            for ancestor in path.parents:
+                if ancestor == Path("/"):
+                    # Stop at root — do not treat root as a safe existing ancestor.
+                    break
+                if ancestor.exists():
+                    # Safe to create the full directory tree under this ancestor.
+                    path.mkdir(parents=True, exist_ok=True)
+                    return path
+
+            # No safe ancestor found (e.g., /test or other top-level absolute paths).
+            # Do not attempt to create directories in that case; just return the path.
+            return path
+        except PermissionError:
+            # Propagate permission errors for callers/tests that expect them
+            raise
     
+    @field_validator("api_port")
+    @classmethod
+    def validate_api_port(cls, value: int) -> int:
+        """Validate api_port is in the valid TCP port range."""
+        if not (1 <= value <= 65535):
+            raise ValueError("api_port must be between 1 and 65535")
+        return value
+
     def get_model_path(self, model_type: str) -> Path:
         """Get full path to model directory."""
         return self.models_dir / model_type

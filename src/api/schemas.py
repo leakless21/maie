@@ -4,7 +4,7 @@ from datetime import datetime
 from typing import List, Optional, Literal, Dict, Any
 from uuid import UUID
 from enum import Enum
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, model_validator, ConfigDict
 
 # =============================================================================
 # Enums
@@ -46,26 +46,31 @@ class ProcessRequestSchema(BaseModel):
         description="The summary format. Required if 'summary' is in features"
     )
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "features": ["clean_transcript", "summary"],
                 "template_id": "meeting_notes_v1"
             }
-    }
+        }
+    )
 
-    @field_validator('template_id')
-    @classmethod
-    def validate_template_id(cls, v, info):
-        """Validate that template_id is provided when summary is requested.
+    @model_validator(mode="after")
+    def check_template_required(cls, model):
+        """Ensure template_id is present when summary is requested.
 
-        Uses Pydantic v2 FieldValidator style: `info.data` contains other field values.
-        `features` will be coerced to a List[Feature], so compare with Feature.SUMMARY.
+        This runs after standard validation so `features` is normalized to list of Feature
+        or strings. Receives the validated model instance.
         """
-        features = info.data.get('features')
-        if features and Feature.SUMMARY in features and not v:
-            raise ValueError('template_id is required when summary is in features')
-        return v
+        features = getattr(model, "features", None)
+        template_id = getattr(model, "template_id", None)
+        if not features:
+            return model
+
+        normalized = [getattr(f, "value", f) for f in features]
+        if Feature.SUMMARY.value in normalized and not template_id:
+            raise ValueError("template_id is required when summary is in features")
+        return model
     
 # =============================================================================
 # Response Models
@@ -75,12 +80,13 @@ class ProcessResponse(BaseModel):
     """Response for POST /v1/process endpoint."""
     task_id: UUID = Field(description="Unique task identifier")
     
-    class Config:
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b"
             }
         }
+    )
 
 class ASRBackendSchema(BaseModel):
     """Schema for ASR backend version information."""
@@ -146,6 +152,10 @@ class StatusResponseSchema(BaseModel):
         ...,
         description="Current status of the task (pending, processing, completed, failed)"
     )
+    error: Optional[str] = Field(
+        None,
+        description="Error message if the task failed"
+    )
     submitted_at: datetime | None = None
     completed_at: datetime | None = None
     versions: Optional[VersionsSchema] = Field(
@@ -159,9 +169,10 @@ class StatusResponseSchema(BaseModel):
     results: Optional[ResultsSchema] = Field(
         None,
         description="Processing results"
-    )           
-    class Config:
-        json_schema_extra = {
+    )
+    
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
                 "status": "COMPLETE",
@@ -203,6 +214,7 @@ class StatusResponseSchema(BaseModel):
                 }
             }
         }
+    )
 
 
 class ModelInfoSchema(BaseModel):
@@ -275,3 +287,11 @@ class TemplatesResponseSchema(BaseModel):
         ...,
         description="List of available templates"
     )
+
+class HealthResponse(BaseModel):
+    """Response for GET /health endpoint."""
+    status: Literal["healthy", "unhealthy"]
+    version: str
+    redis_connected: bool
+    queue_depth: int
+    worker_active: bool

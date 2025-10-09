@@ -101,14 +101,9 @@ if ! command -v uv &> /dev/null; then
   exit 1
 fi
 
-# Create and activate virtual environment
-echo "Setting up test environment with uv..."
-uv venv --seed --python 3.11 .venv
-source .venv/bin/activate
-
-# Install dependencies
-echo "Installing dependencies and test requirements..."
-uv pip install -e ".[test]"
+# Sync dependencies
+echo "Syncing dependencies with uv..."
+uv sync --dev
 
 # Build pytest command
 PYTEST_CMD="uv run pytest"
@@ -135,8 +130,6 @@ fi
 # Add coverage if requested
 if [[ "$COVERAGE" == true ]]; then
   echo "Running tests with coverage report..."
-  # Install coverage if not already installed
-  uv pip install coverage[toml]
   
   # Run with coverage
   eval "$PYTEST_CMD --cov=src --cov-report=html --cov-report=term"

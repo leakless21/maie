@@ -86,14 +86,9 @@ if ! command -v uv &> /dev/null; then
   exit 1
 fi
 
-# Create and activate virtual environment
-echo "Setting up development environment with uv..."
-uv venv --seed --python 3.11 .venv
-source .venv/bin/activate
-
-# Install dependencies
-echo "Installing dependencies..."
-uv pip install -e .
+# Sync dependencies
+echo "Syncing dependencies with uv..."
+uv sync
 
 # Start services based on options
 if [[ "$API_ONLY" == true && "$WORKER_ONLY" == true ]]; then

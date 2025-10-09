@@ -3,7 +3,7 @@ name = "maie"
 version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.13"
 dependencies = [
     "chunkformer>=1.0.0",
     "litestar[standard]>=2.18.0",
@@ -13,11 +13,14 @@ dependencies = [
     "rq>=1.15.0",
     "huggingface-hub>=0.19.0",
     "loguru>=0.7.0",
+    "pydantic>=2.11.10",
 ]
 
 [dependency-groups]
 dev = [
     "black>=25.9.0",
     "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "pytest-cov>=7.0.0",
     "ruff>=0.13.3",
 ]

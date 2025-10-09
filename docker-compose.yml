@@ -55,6 +55,24 @@ services:
       - SECRET_API_KEY=${SECRET_API_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - MAX_FILE_SIZE_MB=500
+      - REDIS_RESULTS_DB=1
+      - WORKER_NAME=maie-worker
+      - JOB_TIMEOUT=600
+      - RESULT_TTL=86400
+      - WHISPER_MODEL_VARIANT=erax-wow-turbo
+      - WHISPER_BEAM_SIZE=5
+      - WHISPER_VAD_FILTER=True
+      - WHISPER_COMPUTE_TYPE=int8_float16
+      - LLM_MODEL_NAME=cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit
+      - LLM_GPU_MEMORY_UTILIZATION=0.9
+      - LLM_MAX_MODEL_LEN=32768
+      - LLM_TEMPERATURE=0.3
+      - LLM_TOP_P=0.9
+      - LLM_TOP_K=20
+      - LLM_MAX_TOKENS=4096
     command: ["python3", "-m", "src.api.main"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -93,6 +111,23 @@ services:
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - MAX_FILE_SIZE_MB=500
+      - REDIS_RESULTS_DB=1
+      - WORKER_NAME=maie-worker
+      - JOB_TIMEOUT=600
+      - RESULT_TTL=86400
+      - WHISPER_BEAM_SIZE=5
+      - WHISPER_VAD_FILTER=True
+      - WHISPER_COMPUTE_TYPE=int8_float16
+      - LLM_MODEL_NAME=cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit
+      - LLM_GPU_MEMORY_UTILIZATION=0.9
+      - LLM_MAX_MODEL_LEN=32768
+      - LLM_TEMPERATURE=0.3
+      - LLM_TOP_P=0.9
+      - LLM_TOP_K=20
+      - LLM_MAX_TOKENS=4096
     command: ["python3", "-m", "src.worker.main"]
     deploy:
       resources:

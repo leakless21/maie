@@ -94,16 +94,20 @@ done
 # Set default model flags if --all is true
 if [[ "$DOWNLOAD_ALL" == true ]]; then
   DOWNLOAD_ERA_X=true
- DOWNLOAD_CHUNKFORMER=true
+  DOWNLOAD_CHUNKFORMER=true
   DOWNLOAD_QWEN=true
 fi
 
-# Check if huggingface_hub is available
-if ! command -v huggingface-cli &> /dev/null; then
-  echo "Error: huggingface-cli is not installed."
-  echo "You can install it with: pip install huggingface_hub"
+# Check if uv is available
+if ! command -v uv &> /dev/null; then
+  echo "Error: uv is not installed. Please install uv to manage the Python environment."
+  echo "You can install it with: pip install uv"
   exit 1
 fi
+
+# Sync dependencies
+echo "Syncing dependencies with uv..."
+uv sync
 
 # Create models directory if it doesn't exist
 mkdir -p "$MODELS_DIR"
@@ -114,7 +118,7 @@ export HF_HOME="$MODELS_DIR"
 # Authenticate if token provided
 if [[ -n "$HF_TOKEN" ]]; then
   echo "Authenticating with Hugging Face..."
-  huggingface-cli login --token "$HF_TOKEN"
+  uv run huggingface-cli login --token "$HF_TOKEN"
 fi
 
 # Initialize exit code
@@ -132,7 +136,7 @@ download_model() {
     echo "  $description already exists at $model_path, skipping..."
   else
     echo "  Downloading $description..."
-    if huggingface-cli download "$model_name" --local-dir "$model_path" --local-dir-use-symlinks False; then
+    if uv run huggingface-cli download "$model_name" --local-dir "$model_path" --local-dir-use-symlinks False; then
       echo "  Successfully downloaded $description to $model_path"
     else
       echo "  Failed to download $description: $model_name"
