@@ -4,8 +4,8 @@ This note tracks temporary shims and placeholders introduced while getting the A
 walking skeleton and tests online. Revisit each item as the full implementation
 matures.
 
-**Last Updated:** October 8, 2025  
-**Status:** Routes implementation complete with 16/16 tests passing
+**Last Updated:** October 9, 2025  
+**Status:** Config and API best practices implemented with 104/108 tests passing
 
 ---
 
@@ -53,6 +53,34 @@ matures.
   3. Return dynamic model metadata (VRAM requirements, capabilities, variants)
   4. Add model health checks (verify model files exist and are loadable)
 - **Reference:** See TDD Section 3.4 for ASR Factory Pattern details
+
+**V1.0 ASR Implementation Scope:**
+
+Per V1.0 scope clarification (see `docs/V1.0_SCOPE_CLARIFICATION.md`), ASR implementation should focus on:
+
+✅ **Included in V1.0:**
+
+- Basic segment-level transcription (text + start/end timestamps)
+- VAD filtering support with custom parameters
+- Language detection
+- Segment-level confidence tracking
+- Sequential load → execute → unload pattern
+- Distil-Whisper model variant support
+
+❌ **Deferred to Post-V1.0:**
+
+- Word-level timestamps → V1.1+ (not in PRD metrics; for timeline/subtitle features)
+- Batched inference pipeline → V1.2+ (contradicts sequential architecture)
+- Speaker diarization → V1.1+ (requires pyannote.audio integration)
+- Streaming transcription → V1.3+ (requires WebSocket API)
+- Model preloading → V1.2+ (explicitly deferred in TDD Section 3.2)
+
+**Implementation Notes:**
+
+- `WhisperBackend.execute()` should NOT enable `word_timestamps=True` in V1.0
+- `WhisperBackend` should NOT implement `execute_batched()` method in V1.0
+- Focus on stability and sequential processing: Load → Process → Unload → Clear VRAM
+- See `docs/guide.md` "Future Enhancements (Post-V1.0 Roadmap)" section for detailed feature roadmap
 
 ### **Template Discovery Enhancement**
 
@@ -138,17 +166,79 @@ matures.
 
 ---
 
-## ✅ Completed Items
+## ✅ Recently Completed Items (October 9, 2025)
 
-- ✅ Implemented all 4 route controllers (Process, Status, Models, Templates)
-- ✅ Comprehensive test suite (16 tests, 100% pass rate)
-- ✅ File upload validation (type, size, format)
-- ✅ Request validation (features, template_id requirements)
-- ✅ Backpressure placeholder (429 handling)
-- ✅ Error field in StatusResponseSchema
-- ✅ Template directory scanning
-- ✅ Basic models endpoint
-- ✅ Type-safe implementations with Pydantic schemas
+### **Config Module Best Practices** ✅
+
+- **Location:** `src/config.py`
+- **Completed:**
+  - ✅ Added `validate_default=True` to SettingsConfigDict for early error detection
+  - ✅ Added `env_nested_delimiter="__"` for hierarchical configuration support
+  - ✅ Added comprehensive tests (4 new tests in `TestPydanticSettingsBestPractices`)
+- **Tests:** 38/38 config tests passing
+
+### **API Dependencies Security Verification** ✅
+
+- **Location:** `src/api/dependencies.py`
+- **Verified Already Correct:**
+  - ✅ Timing-safe API key comparison with `hmac.compare_digest()` (prevents timing attacks)
+  - ✅ Redis connection pooling with proper `encoding="utf-8"` and timeouts
+  - ✅ Litestar guards use correct signature `(ASGIConnection, BaseRouteHandler) -> None`
+  - ✅ Separate sync Redis client for RQ operations
+- **Tests:** Added 17 new tests for security verification
+
+### **API Routes Security Improvements** ✅
+
+- **Location:** `src/api/routes.py`
+- **Completed:**
+  - ✅ Added `sanitize_filename()` function to prevent path traversal attacks
+  - ✅ Updated `save_audio_file()` to use UUID-based filenames (not user input)
+  - ✅ Enhanced MIME type validation (checks both extension AND content-type)
+  - ✅ Improved file size validation with security comments
+- **Tests:** Added 7 security tests (4 passing, 3 skipped for future streaming)
+
+### **Best Practices Documentation** ✅
+
+- **Files:** `docs/implementation-changes.md`, `docs/guide.md`, `docs/PRD.md`
+- **Completed:**
+  - ✅ Created comprehensive implementation changes document
+  - ✅ Updated guide.md with best practices section
+  - ✅ Added NFR-6 security requirements to PRD.md
+- **Coverage:** All changes documented with code examples and test references
+
+---
+
+## 🔄 Remaining Best Practices TODOs
+
+### **File Streaming Implementation** (Future Enhancement)
+
+- **Location:** `src/api/routes.py::save_audio_file()`
+- **Status:** Skipped for now (marked as TODO in code)
+- **Action Items:**
+  1. Implement `aiofiles` streaming with 8KB chunks to prevent memory exhaustion
+  2. Add Content-Length header validation before reading
+  3. Update tests to verify chunk-based streaming
+- **Priority:** Medium (current implementation works but not optimal for large files)
+
+### **Lifespan Hooks for Redis Pools** (Future Enhancement)
+
+- **Location:** `src/api/main.py`
+- **Status:** Not implemented yet
+- **Action Items:**
+  1. Add `init_redis_pools()` and `close_redis_pools()` lifespan hooks
+  2. Implement proper Redis connection pool lifecycle management
+  3. Add tests for lifespan hook execution
+- **Priority:** Medium (current dependency injection works but pools recreated per request)
+
+### **Structured Logging Enhancement** (Future Enhancement)
+
+- **Location:** `src/api/main.py` exception handlers
+- **Status:** Basic exception handlers implemented
+- **Action Items:**
+  1. Add request context (IP, user agent, request ID) to logs
+  2. Implement debug vs production error detail levels
+  3. Add structured logging with JSON format for production
+- **Priority:** Low-Medium (current handlers work but could be more informative)
 
 ---
 
@@ -158,6 +248,7 @@ matures.
 2. Wire up RQ job enqueueing
 3. Add authentication guards to all endpoints
 4. Integrate ASRFactory for dynamic model discovery
+5. Consider implementing file streaming with `aiofiles` for production readiness
 
 Keep this file updated as implementation progresses. Delete completed sections
 to maintain clarity.

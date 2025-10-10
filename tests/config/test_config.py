@@ -44,7 +44,8 @@ class TestSettingsDefaults:
             assert config.whisper_model_variant == "erax-wow-turbo"
             assert config.whisper_beam_size == 5
             assert config.whisper_vad_filter is True
-            assert config.whisper_compute_type == "int8_float16"
+            assert config.whisper_compute_type == "int8"
+            assert config.whisper_device == "cpu"
 
     def test_llm_enhance_settings_defaults(self):
         """RED: llm_enhance model, gpu util 0.95, max_tokens 4096, temperature 0.0."""
@@ -380,3 +381,52 @@ class TestSmokeTests:
         assert hasattr(config, 'worker_name')
         assert hasattr(config, 'job_timeout')
         assert hasattr(config, 'result_ttl')
+
+
+class TestPydanticSettingsBestPractices:
+    """Test Pydantic Settings v2 best practices."""
+
+    def test_settings_config_has_validate_default_true(self):
+        """RED: SettingsConfigDict should have validate_default=True for early error detection."""
+        config = Settings.model_config
+        assert 'validate_default' in config or hasattr(config, 'validate_default')
+        # If present as dict or attribute, it should be True
+        if isinstance(config, dict):
+            assert config.get('validate_default', False) is True
+        else:
+            assert getattr(config, 'validate_default', False) is True
+
+    def test_settings_config_has_env_nested_delimiter(self):
+        """RED: SettingsConfigDict should have env_nested_delimiter for nested config support."""
+        config = Settings.model_config
+        # Check for env_nested_delimiter (commonly '__' for nested env vars)
+        if isinstance(config, dict):
+            assert 'env_nested_delimiter' in config
+            assert config.get('env_nested_delimiter') == '__'
+        else:
+            assert hasattr(config, 'env_nested_delimiter')
+            assert getattr(config, 'env_nested_delimiter') == '__'
+
+    def test_settings_validates_defaults_on_instantiation(self):
+        """RED: When validate_default=True, invalid defaults should raise errors immediately."""
+        # This test verifies that default values are validated
+        # If a default violates constraints, it should fail on instantiation
+        with patch.dict(os.environ, {}, clear=True):
+            try:
+                config = Settings()
+                # If we get here, all defaults are valid
+                assert config is not None
+            except ValueError:
+                pytest.fail("Default values should be valid, but validation raised ValueError")
+
+    def test_nested_env_vars_with_delimiter(self):
+        """RED: env_nested_delimiter='__' allows nested configuration like REDIS__POOL__SIZE."""
+        # Example: REDIS__POOL__SIZE should map to redis.pool.size
+        # For now, test that delimiter is configured
+        config = Settings.model_config
+        if isinstance(config, dict):
+            delimiter = config.get('env_nested_delimiter')
+        else:
+            delimiter = getattr(config, 'env_nested_delimiter', None)
+        
+        assert delimiter == '__', f"Expected '__' but got {delimiter}"

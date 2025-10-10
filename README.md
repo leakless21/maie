@@ -15,7 +15,7 @@ Note: Several parts of the business logic are intentionally skeletons/placeholde
 
 ## Prerequisites
 
-- Python 3.11+ (project configured for this workspace)
+- Python 3.13+ (project configured for this workspace)
 - `uv` (used by `scripts/dev.sh` to manage the virtual environment)
 - `uvicorn` (if you want to run the ASGI app directly without `uv`)
 
@@ -103,16 +103,34 @@ curl -v -F "file=@tests/assets/audio/sample.wav" \
 - `src/config.py` — application settings and defaults (e.g., `max_file_size_mb`, `templates_dir`, `audio_dir`)
 - `templates/` — sample JSON templates used by summarization features
 
-## Implementation notes & TODOs
+## Project Status
 
-- The API skeleton will accept uploads and persist audio files on disk. However, task persistence and background job queuing are not implemented in this branch:
+The API skeleton is functional and can accept audio uploads. Redis/RQ task persistence and background worker processing are not yet implemented - these are tracked as integration tasks in `docs/tdd-followups.md`.
 
-  - `create_task_in_redis` and `enqueue_job` are placeholders and need Redis/RQ wiring.
-  - `get_task_from_redis` currently returns `None`, so `GET /v1/status/{task_id}` will return `404 Not Found` until task storage is implemented.
+Current capabilities:
 
-- Add Redis connection, create task records, and enqueue jobs (RQ or alternative) so workers can pick up and process audio asynchronously.
+- ✅ API endpoints for audio processing requests
+- ✅ File upload validation and persistence
+- ✅ Template and model discovery endpoints
+- ✅ Health check endpoint
+- ⏳ Redis task storage (placeholder)
+- ⏳ RQ job enqueueing (placeholder)
+- ⏳ Background worker processing (placeholder)
 
-## Running tests and linters
+## Next Steps
+
+To complete the implementation:
+
+1. Integrate Redis client for task persistence (see `docs/tdd-followups.md`)
+2. Implement RQ job enqueueing
+3. Build worker processing pipeline in `src/worker/`
+4. Add authentication and rate limiting if needed
+
+See `docs/TDD.md` and `docs/PRD.md` for full architecture and requirements.
+
+## Development
+
+### Running tests and linters
 
 Run unit tests:
 
@@ -126,12 +144,68 @@ Run linters/formatters:
 ./scripts/lint.sh
 ```
 
-## Where to go next
+### GPU Support and cuDNN Setup
 
-- Implement Redis task storage and RQ enqueueing in `src/api/routes.py`.
-- Implement worker processing pipeline in `src/worker/` to consume queued tasks and write results back to Redis.
-- Add auth and rate limiting in `src/api/dependencies.py` if required for production.
+For GPU acceleration with Whisper models, cuDNN libraries must be accessible at runtime. The project uses cuDNN from the Python virtual environment (`nvidia-cudnn-cu12` package).
 
----
+**Why LD_LIBRARY_PATH is Required:**
 
-If you need a trimmed README for packaging or a CONTRIBUTING guide, tell me what tone/level of detail you want and I will add it.
+CTranslate2 (the inference engine used by faster-whisper) loads cuDNN libraries using the system's dynamic linker (`dlopen`), which doesn't respect Python's import paths. The libraries must be in `LD_LIBRARY_PATH` **before the Python process starts**. This is a known limitation of CTranslate2's PyPI distribution, which doesn't include RPATH configuration.
+
+**Automatic Setup (Recommended):**
+
+The `scripts/test.sh` script automatically configures the environment to find cuDNN libraries. Just run:
+
+```bash
+./scripts/test.sh --integration
+```
+
+**Manual Setup:**
+
+If running tests or the application manually, you can source the cuDNN environment helper:
+
+```bash
+source scripts/use-cudnn-env.sh
+```
+
+This adds the venv's cuDNN library path to `LD_LIBRARY_PATH`. After sourcing, GPU-based ASR models will work correctly.
+
+**For Production Deployments:**
+
+Set `LD_LIBRARY_PATH` in your process manager or Docker container:
+
+```bash
+# In systemd unit file
+Environment="LD_LIBRARY_PATH=/path/to/venv/lib/python3.11/site-packages/nvidia/cudnn/lib"
+
+# In Docker Compose
+environment:
+  - LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
+```
+
+**Verification:**
+
+Check if cuDNN is accessible:
+
+```bash
+python -c "import site, os; sp = site.getsitepackages(); print([os.path.join(s, 'nvidia', 'cudnn', 'lib') for s in sp if os.path.isdir(os.path.join(s, 'nvidia', 'cudnn', 'lib'))])"
+```
+
+**Troubleshooting:**
+
+If you see "Unable to load libcudnn_ops.so" errors:
+
+1. Ensure the Python environment has `nvidia-cudnn-cu12` installed
+2. Use `scripts/use-cudnn-env.sh` to set up the environment **before** starting Python
+3. For system-wide issues, see `scripts/purge-cudnn.sh` for cleanup instructions
+
+**Note:** Setting `LD_LIBRARY_PATH` from within Python doesn't work because the dynamic linker reads this variable only at process startup, before Python even loads.
+
+## Additional Resources
+
+- **Architecture & Design**: See `docs/TDD.md` for technical design
+- **Requirements**: See `docs/PRD.md` for product requirements
+- **Implementation Tasks**: See `docs/tdd-followups.md` for remaining work
+- **Configuration**: See `.env.template` for environment variables
+
+For questions or contributions, refer to the documentation in `docs/`.

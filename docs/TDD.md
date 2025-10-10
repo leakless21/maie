@@ -25,8 +25,6 @@ This Technical Design Document provides the architectural blueprint for V1.0 of 
 - Configuration-driven behavior via environment variables (NFR-4)
 - First-class developer experience with OpenAPI 3.1 specification (NFR-2)
 
-> V1.0 Scope Clarification: Only the `whisper` ASR backend is supported in V1.0. Any references to `chunkformer` in examples and code listings are provided as future extension guidance (deferred to V1.1+) and are not part of the V1.0 deliverable.
-
 ---
 
 ## 2. System Architecture
@@ -99,21 +97,21 @@ The system follows a **three-tier architecture** with clear separation of concer
 
 ### 2.3. Technology Stack
 
-| Layer                  | Technology            | Version  | Justification                                                                                                                        |
-| ---------------------- | --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| **Package Management** | UV                    | Latest   | Fast, reliable Python dependency management                                                                                          |
-| **Runtime**            | Python                | 3.11+    | Modern Python with performance improvements                                                                                          |
-| **API Framework**      | Litestar              | 2.x      | Auto OpenAPI 3.1, type-safe, async-native                                                                                            |
-| **Task Queue**         | Redis Queue (RQ)      | 1.15+    | Simple, reliable, low overhead for single-node                                                                                       |
-| **Message Broker**     | Redis                 | 7.x      | Dual-DB setup (queue + results) with AOF                                                                                             |
-| **Audio Processing**   | ffmpeg                | 6.0+     | Audio format normalization and validation                                                                                            |
-| **ASR Backend**        | whisper (CTranslate2) | CT2      | Whisper (CTranslate2) for throughput and batch workloads (default variant `erax-wow-turbo` configurable via `WHISPER_MODEL_VARIANT`) |
-| **LLM Backend**        | Qwen3-4B-Instruct     | AWQ-4bit | Direct vLLM Python library inference                                                                                                 |
-| **Logging**            | Loguru                | Latest   | Zero-config structured logging with JSON output                                                                                      |
-| **Monitoring**         | rq-dashboard          | Latest   | Queue visualization                                                                                                                  |
-| **Observability**      | OpenTelemetry         | 1.20+    | Distributed tracing (optional)                                                                                                       |
-| **Container Runtime**  | Docker + Compose      | Latest   | Simplified deployment                                                                                                                |
-| **GPU Runtime**        | NVIDIA CUDA           | 12.1+    | GPU acceleration                                                                                                                     |
+| Layer                  | Technology                  | Version       | Justification                                                                                                                                                                                                                                                                                                                           |
+| ---------------------- | --------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Package Management** | UV                          | Latest        | Fast, reliable Python dependency management                                                                                                                                                                                                                                                                                             |
+| **Runtime**            | Python                      | 3.11+         | Modern Python with performance improvements                                                                                                                                                                                                                                                                                             |
+| **API Framework**      | Litestar                    | 2.x           | Auto OpenAPI 3.1, type-safe, async-native                                                                                                                                                                                                                                                                                               |
+| **Task Queue**         | Redis Queue (RQ)            | 1.15+         | Simple, reliable, low overhead for single-node                                                                                                                                                                                                                                                                                          |
+| **Message Broker**     | Redis                       | 7.x           | Dual-DB setup (queue + results) with AOF                                                                                                                                                                                                                                                                                                |
+| **Audio Processing**   | ffmpeg                      | 6.0+          | Audio format normalization and validation                                                                                                                                                                                                                                                                                               |
+| **ASR Backend**        | faster-whisper, chunkformer | CT2 / PyTorch | faster-whisper (CTranslate2-optimized Whisper) for general workloads; ChunkFormer for long-form audio. Whisper default variant `erax-wow-turbo` is an org CT2 default (set via `WHISPER_MODEL_VARIANT`); use official variants like `large-v3` or `distil-large-v3` as needed. Official docs: https://github.com/systran/faster-whisper |
+| **LLM Backend**        | Qwen3-4B-Instruct           | AWQ-4bit      | Direct vLLM Python library inference                                                                                                                                                                                                                                                                                                    |
+| **Logging**            | Loguru                      | Latest        | Zero-config structured logging with JSON output                                                                                                                                                                                                                                                                                         |
+| **Monitoring**         | rq-dashboard                | Latest        | Queue visualization                                                                                                                                                                                                                                                                                                                     |
+| **Observability**      | OpenTelemetry               | 1.20+         | Distributed tracing (optional)                                                                                                                                                                                                                                                                                                          |
+| **Container Runtime**  | Docker + Compose            | Latest        | Simplified deployment                                                                                                                                                                                                                                                                                                                   |
+| **GPU Runtime**        | NVIDIA CUDA                 | 12.1+         | GPU acceleration                                                                                                                                                                                                                                                                                                                        |
 
 ---
 
@@ -176,8 +174,9 @@ For `POST /v1/process`:
 1. Validate `file` is present and acceptable format
 2. Validate `features` array (optional, default: `["clean_transcript", "summary"]`)
 3. Validate `asr_backend` (optional, default: `"whisper"`)
-   - Valid values: `"whisper"` (V1.0)
-   - For `"whisper"`, model variant determined by `WHISPER_MODEL_VARIANT` config (default: `erax-wow-turbo`)
+   - Valid values: `"whisper"`, `"chunkformer"` (V1.0)
+   - For `"whisper"`, model variant determined by `WHISPER_MODEL_VARIANT` (default: `erax-wow-turbo`, org CT2 default)
+   - For `"chunkformer"`, model name determined by `CHUNKFORMER_MODEL_NAME` (default: `khanhld/chunkformer-large-vie`)
 4. Validate `template_id` is provided if `"summary"` in features (FR-4)
 5. Generate UUID v4 as `task_id`
 6. Check queue depth for backpressure
@@ -191,7 +190,7 @@ For `POST /v1/process`:
 
 - Chat template: Use a Jinja ChatML template compatible with Qwen3 (non-thinking
   by default). Serve it explicitly (e.g., vLLM `--chat-template
-  /app/assets/chat-templates/qwen3_nonthinking.jinja`). The selected model is
+/app/assets/chat-templates/qwen3_nonthinking.jinja`). The selected model is
   instruct-only (no “thinking” mode), so reasoning toggles do not apply by
   default.
 - Prompt templates: For each `template_id`, render a concise Jinja prompt into
@@ -227,7 +226,7 @@ The worker enforces **strict sequential execution** to operate within VRAM const
 
 - Model loading overhead per model: 5-25 seconds
 - EraX-WoW-Turbo V1.1: 8-12s load time (CT2 optimized)
-- ChunkFormer: 5-10s load time
+- ChunkFormer: ~5–10s load time (implementation-dependent)
 - Qwen3-4B-Instruct (AWQ): 15-25s load time (direct vLLM inference)
 - Target total: 2-3 minutes for 45-minute audio (NFR-5)
 
@@ -315,6 +314,25 @@ COMPLETE / FAILED
 
 **Purpose:** Normalize audio inputs to ensure consistent ASR quality and prevent processing failures due to format incompatibilities.
 
+**Audio Storage Structure:**
+
+Files are organized in task-specific directories for better isolation and cleanup:
+
+```
+data/audio/
+└── {task-id}/
+    ├── raw.{original-ext}     # Original uploaded file (immutable)
+    └── preprocessed.wav        # Normalized 16kHz mono WAV
+```
+
+**Benefits of Task-Based Directories:**
+
+- Clear isolation between different processing jobs
+- Simple cleanup: `rm -rf data/audio/{task-id}/`
+- Better traceability and debugging
+- Preserves original file for reproducibility
+- Scalable to thousands of tasks
+
 **Preprocessing Pipeline:**
 
 ```python
@@ -334,9 +352,12 @@ class AudioPreprocessor:
         """
         Validate and normalize audio file.
 
+        Args:
+            input_path: Path to raw audio file (e.g., data/audio/{task-id}/raw.mp3)
+
         Returns metadata dict with:
         - original_format, duration, sample_rate
-        - normalized_path (if conversion occurred)
+        - normalized_path (e.g., data/audio/{task-id}/preprocessed.wav)
         """
         # 1. Probe audio metadata
         metadata = self._probe_audio(input_path)
@@ -383,7 +404,9 @@ class AudioPreprocessor:
 
     def _normalize_audio(self, input_path: Path, metadata: dict) -> Path:
         """Convert audio to WAV 16kHz mono using ffmpeg"""
-        output_path = input_path.with_suffix(".normalized.wav")
+        # Save preprocessed file in same directory as raw
+        task_dir = input_path.parent
+        output_path = task_dir / "preprocessed.wav"
 
         subprocess.run([
             "ffmpeg", "-y", "-i", str(input_path),
@@ -454,14 +477,25 @@ The ASR processing system uses a **Factory Pattern** to instantiate backend-spec
 - **Type Safety:** Factory validates backend names and returns correct types
 - **Testability:** Mock specific backends independently
 
+**V1.0 Implementation Scope:**
+
+- ✅ Basic segment-level transcription (text + start/end timestamps)
+- ✅ VAD filtering for improved speed and accuracy
+- ✅ Language detection
+- ✅ Segment-level confidence scores
+- ✅ Sequential processing pattern (load → execute → unload)
+- ❌ Word-level timestamps → Deferred to V1.1+
+- ❌ Batched inference → Deferred to V1.2+
+- ❌ Speaker diarization → Deferred to V1.1+
+
 **Module Structure:**
 
 ```
 src/processors/asr/
 ├── __init__.py          # Public exports: ASRFactory, ASRBackend
 ├── factory.py           # ASRFactory + ASRBackend protocol
-├── whisper.py           # WhisperBackend implementation
-└── chunkformer.py       # ChunkFormerBackend implementation
+├── whisper.py           # WhisperBackend implementation (V1.0)
+└── chunkformer.py       # ChunkFormerBackend implementation (V1.0)
 ```
 
 **Architecture Diagram:**
@@ -560,6 +594,28 @@ Each concrete processor must implement:
 
 **Concrete Implementations:**
 
+**ASR Defaults (V1.0)**
+
+- `asr_backend`: `whisper`
+- Whisper (faster-whisper):
+  - `whisper_model_variant`: `erax-wow-turbo` (org CT2 default; use `large-v3`/`distil-large-v3` for official)
+  - `whisper_beam_size`: `5`
+  - `whisper_vad_filter`: `true`
+  - `whisper_compute_type`: `int8_float16`
+  - `whisper_device`: `cuda`
+  - `whisper_condition_on_previous_text`: `true`
+- ChunkFormer:
+  - `chunkformer_model_name`: `khanhld/chunkformer-large-vie`
+  - `chunkformer_chunk_size`: `64`
+  - `chunkformer_left_context`: `128`
+  - `chunkformer_right_context`: `128`
+  - `chunkformer_total_batch_duration`: `14400`
+  - `chunkformer_return_timestamps`: `true`
+
+Installation:
+
+- Python API and CLI: `pip install chunkformer` (provides `chunkformer-decode`)
+
 **1. WhisperBackend (Default Backend)**
 
 **Module:** `src/processors/asr/whisper.py`
@@ -586,6 +642,38 @@ Each concrete processor must implement:
 **Alternative Whisper Models (Configurable):**
 
 - Model selection via `WHISPER_MODEL_VARIANT` environment variable
+- Supported variants: `large-v3`, `turbo`, `distil-large-v3`, custom CT2 models
+
+**Distil-Whisper Support:**
+
+For faster, smaller Distil-Whisper models (e.g., `distil-large-v3`):
+
+**Required Configuration:**
+
+```env
+WHISPER_MODEL_VARIANT=distil-large-v3
+WHISPER_CONDITION_ON_PREVIOUS_TEXT=false  # REQUIRED for Distil models
+```
+
+**Why `condition_on_previous_text=False`?**
+
+Distil-Whisper models are trained without context conditioning and perform better with this setting disabled. This is documented in the official faster-whisper repository.
+
+**Configuration Example:**
+
+```python
+# In config.py or .env
+whisper_model_variant = "distil-large-v3"
+whisper_condition_on_previous_text = False  # Critical for Distil
+whisper_language = "en"  # Optional: force language
+```
+
+**Benefits of Distil-Whisper:**
+
+- **Speed:** ~5-7x faster than large-v3
+- **Size:** ~40% smaller model
+- **Quality:** Minimal accuracy loss (<2% WER increase)
+- **VRAM:** Lower memory requirements
 
 **Version Metadata (NFR-1):**
 
@@ -596,7 +684,7 @@ Each concrete processor must implement:
 - Compute type: `int8_float16`
 - Decoding params: `beam_size`, `vad_filter`
 
-**2. ChunkFormerBackend** (Low-Latency Backend)
+**2. ChunkFormerBackend** (Long-Form Backend)
 
 **Module:** `src/processors/asr/chunkformer.py`
 
@@ -604,7 +692,7 @@ Each concrete processor must implement:
 
 **Configuration:**
 
-- Model: `chunkformer-large-vie` (khanhld/chunkformer-large-vie)
+- Model: `khanhld/chunkformer-large-vie` (Hugging Face Hub)
 - Architecture: Chunk-wise processing (ICASSP 2025)
 - Processing: Unbatched, sequential chunks
 - Context: Configurable left/right context windows
@@ -620,23 +708,23 @@ Each concrete processor must implement:
 - Backend name: `chunkformer`
 - Model variant: `large-vie`
 - Checkpoint hash: Auto-detected from HuggingFace
-- Architecture params: `chunk_size_ms`, `left_context_ms`
+- Architecture params: `chunk_size_frames`, `left_context_frames`, `right_context_frames`, `total_batch_duration_seconds`
 
-**Important Note:** ChunkFormer parameter names (`chunk_size_ms`, `left_context_ms`) should be verified against the official GitHub repository (`github.com/khanld/chunkformer`). These may be application-level abstractions that need mapping to the model's actual API (likely frame/token notation).
+Implementation note: This project wraps the underlying implementation behind a stable factory interface. Configuration fields (`chunk_size`, `left_context`, `right_context`, `total_batch_duration`, `return_timestamps`) are mapped to the chosen decode routine. The backend handles multiple ChunkFormer API response formats (dict, list, or string) and normalizes them to a consistent ASRResult structure.
 
 **ASRResult Data Structure:**
 
 ```
 ASRResult:
-  - transcript: str              # Raw transcription output
-  - confidence_avg: float        # For FR-5 metrics
-  - vad_coverage: float          # For FR-5 metrics
-  - model_name: str              # For NFR-1 versioning
-  - checkpoint_hash: str         # For NFR-1 versioning
-  - quantization: str (optional) # For NFR-1 versioning
-  - beam_size: int (optional)    # For NFR-1 versioning
-  - duration_ms: int             # Processing time
+  - text: str                    # Full transcript text
+  - segments: list[dict] | None  # Segments with timestamps
+  - language: str | None         # Auto-detected language code (e.g., "en", "vi")
+  - language_probability: float | None  # Confidence in language detection (0-1)
+  - confidence: float | None     # Average confidence score (if available)
+  - error: dict | None           # Structured error information (if execution failed)
 ```
+
+**Note:** The `language` and `language_probability` fields are automatically populated by faster-whisper's language detection when `language` parameter is not explicitly set.
 
 **Adding New ASR Backends:**
 
@@ -935,7 +1023,7 @@ All Python dependencies managed through UV for:
 ```
 /maie/
 ├── .env.template           # Configuration template
-├── .python-version         # Python 3.11+
+├── .python-version         # Python 3.13+
 ├── pyproject.toml          # UV-managed dependencies
 ├── uv.lock                 # Lockfile for reproducibility
 ├── docker-compose.yml      # Multi-service orchestration
@@ -1025,6 +1113,58 @@ worker:
             device_ids: ["0"]
             capabilities: [gpu]
 ```
+
+**CUDA Library Setup (Linux):**
+
+For GPU acceleration with faster-whisper, the following NVIDIA libraries must be installed and properly configured:
+
+**Required Libraries:**
+
+```bash
+# Install CUDA 12 libraries
+pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
+```
+
+**Environment Configuration:**
+
+```bash
+# Set library path for Python runtime
+export LD_LIBRARY_PATH=$(python3 -c 'import os; import nvidia.cublas.lib; import nvidia.cudnn.lib; print(os.path.dirname(nvidia.cublas.lib.__file__) + ":" + os.path.dirname(nvidia.cudnn.lib.__file__))')
+```
+
+**Docker Integration:**
+
+```dockerfile
+# In Dockerfile
+RUN pip install nvidia-cublas-cu12 nvidia-cudnn-cu12==9.*
+
+# Set environment variable
+ENV LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
+```
+
+**Docker Compose:**
+
+```yaml
+worker:
+  environment:
+    - LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
+    - OMP_NUM_THREADS=4 # For CPU fallback performance
+```
+
+**CPU Performance Tuning:**
+
+When running on CPU (forced or fallback), set thread count for consistent performance:
+
+```yaml
+# Docker Compose
+worker:
+  environment:
+    - OMP_NUM_THREADS=4 # Adjust based on CPU cores
+    - WHISPER_DEVICE=cpu
+    - WHISPER_COMPUTE_TYPE=int8
+```
+
+**Recommendation:** Start with `OMP_NUM_THREADS = (CPU cores / 2)` for best performance.
 
 ### 3.8. Model Downloading Strategy
 
@@ -1158,7 +1298,7 @@ Fields:
   file: UploadFile               # Required, .wav or .mp3
   features: list[str]            # Optional, default: ["clean_transcript", "summary"]
                                  # Valid: "raw_transcript", "clean_transcript", "summary", "enhancement_metrics"
-                                 # Note: "tags" feature deprecated - tags now embedded in summary template
+
   asr_backend: str               # Optional, default: "whisper"
                                  # Valid: "whisper", "chunkformer"
                                  # For "whisper": model variant set via WHISPER_MODEL_VARIANT config (default: erax-wow-turbo)
@@ -1204,7 +1344,7 @@ Refer to PRD Appendix B for the authoritative response schema and examples. Tags
     {
       "backend_id": "whisper",
       "name": "Whisper (CTranslate2)",
-      "default_variant": "erax-wow-turbo",
+      "default_variant": "erax-wow-turbo",  # org CT2 default; replace with official variants as needed
       "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
       "description": "Default ASR backend with native punctuation",
       "capabilities": ["transcription", "punctuation", "vad_filtering"],
@@ -1242,14 +1382,18 @@ All system behavior configured via environment variables loaded from `.env` file
 
 **Minimal Configuration (V1.0):**
 
-| Variable                | Purpose                    | Default                |
-| ----------------------- | -------------------------- | ---------------------- |
-| `PIPELINE_VERSION`      | Version stamping for NFR-1 | `1.0.0`                |
-| `WHISPER_MODEL_VARIANT` | Whisper model variant      | `erax-wow-turbo`       |
-| `REDIS_URL`             | Queue and results store    | `redis://redis:6379/0` |
-| `SECRET_API_KEY`        | API authentication         | —                      |
-| `MAX_QUEUE_DEPTH`       | Backpressure threshold     | `50`                   |
-| `MAX_FILE_SIZE_MB`      | Upload size limit          | `500`                  |
+| Variable                             | Purpose                                | Default                         |
+| ------------------------------------ | -------------------------------------- | ------------------------------- |
+| `PIPELINE_VERSION`                   | Version stamping for NFR-1             | `1.0.0`                         |
+| `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)  |
+| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                          |
+| `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)            |
+| `CHUNKFORMER_MODEL_NAME`             | ChunkFormer model name                 | `khanhld/chunkformer-large-vie` |
+| `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`          |
+| `SECRET_API_KEY`                     | API authentication                     | —                               |
+| `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                            |
+| `MAX_FILE_SIZE_MB`                   | Upload size limit                      | `500`                           |
+| `OMP_NUM_THREADS`                    | CPU threads for performance            | `4` (recommended)               |
 
 **Example `.env` (V1.0)**
 
@@ -1257,12 +1401,17 @@ All system behavior configured via environment variables loaded from `.env` file
 # Pipeline
 PIPELINE_VERSION=1.0.0
 WHISPER_MODEL_VARIANT=erax-wow-turbo
+WHISPER_CONDITION_ON_PREVIOUS_TEXT=true
+WHISPER_LANGUAGE=  # Empty = auto-detect
 
 # Runtime
 REDIS_URL=redis://redis:6379/0
 SECRET_API_KEY=CHANGE_ME
 MAX_QUEUE_DEPTH=50
 MAX_FILE_SIZE_MB=500
+
+# CPU Performance (when running on CPU)
+OMP_NUM_THREADS=4
 ```
 
 **Note on DEFAULT_FEATURES:** The `tags` feature has been removed as tags are now embedded within summary templates (FR-6). Templates should define a `tags` field for categorization.
@@ -1540,11 +1689,13 @@ async def api_key_guard(request: Request, _: Any) -> None:
    - Configurable via `MAX_FILE_SIZE_MB` env var
    - Return `413 Payload Too Large` on violation
 
-3. **Secure File Naming:**
+3. **Secure File Storage:**
 
-   - Generate UUIDs for filenames (ignore client names)
-   - Store in dedicated directory with restricted permissions
-   - Pattern: `{AUDIO_DIR}/{task_id}.{ext}`
+   - Generate UUIDs for task directories (ignore client names)
+   - Store in task-specific directories with restricted permissions
+   - Pattern: `{AUDIO_DIR}/{task_id}/raw.{ext}` (original upload)
+   - Pattern: `{AUDIO_DIR}/{task_id}/preprocessed.wav` (normalized audio)
+   - Task-based isolation prevents cross-contamination
 
 4. **Disk Quotas:**
    - Monitor `/data/audio` disk usage
@@ -1553,39 +1704,49 @@ async def api_key_guard(request: Request, _: Any) -> None:
 
 ### 7.3. File Cleanup Strategy
 
-**V1.0 Approach: Simple Command-Based Cleanup**
+**V1.1 Approach: Task-Based Directory Cleanup**
 
 **Cleanup Policy:**
 
-- Audio files retained for 7 days after job completion
-- Failed job files retained for 14 days (debugging)
-- Successful job files eligible for immediate cleanup if disk pressure
+- Task directories retained for 7 days after job completion
+- Failed job directories retained for 14 days (debugging)
+- Successful job directories eligible for immediate cleanup if disk pressure
+
+**Directory Structure Benefits:**
+
+- Atomic cleanup: Delete entire task directory in one operation
+- No orphaned files from incomplete processing
+- Preserves both raw and preprocessed files until cleanup
+- Easier to implement retention policies
 
 **Implementation:**
 
 ```bash
-# Simple cron-based cleanup (V1.0)
+# Simple cron-based cleanup (V1.1)
 # Add to host crontab or docker-compose healthcheck
 
-# Daily cleanup: Remove files older than 7 days
-0 2 * * * find /data/audio -type f -mtime +7 -delete
+# Daily cleanup: Remove task directories older than 7 days
+0 2 * * * find /data/audio -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
 
-# Emergency cleanup: Remove successful job files if disk >90%
+# Emergency cleanup: Remove task directories if disk >90%
 */15 * * * * [ $(df -h /data/audio | awk 'NR==2 {print $5}' | sed 's/%//') -gt 90 ] && \
-  find /data/audio -type f -mtime +1 -delete
+  find /data/audio -maxdepth 1 -type d -mtime +1 -exec rm -rf {} +
 ```
 
-**Manual Cleanup Command:**
+**Manual Cleanup Commands:**
 
 ```bash
-# Remove all processed files older than 7 days
-docker exec maie-api find /data/audio -type f -mtime +7 -delete
+# Remove all task directories older than 7 days
+docker exec maie-api find /data/audio -maxdepth 1 -type d -mtime +7 -exec rm -rf {} +
 
-# Remove specific task files
-docker exec maie-api rm /data/audio/{task_id}.{wav,mp3}
+# Remove specific task directory (includes raw + preprocessed)
+docker exec maie-api rm -rf /data/audio/{task_id}
 
 # Check disk usage
 docker exec maie-api df -h /data/audio
+
+# List task directories with sizes
+docker exec maie-api du -sh /data/audio/*
 ```
 
 **Future Enhancements (Post V1.0):**
@@ -1616,7 +1777,7 @@ docker exec maie-api df -h /data/audio
 
 - Use `uv` for reproducible dependency management
 - Pin all dependencies in `uv.lock`
-- Regular security audits: `uv pip audit` (or `pip-audit`)
+- Regular security audits: `uvx pip-audit` (or `pip-audit`)
 - Subscribe to security advisories for critical packages
 
 **High-Risk Dependencies:**
@@ -2027,7 +2188,7 @@ api:
    # Qwen3-4B-Instruct AWQ
    huggingface-cli download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit --local-dir data/models/qwen3-4b-awq
 
-   # ChunkFormer (optional)
+   # ChunkFormer
    huggingface-cli download khanhld/chunkformer-large-vie --local-dir data/models/chunkformer
    ```
 
@@ -2179,25 +2340,60 @@ docker-compose exec worker rq requeue --all --url redis://redis:6379/0
 
 ## 10. Future Enhancements (Post V1.0)
 
-### 10.1. V1.1: WhisperX-like Capabilities
+### V1.0 ASR Feature Scope
 
-**Planned Features:**
+**What's Included in V1.0:**
 
-- **Speaker Diarization:** Integrate pyannote.audio
-- **Word-Level Timestamps:** Enable via WhisperX alignment
+- ✅ Basic segment-level transcription (text + timestamps)
+- ✅ VAD filtering (Voice Activity Detection)
+- ✅ Language detection
+- ✅ Segment-level confidence scores
+- ✅ Sequential processing (load → execute → unload)
+- ✅ Distil-Whisper support
+
+**What's Deferred to Future Releases:**
+
+- ❌ Word-level timestamps → V1.1+
+- ❌ Batched inference → V1.2+
+- ❌ Model preloading → V1.2+
+- ❌ Speaker diarization → V1.1+
+- ❌ Streaming transcription → V1.3+
+
+**V1.0 Philosophy:** Simple, stable, sequential - one job, one GPU, load → process → unload.
+
+---
+
+### 10.1. V1.1: Advanced ASR & WhisperX-like Capabilities
+
+**Planned ASR Enhancements:**
+
+- **Word-Level Timestamps:** Enable fine-grained timeline features via faster-whisper's `word_timestamps=True` parameter
+  - **Use Cases:** Video subtitle generation, interactive transcript navigation, speaker diarization alignment
+  - **Not in V1.0 Because:** Not required by PRD metrics (FR-5); adds storage overhead; V1.0 focuses on transcript → summary pipeline
+  - **Implementation:** Update `WhisperBackend.execute()` to capture word-level data when enabled
+- **Speaker Diarization:** Integrate pyannote.audio for multi-speaker identification
+  - **Requires:** Word-level timestamps for alignment accuracy
+  - **Output:** Speaker labels per segment/word
 - **Subtitle Generation:** Output `.srt` and `.vtt` formats
+  - **Requires:** Word-level timestamps
+  - **Use Cases:** Accessibility, video platforms
 
 **Implementation Notes:**
 
 - Add new `features`: `diarization`, `word_timestamps`, `subtitles`
 - New processor: `DiarizationProcessor` (pyannote-audio)
-- Update response schema with speaker labels and timestamps
+- Update response schema with speaker labels and word-level timestamps
+- Update `ASRResult` dataclass to include optional `words` field
+
+---
 
 ### 10.1.1 V1.1: Performance & Long-Context
 
-**Planned Enhancements:**
+**Planned Performance Enhancements:**
 
 - **LLM Preloading (Performance Mode):** Optional worker mode to load the LLM at startup and reuse across jobs on high-VRAM systems to reduce latency.
+  - **Not in V1.0 Because:** Contradicts sequential architecture (TDD Section 3.2); requires >24GB VRAM; V1.0 prioritizes stability
+  - **Prerequisites:** Multi-GPU support OR larger VRAM, revised memory management
 - **Long-Context Handling Strategies:** Introduce task-dependent strategies for transcripts exceeding LLM context window:
   - Overlapping chunking for text enhancement (local task)
   - MapReduce for summarization and tags (global task)
@@ -2207,13 +2403,85 @@ docker-compose exec worker rq requeue --all --url redis://redis:6379/0
 - Add `WORKER_MODEL_STRATEGY` with values `sequential` (default) and `preload_llm`.
 - Add `LLM_CONTEXT_LENGTH`, `LLM_CHUNK_SIZE`, `LLM_CHUNK_OVERLAP` with safe defaults.
 
-### 10.2. V1.2: Streaming Support
+### 10.2. V1.2: Batched Inference & Multi-GPU Support
 
-**Goal:** Real-time transcription with websocket API
+**Goal:** Improve throughput on high-VRAM systems through parallel processing
+
+**Planned ASR Enhancements:**
+
+- **Batched Inference Pipeline:** Use faster-whisper's `BatchedInferencePipeline` for processing multiple audio chunks in parallel
+  - **Not in V1.0 Because:** Contradicts sequential architecture; requires model preloading; adds complexity without PRD requirement
+  - **Prerequisites:** Model preloading strategy, >24GB VRAM OR multi-GPU setup
+  - **Expected Speedup:** 3-5x for longer audio files
+  - **Implementation:** New `execute_batched()` method in `WhisperBackend`
+- **Multi-GPU Scaling:** Distribute ASR and LLM across separate GPUs
+  - **Architecture Change:** Load ASR on GPU 0, LLM on GPU 1 (eliminates unload/reload cycles)
+  - **VRAM Requirement:** 2x 16GB GPUs OR 1x 32GB+ GPU
+- **Model Preloading:** Keep models resident in VRAM between jobs
+  - **Configuration:** `WORKER_MODEL_STRATEGY=preload_llm` or `preload_all`
+  - **Memory Planning:** Pre-calculate peak VRAM usage across pipeline stages
+
+**Configuration Example:**
+
+```bash
+# V1.2 High-Performance Mode
+WORKER_MODEL_STRATEGY=preload_all
+WHISPER_BATCH_SIZE=16
+WHISPER_USE_BATCHED_PIPELINE=true
+GPU_ASR_DEVICE=cuda:0
+GPU_LLM_DEVICE=cuda:1
+```
+
+**Benefits:**
+
+- Higher throughput (6+ concurrent → 15+ concurrent)
+- Lower latency (no model loading overhead)
+- Better GPU utilization
+
+**Trade-offs:**
+
+- Higher VRAM requirements
+- More complex deployment
+- Reduced flexibility (models stay loaded)
+
+---
+
+### ASR Feature Roadmap Summary
+
+| Feature                     | V1.0 | V1.1 | V1.2 | V1.3 | Reason for Deferral                          |
+| --------------------------- | ---- | ---- | ---- | ---- | -------------------------------------------- |
+| **Basic Transcription**     | ✅   | ✅   | ✅   | ✅   | Core feature                                 |
+| Segment-level timestamps    | ✅   | ✅   | ✅   | ✅   | Core feature                                 |
+| Segment-level confidence    | ✅   | ✅   | ✅   | ✅   | Core feature (FR-5 metrics)                  |
+| VAD filtering               | ✅   | ✅   | ✅   | ✅   | Performance optimization                     |
+| Language detection          | ✅   | ✅   | ✅   | ✅   | Core feature                                 |
+| Distil-Whisper support      | ✅   | ✅   | ✅   | ✅   | Simple model swap                            |
+| Sequential processing       | ✅   | ✅   | ✅   | ✅   | V1.0 architecture                            |
+| **Word-Level Timestamps**   | ❌   | ✅   | ✅   | ✅   | Not in PRD metrics; adds complexity          |
+| **Speaker Diarization**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
+| **Subtitle Generation**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
+| **Batched Inference**       | ❌   | ❌   | ✅   | ✅   | Contradicts sequential architecture          |
+| **Model Preloading**        | ❌   | ❌   | ✅   | ✅   | Requires >24GB VRAM; deferred per TDD 3.2    |
+| **Multi-GPU Support**       | ❌   | ❌   | ✅   | ✅   | Deployment complexity; not needed for 6+ RPS |
+| **Streaming Transcription** | ❌   | ❌   | ❌   | ✅   | Major architecture change; WebSocket needed  |
+
+**Key Insights:**
+
+- **V1.0:** Focus on stability and simplicity (sequential, single GPU, basic features)
+- **V1.1:** Add timeline/subtitle features (word timestamps, diarization)
+- **V1.2:** Optimize for throughput (batching, preloading, multi-GPU)
+- **V1.3:** Enable real-time use cases (streaming)
+
+---
+
+### 10.2.1 V1.2: Streaming Support
+
+**Goal:** Real-time transcription with websocket API (V1.3+ feature preview)
 
 **Technical Approach:**
 
-- Integrate ChunkFormer's streaming mode
+– ChunkFormer long-form decode is supported via the backend wrapper
+
 - WebSocket endpoint: `/v1/stream`
 - Chunk-by-chunk transcription with incremental updates
 

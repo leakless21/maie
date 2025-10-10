@@ -28,6 +28,7 @@ uv.lock
 htmlcov/
 .cov/
 .coverage.*
+.ruff_cache/
 .tox/
 .hypothesis/
 

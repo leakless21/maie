@@ -3,17 +3,21 @@ name = "maie"
 version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
-requires-python = ">=3.13"
+requires-python = ">=3.11"
 dependencies = [
     "chunkformer>=1.0.0",
     "litestar[standard]>=2.18.0",
     "vllm>=0.11.0",
     "pydantic-settings>=2.0.0",
-    "redis>=5.0.0",
+    "redis[hiredis]>=5.0.0",
     "rq>=1.15.0",
     "huggingface-hub>=0.19.0",
     "loguru>=0.7.0",
     "pydantic>=2.11.10",
+    "faster-whisper>=1.2.0",
+    "ctranslate2>=4.6.0",
+    "torch>=2.8.0",
+    "torchaudio>=2.8.0",
 ]
 
 [dependency-groups]
@@ -23,4 +27,17 @@ dev = [
     "pytest-asyncio>=1.2.0",
     "pytest-cov>=7.0.0",
     "ruff>=0.13.3",
+]
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.sources]
+torch = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+torchvision = [
+  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
 ]

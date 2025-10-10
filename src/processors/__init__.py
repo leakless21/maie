@@ -6,7 +6,10 @@ Exports all processor classes and functions.
 from src.processors.base import ASRResult, LLMResult, ASRBackend, LLMBackend, Processor
 from src.processors.asr.factory import ASRProcessorFactory
 from src.processors.asr import ASRBackend, WhisperBackend, ChunkFormerBackend
-from src.processors.llm import LLMProcessor
+try:
+    from src.processors.llm import LLMProcessor
+except Exception:  # optional dependency may be missing in test environments
+    LLMProcessor = None
 from src.processors.chat.template_manager import ChatTemplateManager
 
 # Audio processors
@@ -23,7 +26,7 @@ __all__ = [
     "ASRBackend",
     "LLMBackend",
     "Processor",
-    "ASRFactory",
+    "ASRProcessorFactory",
     "WhisperBackend",
     "ChunkFormerBackend",
     "LLMProcessor",

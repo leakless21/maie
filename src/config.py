@@ -40,13 +40,77 @@ class Settings(BaseSettings):
     # ============================================================
     # ASR Settings
     # ============================================================
+    whisper_model_path: str = Field(
+        default="data/models/era-x-wow-turbo-v1.1-ct2",
+        description="Path to Whisper model directory"
+    )
     whisper_model_variant: str = Field(
         default="erax-wow-turbo",
         description="Whisper model variant (erax-wow-turbo, large-v3, etc.)"
     )
     whisper_beam_size: int = Field(default=5, description="Beam size for decoding")
     whisper_vad_filter: bool = Field(default=True, description="Enable VAD filtering")
-    whisper_compute_type: str = Field(default="int8_float16", description="CTranslate2 compute type")
+    whisper_vad_min_silence_ms: int = Field(default=500, description="Minimum silence duration for VAD (ms)")
+    whisper_vad_speech_pad_ms: int = Field(default=400, description="Speech padding for VAD (ms)")
+    whisper_device: str = Field(default="cuda", description="Device for whisper computation (cpu, cuda, auto)")
+    whisper_compute_type: str = Field(default="float16", description="CTranslate2 compute type")
+    whisper_cpu_fallback: bool = Field(default=True, description="Fallback to CPU if CUDA fails")
+    whisper_condition_on_previous_text: bool = Field(
+        default=True,
+        description="Use previous text as context (set False for Distil-Whisper models)"
+    )
+    whisper_language: str | None = Field(
+        default=None,
+        description="Force specific language code (e.g., 'en', 'vi') or None for auto-detection"
+    )
+    whisper_cpu_threads: int | None = Field(
+        default=None,
+        description="Number of CPU threads for Whisper inference (None = auto, affects OMP_NUM_THREADS)"
+    )
+
+    # ============================================================
+    # ChunkFormer Settings (Long-form / chunked ASR backend)
+    # ============================================================
+    chunkformer_model_path: str = Field(
+        default="data/models/chunkformer-ctc-large-vie",
+        description="Path to ChunkFormer model directory"
+    )
+    chunkformer_model_variant: str = Field(
+        default="khanhld/chunkformer-large-vie",
+        description="ChunkFormer model variant or HF repo id"
+    )
+    chunkformer_chunk_size: int = Field(
+        default=64,
+        description="Chunk size in frames for chunked processing"
+    )
+    chunkformer_left_context_size: int = Field(
+        default=128,
+        description="Left context window size (frames) applied to each chunk"
+    )
+    chunkformer_right_context_size: int = Field(
+        default=128,
+        description="Right context window size (frames) applied to each chunk"
+    )
+    chunkformer_total_batch_duration: int = Field(
+        default=14400,
+        description="Maximum total batch duration for ChunkFormer processing (seconds)"
+    )
+    chunkformer_return_timestamps: bool = Field(
+        default=True,
+        description="Whether ChunkFormer should return word/segment timestamps"
+    )
+    chunkformer_device: str = Field(
+        default="cuda",
+        description="Device for ChunkFormer computation (cpu, cuda, auto)"
+    )
+    chunkformer_batch_size: int | None = Field(
+        default=None,
+        description="Batch size for ChunkFormer (None = sequential/unbatched)"
+    )
+    chunkformer_cpu_fallback: bool = Field(
+        default=True,
+        description="Fallback to CPU if CUDA fails for ChunkFormer"
+    )
 
     # ============================================================
     # LLM Settings - Enhancement Task
@@ -111,7 +175,9 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
-        extra="ignore"  # Ignore unknown env vars
+        extra="ignore",  # Ignore unknown env vars
+        validate_default=True,  # Validate default values on instantiation
+        env_nested_delimiter="__",  # Support nested config like REDIS__POOL__SIZE
     )
     
     @field_validator("audio_dir", "models_dir", "templates_dir", "chat_templates_dir")

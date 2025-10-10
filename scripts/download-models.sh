@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Model download script for Modular Audio Intelligence Engine (MAIE)
-# Downloads required AI models using huggingface-cli
+# Downloads required AI models using hf (Hugging Face CLI)
 
 set -euo pipefail
 
@@ -14,7 +14,7 @@ show_help() {
 cat << EOF
 Usage: $(basename "$0") [OPTIONS]
 
-Downloads AI models required for MAIE using huggingface-cli.
+Downloads AI models required for MAIE using hf (Hugging Face CLI).
 
 OPTIONS:
   -h, --help                    Show this help message
@@ -118,7 +118,7 @@ export HF_HOME="$MODELS_DIR"
 # Authenticate if token provided
 if [[ -n "$HF_TOKEN" ]]; then
   echo "Authenticating with Hugging Face..."
-  uv run huggingface-cli login --token "$HF_TOKEN"
+  uv run hf auth login --token "$HF_TOKEN"
 fi
 
 # Initialize exit code
@@ -136,7 +136,7 @@ download_model() {
     echo "  $description already exists at $model_path, skipping..."
   else
     echo "  Downloading $description..."
-    if uv run huggingface-cli download "$model_name" --local-dir "$model_path" --local-dir-use-symlinks False; then
+    if uv run hf download "$model_name" --local-dir "$model_path"; then
       echo "  Successfully downloaded $description to $model_path"
     else
       echo "  Failed to download $description: $model_name"
@@ -149,8 +149,8 @@ download_model() {
 if [[ "$DOWNLOAD_ERA_X" == true ]]; then
  echo "Downloading EraX-WoW-Turbo V1.1 model..."
   # Note: Using a placeholder model name since the exact model identifier may vary
-  # This would need to be updated with the actual model identifier
-  if ! download_model "microsoft/EraX-WoW-Turbo-V1.1" "$MODELS_DIR/era-x-wow-turbo-v1.1" "EraX-WoW-Turbo V1.1"; then
+  # Downloads are performed using 'hf download' (new Hugging Face CLI)
+  if ! download_model "erax-ai/EraX-WoW-Turbo-V1.1-CT2" "$MODELS_DIR/era-x-wow-turbo-v1.1-ct2" "EraX-WoW-Turbo V1.1-CT2"; then
     EXIT_CODE=1
  fi
 fi
@@ -160,7 +160,7 @@ if [[ "$DOWNLOAD_CHUNKFORMER" == true ]]; then
  echo "Downloading ChunkFormer Large model..."
   # Note: Using a placeholder model name since the exact model identifier may vary
   # This would need to be updated with the actual model identifier
-  if ! download_model "facebook/chunkformer-large-16khz" "$MODELS_DIR/chunkformer-large" "ChunkFormer Large"; then
+  if ! download_model "khanhld/chunkformer-ctc-large-vie" "$MODELS_DIR/chunkformer-ctc-large-vie" "ChunkFormer-CTC-Large-Vie"; then
     EXIT_CODE=1
   fi
 fi
@@ -170,7 +170,7 @@ if [[ "$DOWNLOAD_QWEN" == true ]]; then
   echo "Downloading Qwen3-4B-Instruct AWQ model..."
   # Note: Using a placeholder model name since the exact model identifier may vary
   # This would need to be updated with the actual model identifier
-  if ! download_model "Qwen/Qwen3-4B-Instruct-AWQ" "$MODELS_DIR/qwen3-4b-instruct-awq" "Qwen3-4B-Instruct AWQ"; then
+  if ! download_model "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit" "$MODELS_DIR/qwen3-4b-instruct-2507-awq" "Qwen3-4B-Instruct 2507 AWQ"; then
     EXIT_CODE=1
   fi
 fi

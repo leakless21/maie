@@ -9,6 +9,21 @@ export PYTHONPATH="${PYTHONPATH:-.}:$(pwd)"
 export ENVIRONMENT="${ENVIRONMENT:-test}"
 export LOG_LEVEL="${LOG_LEVEL:-WARNING}"
 
+# Setup cuDNN from venv if available (needed for GPU tests with CTranslate2)
+# This ensures that faster-whisper can find cuDNN libraries when using GPU
+# Note: We need to detect this BEFORE running uv, using the venv's Python
+CUDNN_LIB_DIR=""
+if [[ -f ".venv/bin/python" ]]; then
+  CUDNN_LIB_DIR=$(.venv/bin/python -c "import site, os; sp = site.getsitepackages(); cudnn_dir = next((os.path.join(s, 'nvidia', 'cudnn', 'lib') for s in sp if os.path.isdir(os.path.join(s, 'nvidia', 'cudnn', 'lib'))), None); print(cudnn_dir if cudnn_dir else '')" 2>/dev/null || echo "")
+elif command -v python &> /dev/null; then
+  CUDNN_LIB_DIR=$(python -c "import site, os; sp = site.getsitepackages(); cudnn_dir = next((os.path.join(s, 'nvidia', 'cudnn', 'lib') for s in sp if os.path.isdir(os.path.join(s, 'nvidia', 'cudnn', 'lib'))), None); print(cudnn_dir if cudnn_dir else '')" 2>/dev/null || echo "")
+fi
+
+if [[ -n "$CUDNN_LIB_DIR" ]]; then
+  export LD_LIBRARY_PATH="${CUDNN_LIB_DIR}:${LD_LIBRARY_PATH:-}"
+  echo "Added cuDNN to LD_LIBRARY_PATH: $CUDNN_LIB_DIR"
+fi
+
 # Function to display help
 show_help() {
 cat << EOF

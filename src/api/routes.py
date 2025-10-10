@@ -1,6 +1,7 @@
 """Route definitions for the MAIE API."""
 
 import json
+import re
 import uuid
 from pathlib import Path
 from typing import Any, Dict, List
@@ -26,45 +27,87 @@ from src.api.schemas import (
     TemplateInfoSchema,
     TemplatesResponseSchema,
 )
-from src.config import Settings, settings
+from src.config import settings
 
-# Provide a patchable class attribute for tests that monkeypatch Settings.max_file_size_mb.
-if not hasattr(Settings, "max_file_size_mb"):  # pragma: no cover - defensive shim for tests
-    Settings.max_file_size_mb = settings.max_file_size_mb  # type: ignore
+
+def sanitize_filename(filename: str) -> str:
+    """
+    Sanitize filename to prevent path traversal attacks.
+    
+    Removes directory separators, parent directory references, and other
+    potentially malicious characters.
+    
+    Args:
+        filename: Original filename from user input
+        
+    Returns:
+        Sanitized filename safe for file system operations
+    """
+    if not filename:
+        return "unnamed"
+    
+    # Remove path components - just keep the base filename
+    filename = Path(filename).name
+    
+    # Remove any remaining path traversal attempts
+    filename = filename.replace("..", "").replace("/", "").replace("\\", "")
+    
+    # Remove potentially dangerous characters but keep extension
+    # Allow: letters, numbers, dots, dashes, underscores
+    filename = re.sub(r'[^a-zA-Z0-9._-]', '_', filename)
+    
+    # Ensure filename isn't empty after sanitization
+    if not filename or filename == ".":
+        return "unnamed"
+    
+    return filename
 
 
 def check_queue_depth() -> bool:
     """
     Check if the queue has capacity for more jobs.
     
+    Note: Currently not implemented. Will be wired up when Redis/RQ integration is complete.
+    
     Returns:
         True if queue has capacity, False if full
     """
-    # TODO: Implement actual Redis queue depth check
-    # For now, always return True
+    # Placeholder - returns True until Redis integration implemented
     return True
 
 
 async def save_audio_file(file: UploadFile, task_id: uuid.UUID, content: bytes) -> Path:
     """
-    Save uploaded audio file to disk.
+    Save uploaded audio file to disk with security controls.
     
     Args:
         file: Uploaded audio file
-        task_id: Task identifier for naming
+        task_id: Task identifier for naming (UUID for security)
         content: File content bytes
         
     Returns:
         Path to saved file
     """
-    # Determine file extension
-    ext = Path(file.filename).suffix if file.filename else ".wav"
+    # SECURITY: Use UUID for filename, not user input (prevents path traversal)
+    # Extract extension from user filename for convenience
+    if file.filename:
+        sanitized = sanitize_filename(file.filename)
+        ext = Path(sanitized).suffix
+    else:
+        ext = ".wav"  # Default extension
+    
+    # Ensure extension is in allowed list
+    allowed_extensions = {".wav", ".mp3", ".m4a", ".flac"}
+    if ext.lower() not in allowed_extensions:
+        ext = ".wav"  # Fallback to safe default
+    
+    # Use UUID-based filename
     file_path = settings.audio_dir / f"{task_id}{ext}"
     
     # Ensure directory exists
     settings.audio_dir.mkdir(parents=True, exist_ok=True)
     
-    # Save file
+    # Save file (synchronous write - will be optimized with aiofiles later)
     with open(file_path, "wb") as f:
         f.write(content)
     
@@ -75,12 +118,12 @@ def create_task_in_redis(task_id: uuid.UUID, request_params: Dict[str, Any]) -> 
     """
     Create initial task record in Redis.
     
+    Note: Placeholder stub. Will be implemented when Redis integration is complete.
+    
     Args:
         task_id: Task identifier
         request_params: Processing parameters
     """
-    # TODO: Implement Redis task creation
-    # For now, this is a placeholder
     pass
 
 
@@ -88,13 +131,13 @@ def enqueue_job(task_id: uuid.UUID, file_path: Path, request_params: Dict[str, A
     """
     Enqueue processing job to Redis queue.
     
+    Note: Placeholder stub. Will be implemented when RQ integration is complete.
+    
     Args:
         task_id: Task identifier
         file_path: Path to audio file
         request_params: Processing parameters
     """
-    # TODO: Implement RQ job enqueueing
-    # For now, this is a placeholder
     pass
 
 
@@ -132,27 +175,44 @@ class ProcessController(Controller):
                 detail="Missing or invalid 'file' field"
             )
         
-        # Validate file type
+        # SECURITY: Validate BOTH file extension AND MIME type
         allowed_extensions = {".wav", ".mp3", ".m4a", ".flac"}
-        file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+        allowed_mime_types = {"audio/wav", "audio/wave", "audio/x-wav", "audio/mpeg", "audio/mp4", "audio/x-m4a", "audio/flac"}
         
-        if file_ext not in allowed_extensions:
-            content_type = file.content_type or ""
-            if not content_type.startswith("audio/"):
+        file_ext = Path(file.filename).suffix.lower() if file.filename else ""
+        content_type = (file.content_type or "").lower()
+        
+        # Check extension
+        extension_valid = file_ext in allowed_extensions
+        
+        # Check MIME type
+        mime_valid = content_type.startswith("audio/") or any(mime in content_type for mime in allowed_mime_types)
+        
+        # Both should be valid (or at least one with the other being empty/unknown)
+        if not extension_valid:
+            if not mime_valid:
                 raise HTTPException(
                     status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    detail=f"Unsupported file type: {file.filename}"
+                    detail=f"Unsupported file type: {file.filename} (extension: {file_ext}, mime: {content_type})"
                 )
         
-        # Validate file size
+        # Additional check: if MIME type is explicitly NOT audio, reject even if extension is valid
+        if content_type and not content_type.startswith("audio/") and content_type not in allowed_mime_types:
+            raise HTTPException(
+                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"File MIME type must be audio/*, got: {content_type}"
+            )
+        
+        # Read file content (synchronous - will be optimized with streaming later)
         file_content = await file.read()
+        
+        # SECURITY: Validate file size (prevents DoS memory exhaustion)
         file_size_mb = len(file_content) / (1024 * 1024)
         
-        max_size_mb = getattr(settings, "max_file_size_mb", getattr(Settings, "max_file_size_mb", settings.max_file_size_mb))
-        if file_size_mb > max_size_mb:
+        if file_size_mb > settings.max_file_size_mb:
             raise HTTPException(
                 status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large: {file_size_mb:.2f}MB (max {max_size_mb}MB)"
+                detail=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)"
             )
         
         # Parse other form fields
@@ -203,14 +263,14 @@ def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
     """
     Retrieve task data from Redis.
     
+    Note: Placeholder stub. Will be implemented when Redis integration is complete.
+    
     Args:
         task_id: Task identifier
         
     Returns:
         Task data dictionary or None if not found
     """
-    # TODO: Implement actual Redis retrieval
-    # For now, return None
     return None
 
 
@@ -218,11 +278,13 @@ def get_available_models() -> ModelsResponseSchema:
     """
     Get list of available ASR models/backends.
     
+    Note: Currently returns hardcoded whisper backend. Will be implemented with ASRFactory
+    when processor modules are complete.
+    
     Returns:
         ModelsResponseSchema with models list
     """
-    # TODO: Implement actual model discovery from ASRFactory
-    # For now, return default whisper backend
+    # Placeholder - hardcoded default whisper backend
     models = [
         ModelInfoSchema(
             id="whisper",

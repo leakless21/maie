@@ -4,7 +4,7 @@ This module exposes a preconfigured Litestar `app` object with:
 - OpenAPI metadata
 - registered route controllers
 - lightweight health endpoint
-- dependency registrations for api_key_auth and validate_request_data
+- dependency registrations for validate_request_data
 - conservative CORS configuration (exposed as app.cors_config)
 - exception handlers for authorization and generic errors
 
@@ -26,7 +26,7 @@ except Exception:  # pragma: no cover - defensive
 from litestar.exceptions import NotAuthorizedException
 
 from src.api.routes import route_handlers
-from src.api.dependencies import api_key_auth, validate_request_data
+from src.api.dependencies import api_key_guard, validate_request_data
 from src.api.schemas import HealthResponse
 from src.config import settings
 
@@ -67,7 +67,6 @@ litestar_kwargs: Dict[str, Any] = {
     "route_handlers": [*route_handlers, health],
     "openapi_config": openapi_config,
     "dependencies": {
-        "api_key_auth": api_key_auth,
         "validate_request_data": validate_request_data,
     },
     "exception_handlers": {
