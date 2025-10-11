@@ -17,7 +17,7 @@ from src.processors.audio.preprocessor import AudioPreprocessor
 from src.processors.audio.metrics import AudioMetricsCollector
 
 # Prompt processors
-from src.processors.prompt.template_loader import PromptTemplateLoader
+from src.processors.prompt.template_loader import TemplateLoader
 from src.processors.prompt.renderer import PromptRenderer
 
 __all__ = [
@@ -33,6 +33,6 @@ __all__ = [
     "ChatTemplateManager",
     "AudioPreprocessor",
     "AudioMetricsCollector",
-    "PromptTemplateLoader",
+    "TemplateLoader",
     "PromptRenderer"
 ]

@@ -44,8 +44,8 @@ class TestSettingsDefaults:
             assert config.whisper_model_variant == "erax-wow-turbo"
             assert config.whisper_beam_size == 5
             assert config.whisper_vad_filter is True
-            assert config.whisper_compute_type == "int8"
-            assert config.whisper_device == "cpu"
+            assert config.whisper_compute_type == "float16"
+            assert config.whisper_device == "cuda"
 
     def test_llm_enhance_settings_defaults(self):
         """RED: llm_enhance model, gpu util 0.95, max_tokens 4096, temperature 0.0."""

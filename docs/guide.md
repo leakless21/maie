@@ -36,12 +36,16 @@ maie/
 │   │   │   ├── __init__.py                  # Exports: ASRFactory, WhisperBackend
 │   │   │   ├── factory.py                   # Factory pattern for ASR backends
 │   │   │   └── whisper.py                   # Whisper implementation
-│   │   └── llm/
-│   │       ├── __init__.py                  # Exports: Enhancement/Summary processors
-│   │       ├── base.py                      # Abstract LLM processor
-│   │       ├── config.py                    # Generation config hierarchy
-│   │       ├── enhancement_processor.py     # Text enhancement LLM
-│   │       └── summary_processor.py         # Summarization LLM
+│   │   ├── llm/
+│   │   │   ├── __init__.py                  # Exports: Enhancement/Summary processors
+│   │   │   ├── base.py                      # Abstract LLM processor
+│   │   │   ├── config.py                    # Generation config hierarchy
+│   │   │   ├── enhancement_processor.py     # Text enhancement LLM
+│   │   │   └── summary_processor.py         # Summarization LLM
+│   │   └── prompt/
+│   │       ├── __init__.py
+│   │       ├── renderer.py
+│   │       └── template_loader.py
 │   └── worker/
 │       ├── __init__.py                      # Empty
 │       ├── main.py                          # RQ worker entrypoint
@@ -64,7 +68,10 @@ maie/
 │   └── e2e/
 │       └── test_full_pipeline.py
 ├── templates/                               # JSON Schema files
-│   └── meeting_notes_v1.json
+│   ├── meeting_notes_v1.json
+│   └── prompts/                             # Jinja2 prompt templates
+│       ├── text_enhancement_v1.jinja
+│       └── meeting_notes_v1.jinja
 ├── assets/
 │   └── chat-templates/                      # Optional Jinja templates
 │       └── qwen3_nonthinking.jinja
@@ -1644,336 +1651,87 @@ segments, info = batched_model.transcribe("audio.mp3", batch_size=16)
 
 ## LLM Processing Layer
 
-### File: `src/processors/llm/config.py`
+### File: `src/processors/prompt/template_loader.py`
 
-**Purpose**: Hierarchical configuration management for LLM generation
+**Purpose**: Load and cache Jinja2 templates from the filesystem.
 
-**Dataclass: `GenerationConfig`**:
+```python
+from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
+from functools import lru_cache
 
-**Fields** (all Optional):
+class TemplateLoader:
+    def __init__(self, template_dir: Path):
+        self.env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
 
-- `temperature: float | None`
-- `top_p: float | None`
-- `top_k: int | None`
-- `max_tokens: int | None`
-- `repetition_penalty: float | None`
-- `presence_penalty: float | None`
-- `frequency_penalty: float | None`
-- `min_p: float | None`
-- `stop: list[str] | None`
-- `seed: int | None`
+    @lru_cache(maxsize=128)
+    def get_template(self, template_name: str):
+        return self.env.get_template(f"{template_name}.jinja")
+```
 
-**Methods**:
+### File: `src/processors/prompt/renderer.py`
 
-1. **`def to_sampling_params(self) -> dict[str, Any]`**:
+**Purpose**: Render Jinja2 templates with a given context.
 
-   - **Logic**:
-     1. Create empty dict
-     2. For each field, if value is not None, add to dict
-     3. Return dict with only non-None values
-   - Used to create vLLM SamplingParams
+```python
+from .template_loader import TemplateLoader
 
-2. **`def merge_with(self, other: "GenerationConfig") -> "GenerationConfig"`**:
+class PromptRenderer:
+    def __init__(self, template_loader: TemplateLoader):
+        self.template_loader = template_loader
 
-   - **Logic**:
-     1. For each field: use self's value if not None, else use other's value
-     2. Create new GenerationConfig with merged values
-     3. Return new instance
-   - Implements priority: self > other
-
-3. **`def __repr__(self) -> str`**:
-   - Show only non-None fields for debugging
-
-**Functions**:
-
-1. **`def load_model_generation_config(model_path: Path) -> GenerationConfig`**:
-
-   - **Logic**:
-     1. Check if `model_path / "generation_config.json"` exists
-     2. If not: return empty GenerationConfig()
-     3. If yes:
-        - Load JSON
-        - Map HuggingFace fields to our fields:
-          - `temperature` → `temperature`
-          - `top_p` → `top_p`
-          - `top_k` → `top_k`
-          - `max_new_tokens` or `max_length` → `max_tokens`
-          - `repetition_penalty` → `repetition_penalty`
-        - Create GenerationConfig
-        - Log what was loaded
-        - Return config
-     4. Handle exceptions: return empty config, log warning
-
-2. **`def get_library_defaults() -> GenerationConfig`**:
-
-   - **Returns**: GenerationConfig with vLLM defaults:
-     - temperature=1.0
-     - top_p=1.0
-     - top_k=-1 (disabled)
-     - max_tokens=16
-     - repetition_penalty=1.0
-     - presence_penalty=0.0
-     - frequency_penalty=0.0
-
-3. **`def build_generation_config(model_path: Path, env_overrides: GenerationConfig, runtime_overrides: GenerationConfig | None) -> GenerationConfig`**:
-   - **Purpose**: Apply configuration hierarchy
-   - **Logic**:
-     1. Start with: `config = get_library_defaults()`
-     2. Merge model defaults: `config = load_model_generation_config(model_path).merge_with(config)`
-     3. Merge env overrides: `config = env_overrides.merge_with(config)`
-     4. If runtime_overrides: `config = runtime_overrides.merge_with(config)`
-     5. Log final config
-     6. Return config
-   - **Priority**: runtime > env > model > library
-
----
+    def render(self, template_name: str, **context) -> str:
+        template = self.template_loader.get_template(template_name)
+        return template.render(**context)
+```
 
 ### File: `src/processors/llm/enhancement_processor.py`
 
-**Purpose**: LLM for text enhancement with configuration hierarchy
+**Purpose**: LLM for text enhancement, using the new prompt rendering system.
 
-**Class: `EnhancementLLMProcessor`**:
+```python
+from src.processors.prompt.renderer import PromptRenderer
 
-**Instance Attributes**:
+class EnhancementLLMProcessor:
+    def __init__(self, prompt_renderer: PromptRenderer, ...):
+        self.prompt_renderer = prompt_renderer
+        # ... other initializations
 
-- `model_name: str` - LLM model identifier
-- `gpu_memory_utilization: float` - From settings
-- `max_model_len: int` - Context window size
-- `env_config: GenerationConfig` - Config from environment variables
-- `runtime_config: GenerationConfig | None` - Config from constructor parameters
-- `llm: LLM | None` - vLLM instance (lazy loaded)
-- `checkpoint_hash: str | None` - For versioning
-- `final_config: GenerationConfig | None` - Resolved config after merging
-
-**Methods**:
-
-1. **`def __init__(self, model_name=None, temperature=None, top_p=None, top_k=None, max_tokens=None, repetition_penalty=None, gpu_memory_utilization=None, max_model_len=None)`**:
-
-   - **Logic**:
-     1. Set model_name from parameter or `settings.llm_enhancement_model`
-     2. Set gpu_memory_utilization and max_model_len from parameters or settings
-     3. Build `env_config`:
-        ```python
-        self.env_config = GenerationConfig(
-            temperature=settings.llm_enhancement_temperature,
-            top_p=settings.llm_enhancement_top_p,
-            top_k=settings.llm_enhancement_top_k,
-            max_tokens=settings.llm_enhancement_max_tokens,
-            repetition_penalty=settings.llm_enhancement_repetition_penalty
+    def enhance_text(self, transcript: str) -> str:
+        # ...
+        prompt = self.prompt_renderer.render(
+            'text_enhancement_v1',
+            transcript=transcript
         )
-        ```
-     4. Build `runtime_config`:
-        ```python
-        runtime_config = GenerationConfig(
-            temperature=temperature,
-            top_p=top_p,
-            top_k=top_k,
-            max_tokens=max_tokens,
-            repetition_penalty=repetition_penalty
-        )
-        # Only set if any values provided
-        self.runtime_config = runtime_config if any(v is not None for v in runtime_config.__dict__.values()) else None
-        ```
-     5. Initialize llm, checkpoint_hash, final_config to None
-     6. Log initialization with env_config and runtime_config
-
-2. **`def is_loaded(self) -> bool`**:
-
-   - Return `self.llm is not None`
-
-3. **`def load_model(self) -> None`**:
-
-   - **Guard**: If already loaded, return
-   - **Logic**:
-     1. Determine model_path: `settings.models_dir / "llm" / Path(self.model_name).name`
-     2. Build final config:
-        ```python
-        self.final_config = build_generation_config(
-            model_path=model_path,
-            env_overrides=self.env_config,
-            runtime_overrides=self.runtime_config
-        )
-        ```
-     3. Log final generation config
-     4. Load model:
-        ```python
-        self.llm = LLM(
-            model=self.model_name,
-            quantization="awq",
-            gpu_memory_utilization=self.gpu_memory_utilization,
-            max_model_len=self.max_model_len,
-            trust_remote_code=True,
-            download_dir=str(settings.models_dir / "llm")
-        )
-        ```
-     5. Calculate checkpoint_hash if model_path exists
-     6. Log load completion with timing
-
-4. **`def enhance_text(self, transcript: str) -> str`**:
-
-   - **Guards**:
-     - Check `self.is_loaded()`, raise RuntimeError if not
-     - Check `self.final_config is not None`, raise RuntimeError if not
-   - **Logic**:
-
-     1. Log start
-     2. Build prompt:
-
-        ```
-        Add punctuation and proper capitalization to the following transcript.
-        Output only the corrected text, no explanations.
-
-        Transcript: {transcript}
-
-        Corrected:
-        ```
-
-     3. Get sampling params:
-        ```python
-        sampling_params_dict = self.final_config.to_sampling_params()
-        # Adjust max_tokens for enhancement
-        if "max_tokens" in sampling_params_dict:
-            sampling_params_dict["max_tokens"] = min(
-                len(transcript) + 500,
-                sampling_params_dict["max_tokens"]
-            )
-        sampling_params = SamplingParams(**sampling_params_dict)
-        ```
-     4. Generate: `outputs = self.llm.generate([prompt], sampling_params)`
-     5. Extract: `enhanced_text = outputs[0].outputs[0].text.strip()`
-     6. Log completion with timing and lengths
-     7. Return enhanced_text
-
-5. **`def unload(self) -> None`**:
-
-   - **Logic**:
-     1. If `self.llm is not None`:
-        - Log unloading
-        - `del self.llm`
-        - `self.llm = None`
-        - `self.final_config = None`
-        - `torch.cuda.empty_cache()`
-        - Log GPU cache cleared
-
-6. **`def get_version_info(self) -> dict`**:
-
-   - **Guard**: Check `self.final_config is not None`, raise RuntimeError if not
-   - **Returns**: Dict with:
-     ```python
-     {
-         "name": self.model_name,
-         "checkpoint_hash": self.checkpoint_hash or "unknown",
-         "quantization": "awq-4bit",
-         "task": "text_enhancement",
-         "chat_template": "qwen3_nonthinking",
-         "thinking": False,
-         "reasoning_parser": None,
-         "decoding_params": self.final_config.to_sampling_params()
-     }
-     ```
-
-7. **`@staticmethod def _calculate_checkpoint_hash(model_path: Path) -> str`**:
-   - Same as WhisperBackend implementation
-   - Hash all .bin and .safetensors files
-
----
+        # ... LLM generation logic
+```
 
 ### File: `src/processors/llm/summary_processor.py`
 
-**Purpose**: LLM for structured summarization with JSON schema validation
+**Purpose**: LLM for structured summarization, using the new prompt rendering system.
 
-**Class: `SummaryLLMProcessor`**:
+```python
+import json
+from src.processors.prompt.renderer import PromptRenderer
 
-**Instance Attributes**: Same as EnhancementLLMProcessor but with summary-specific config
+class SummaryLLMProcessor:
+    def __init__(self, prompt_renderer: PromptRenderer, ...):
+        self.prompt_renderer = prompt_renderer
+        # ... other initializations
 
-**Methods**:
-
-1. **`def __init__(...)`**:
-
-   - Same structure as EnhancementLLMProcessor
-   - Uses `settings.llm_summary_*` for env_config
-   - Builds runtime_config from parameters
-
-2. **`def is_loaded(self) -> bool`**: Same implementation
-
-3. **`def load_model(self) -> None`**: Same implementation (different config sources)
-
-4. **`def generate_summary(self, transcript: str, template_id: str, max_retries: int = 2) -> dict[str, Any]`**:
-
-   - **Guards**:
-
-     - Check `self.is_loaded()`, raise RuntimeError if not
-     - Check `self.final_config is not None`, raise RuntimeError if not
-
-   - **Logic**:
-     1. Load template schema:
-        ```python
+    def generate_summary(self, transcript: str, template_id: str, max_retries: int = 2) -> dict[str, Any]:
+        # ...
         schema_path = settings.get_template_path(template_id)
-        if not schema_path.exists():
-            raise ValueError(f"Template not found: {template_id}")
         with open(schema_path) as f:
             schema = json.load(f)
-        ```
-     2. Build prompt: `prompt = self._build_summary_prompt(transcript, schema)`
-     3. **Retry loop** (0 to max_retries):
-        a. Get sampling params from final_config
-        b. On retry (attempt > 0): Lower temperature: `temperature *= (0.7 ** attempt)`
-        c. Create SamplingParams
-        d. Generate: `outputs = self.llm.generate([prompt], sampling_params)`
-        e. Extract text: `response_text = outputs[0].outputs[0].text.strip()`
-        f. Try to parse JSON:
-        - `summary = json.loads(response_text)`
-        - On JSONDecodeError: log warning, continue to next attempt
-          g. Validate against schema:
-        - `from jsonschema import validate`
-        - `validate(instance=summary, schema=schema)`
-        - On success: log, return summary
-        - On validation error: log, add error to prompt for next attempt
-     4. After exhausting retries: raise ValueError
 
-5. **`def _build_summary_prompt(self, transcript: str, schema: dict[str, Any]) -> str`**:
-
-   - **Logic**:
-
-     1. Convert schema to formatted JSON string: `json.dumps(schema, indent=2)`
-     2. Build prompt:
-
-        ```
-        You are an expert at analyzing transcripts and creating structured summaries.
-
-        Read the following transcript and create a structured summary matching this JSON schema:
-
-        {schema_json}
-
-        Important:
-        - Respond with ONLY valid JSON, no additional text
-        - Include 1-5 relevant category tags that describe the content themes
-        - Be concise but accurate
-
-        Transcript:
-        {transcript}
-
-        JSON Summary:
-        ```
-
-     3. Return prompt string
-
-6. **`def unload(self) -> None`**: Same as EnhancementLLMProcessor
-
-7. **`def get_version_info(self) -> dict`**:
-
-   - Same structure as EnhancementLLMProcessor
-   - **Differences**:
-     - `task: "summarization"`
-     - Includes `structured_output` field:
-       ```python
-       "structured_output": {
-           "backend": "json_schema",
-           "schema_validation": True
-       }
-       ```
-
-8. **`@staticmethod def _calculate_checkpoint_hash(...)`**: Same implementation
+        prompt = self.prompt_renderer.render(
+            template_id,
+            transcript=transcript,
+            schema=json.dumps(schema, indent=2)
+        )
+        # ... LLM generation and validation logic
+```
 
 ---
 

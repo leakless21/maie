@@ -1,51 +1,56 @@
-"""Prompt template loader for MAIE prompt template system."""
-from typing import Dict, Optional
+from functools import lru_cache
 from pathlib import Path
 
+from jinja2 import Environment, FileSystemLoader
 
-class PromptTemplateLoader:
-    """Loads and manages Jinja prompt templates for MAIE."""
+
+class TemplateLoader:
+    """
+    Template loader for Jinja2 templates with caching and security features.
     
-    def __init__(self, templates_dir: Optional[Path] = None):
-        """Initialize the prompt template loader.
+    This class provides a secure, cached interface for loading Jinja2 templates
+    from the filesystem. It includes automatic HTML escaping for XSS prevention
+    and LRU caching for performance optimization.
+    
+    Args:
+        template_dir: Path to directory containing .jinja template files
         
-        Args:
-            templates_dir: Directory containing prompt templates.
-                          Defaults to templates/prompts/ if not provided.
+    Example:
+        >>> loader = TemplateLoader(Path("templates"))
+        >>> template = loader.get_template("my_template")
+        >>> result = template.render(name="World")
+    """
+    
+    def __init__(self, template_dir: Path):
         """
-        self.templates_dir = templates_dir or Path("templates/prompts/")
-    
-    def load_template(self, template_id: str) -> str:
-        """Load a prompt template by ID.
+        Initialize TemplateLoader with template directory.
         
         Args:
-            template_id: The ID of the template to load (e.g., 'meeting_notes_v1')
+            template_dir: Path to directory containing .jinja template files
+        """
+        self.template_dir = template_dir
+        self.env = Environment(loader=FileSystemLoader(template_dir), autoescape=True)
+
+    @lru_cache(maxsize=128)
+    def get_template(self, template_name: str):
+        """
+        Loads and caches a Jinja2 template.
+        
+        Args:
+            template_name: Name of template (with or without .jinja extension)
             
         Returns:
-            The template content as a string
+            Jinja2 Template object
             
         Raises:
-            FileNotFoundError: If the template file doesn't exist
-            ValueError: If the template_id is invalid
-        """
-        return ""
-    
-    def validate_template(self, template_content: str, template_id: str) -> bool:
-        """Validate that a template has the required structure and placeholders.
-        
-        Args:
-            template_content: The template content to validate
-            template_id: The template ID for validation rules
+            TemplateNotFound: If template file doesn't exist
             
-        Returns:
-            True if template is valid, False otherwise
+        Example:
+            >>> template = loader.get_template("my_template")
+            >>> template = loader.get_template("my_template.jinja")  # Also works
         """
-        return True
-    
-    def get_available_templates(self) -> Dict[str, Path]:
-        """Get all available prompt templates.
-        
-        Returns:
-            Dictionary mapping template IDs to their file paths
-        """
-        return {}
+        # Handle .jinja extension - if already present, don't add it again
+        if template_name.endswith('.jinja'):
+            return self.env.get_template(template_name)
+        else:
+            return self.env.get_template(f"{template_name}.jinja")

@@ -1,56 +1,51 @@
-"""Prompt renderer for MAIE prompt template system."""
-from typing import Dict, Any, List, Optional
-from jinja2 import Environment
-
-
-class PromptTemplateLoader:  # Forward reference workaround
-    pass
+from .template_loader import TemplateLoader
 
 
 class PromptRenderer:
-    """Renders Jinja prompt templates into OpenAI-style messages."""
+    """
+    Prompt renderer for Jinja2 templates with context validation.
     
-    def __init__(self, template_loader: Optional[PromptTemplateLoader] = None):
-        """Initialize the prompt renderer.
+    This class provides a secure interface for rendering Jinja2 templates
+    with proper context validation and error handling.
+    
+    Args:
+        template_loader: TemplateLoader instance for loading templates
+        
+    Example:
+        >>> loader = TemplateLoader(Path("templates"))
+        >>> renderer = PromptRenderer(loader)
+        >>> result = renderer.render("my_template", name="World")
+    """
+    
+    def __init__(self, template_loader: TemplateLoader):
+        """
+        Initialize PromptRenderer with TemplateLoader.
         
         Args:
-            template_loader: Optional template loader to use for loading templates
+            template_loader: TemplateLoader instance
+            
+        Raises:
+            TypeError: If template_loader is None
         """
+        if template_loader is None:
+            raise TypeError("template_loader cannot be None")
         self.template_loader = template_loader
-        self.environment = Environment()
-    
-    def render(self, template_id: str, **context) -> List[Dict[str, str]]:
-        """Render a prompt template with context into OpenAI-style messages.
+
+    def render(self, template_name: str, **context) -> str:
+        """
+        Renders a prompt template with the given context.
         
         Args:
-            template_id: The ID of the template to render
-            **context: Context variables to render the template with
+            template_name: Name of template to render
+            **context: Context variables for template rendering
             
         Returns:
-            List of OpenAI-style message dictionaries with 'role' and 'content' keys
-        """
-        return []
-    
-    def render_from_content(self, template_content: str, **context) -> List[Dict[str, str]]:
-        """Render a prompt template from content string into OpenAI-style messages.
-        
-        Args:
-            template_content: The template content to render
-            **context: Context variables to render the template with
+            Rendered template as string
             
-        Returns:
-            List of OpenAI-style message dictionaries with 'role' and 'content' keys
+        Raises:
+            TemplateNotFound: If template doesn't exist
+            UndefinedError: If required template variable is missing
+            TemplateSyntaxError: If template has syntax errors
         """
-        return []
-    
-    def validate_context(self, template_id: str, context: Dict[str, Any]) -> bool:
-        """Validate that the provided context contains all required variables for the template.
-        
-        Args:
-            template_id: The template ID to validate against
-            context: The context to validate
-            
-        Returns:
-            True if context is valid, False otherwise
-        """
-        return True
+        template = self.template_loader.get_template(template_name)
+        return template.render(**context)

@@ -1,8 +1,4 @@
-"""Prompt processors module initialization for MAIE."""
-from .template_loader import PromptTemplateLoader
 from .renderer import PromptRenderer
+from .template_loader import TemplateLoader
 
-__all__ = [
-    "PromptTemplateLoader",
-    "PromptRenderer"
-]
+__all__ = ["PromptRenderer", "TemplateLoader"]

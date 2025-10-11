@@ -880,12 +880,37 @@ _Full template schemas with detailed descriptions available in `/app/templates/`
 
 **LLM Prompt Structure:**
 
-The system prompt instructs the model to:
+The system uses a dedicated prompt management subsystem to render prompts for the LLM. This subsystem uses Jinja2 templates to allow for configurable and dynamic prompt generation.
 
-1. Read and understand the transcript
-2. Generate a structured summary following the template
-3. Identify 1-5 relevant category tags based on content themes
-4. Return everything as a single JSON object
+See section 3.5.1 for more details.
+
+### 3.5.1. Prompt Management
+
+**Design: Externalized Jinja2 Templates**
+
+To ensure that prompts are easy to manage, version, and iterate on, they are externalized from the application code and managed using the Jinja2 templating engine.
+
+**Directory Structure:**
+
+- **`templates/prompts/`**: This directory stores all Jinja2 prompt templates (e.g., `text_enhancement_v1.jinja`, `meeting_notes_v1.jinja`).
+- **`src/processors/prompt/`**: This directory contains the prompt rendering logic.
+
+**Key Components:**
+
+1.  **`TemplateLoader` Class (`src/processors/prompt/template_loader.py`):**
+    *   Responsible for loading Jinja2 templates from the `templates/prompts` directory.
+    *   Uses a cache (`@lru_cache`) to avoid redundant file system access.
+
+2.  **`PromptRenderer` Class (`src/processors/prompt/renderer.py`):**
+    *   Uses the `TemplateLoader` to get a template.
+    *   Renders the template with the provided context (e.g., transcript, JSON schema) to generate the final prompt string.
+
+**Workflow:**
+
+1.  The LLM processor (e.g., `SummaryLLMProcessor`) receives a request with a `template_id`.
+2.  It calls the `PromptRenderer` with the `template_id` and the necessary context.
+3.  The `PromptRenderer` uses the `TemplateLoader` to load the corresponding Jinja2 template.
+4.  The template is rendered with the context, and the final prompt is returned to the LLM processor.
 
 **Benefits:**
 
@@ -1046,7 +1071,11 @@ All Python dependencies managed through UV for:
 │   │   │   ├── factory.py  # ASRFactory + ASRBackend protocol
 │   │   │   ├── whisper.py  # WhisperBackend
 │   │   │   └── chunkformer.py # ChunkFormerBackend
-│   │   └── llm.py          # Direct vLLM inference
+│   │   ├── llm.py          # Direct vLLM inference
+│   │   └── prompt/         # Prompt rendering logic
+│   │       ├── __init__.py
+│   │       ├── renderer.py
+│   │       └── template_loader.py
 │   └── worker/
 │       ├── main.py         # RQ worker entrypoint
 │       └── pipeline.py     # Sequential processing logic
@@ -1055,7 +1084,10 @@ All Python dependencies managed through UV for:
 │   └── download_models.sh  # Model download script
 │
 ├── templates/              # JSON Schema definitions (FR-4)
-│   └── meeting_notes_v1.json
+│   ├── meeting_notes_v1.json
+│   └── prompts/            # Jinja2 prompt templates
+│       ├── text_enhancement_v1.jinja
+│       └── meeting_notes_v1.jinja
 ├── assets/
 │   └── chat-templates/     # Jinja ChatML templates for Qwen3 (optional)
 │
