@@ -170,12 +170,23 @@ def inject_mock_chunkformer(mock_chunkformer):
 
 @pytest.fixture
 def inject_mock_faster_whisper(mock_faster_whisper):
-    """Inject mock faster-whisper into sys.modules."""
+    """Inject mock faster-whisper into sys.modules and clear cache."""
     original = sys.modules.get("faster_whisper")
     sys.modules["faster_whisper"] = mock_faster_whisper
+    
+    # Clear the cached module in whisper.py if it was already imported
+    import src.processors.asr.whisper as whisper_module
+    original_cache = whisper_module._FASTER_WHISPER_MODULE
+    original_failed = whisper_module._FASTER_WHISPER_IMPORT_FAILED
+    whisper_module._FASTER_WHISPER_MODULE = None
+    whisper_module._FASTER_WHISPER_IMPORT_FAILED = False
+    
     yield mock_faster_whisper
     
     # Cleanup
+    whisper_module._FASTER_WHISPER_MODULE = original_cache
+    whisper_module._FASTER_WHISPER_IMPORT_FAILED = original_failed
+    
     if original is not None:
         sys.modules["faster_whisper"] = original
     else:
