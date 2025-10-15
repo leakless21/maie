@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Fake pixi shim for smoke tests — prints arguments and simulates success for install/run commands.
+echo "FAKE_PIXI_CALL: $@"
+if [[ "$1" == "install" ]]; then
+  echo "FAKE_PIXI: simulated install ($@)"
+  exit 0
+fi
+if [[ "$1" == "run" ]]; then
+  # Show what task would be executed and any additional args
+  echo "FAKE_PIXI: simulated run $2 ${@:3}"
+  exit 0
+fi
+# Default: print args and succeed
+exit 0

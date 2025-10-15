@@ -6,9 +6,9 @@
 | :-------------------- | :----------------------------------------- |
 | **Project Name**      | Modular Audio Intelligence Engine (MAIE)   |
 | **Version**           | 1.3                                        |
-| **Status**            | **Implementation-Ready**                   |
+| **Status**            | **Production Ready**                       |
 | **Related Documents** | PRD V1.3 (docs/PRD.md), Project Brief V1.3 |
-| **Last Updated**      | October 7, 2025                            |
+| **Last Updated**      | October 15, 2025                           |
 | **Authors**           | Engineering Team                           |
 
 ---
@@ -99,7 +99,7 @@ The system follows a **three-tier architecture** with clear separation of concer
 
 | Layer                  | Technology                  | Version       | Justification                                                                                                                                                                                                                                                                                                                           |
 | ---------------------- | --------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Package Management** | UV                          | Latest        | Fast, reliable Python dependency management                                                                                                                                                                                                                                                                                             |
+| **Package Management** | Pixi                        | Latest        | Fast, reproducible Python environment management (Conda + PyPI)                                                                                                                                                                                                                                                                         |
 | **Runtime**            | Python                      | 3.11+         | Modern Python with performance improvements                                                                                                                                                                                                                                                                                             |
 | **API Framework**      | Litestar                    | 2.x           | Auto OpenAPI 3.1, type-safe, async-native                                                                                                                                                                                                                                                                                               |
 | **Task Queue**         | Redis Queue (RQ)            | 1.15+         | Simple, reliable, low overhead for single-node                                                                                                                                                                                                                                                                                          |
@@ -898,12 +898,13 @@ To ensure that prompts are easy to manage, version, and iterate on, they are ext
 **Key Components:**
 
 1.  **`TemplateLoader` Class (`src/processors/prompt/template_loader.py`):**
-    *   Responsible for loading Jinja2 templates from the `templates/prompts` directory.
-    *   Uses a cache (`@lru_cache`) to avoid redundant file system access.
+
+    - Responsible for loading Jinja2 templates from the `templates/prompts` directory.
+    - Uses a cache (`@lru_cache`) to avoid redundant file system access.
 
 2.  **`PromptRenderer` Class (`src/processors/prompt/renderer.py`):**
-    *   Uses the `TemplateLoader` to get a template.
-    *   Renders the template with the provided context (e.g., transcript, JSON schema) to generate the final prompt string.
+    - Uses the `TemplateLoader` to get a template.
+    - Renders the template with the provided context (e.g., transcript, JSON schema) to generate the final prompt string.
 
 **Workflow:**
 
@@ -1035,12 +1036,12 @@ Fields:
 
 ### 3.7. Deployment Architecture
 
-**Package Management: UV (uv.dev)**
+**Package Management: Pixi (prefix.dev)**
 
-All Python dependencies managed through UV for:
+All Python dependencies managed through Pixi for:
 
 - Fast dependency resolution
-- Reproducible builds via `uv.lock`
+- Reproducible builds via `pixi.lock` (optional)
 - Consistent environments across dev/prod
 
 **Project Structure:**
@@ -1049,8 +1050,8 @@ All Python dependencies managed through UV for:
 /maie/
 ├── .env.template           # Configuration template
 ├── .python-version         # Python 3.13+
-├── pyproject.toml          # UV-managed dependencies
-├── uv.lock                 # Lockfile for reproducibility
+├── pyproject.toml          # Project metadata
+├── pixi.toml               # Pixi environment manifest
 ├── docker-compose.yml      # Multi-service orchestration
 ├── Dockerfile              # Single image for API + Worker
 ├── README.md
@@ -1180,23 +1181,23 @@ ENV LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/u
 worker:
   environment:
     - LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
-    - OMP_NUM_THREADS=4 # For CPU fallback performance
+    - OMP_NUM_THREADS=4 # For GPU performance optimization
 ```
 
-**CPU Performance Tuning:**
+**GPU Performance Tuning:**
 
-When running on CPU (forced or fallback), set thread count for consistent performance:
+For optimal GPU performance, ensure proper CUDA setup:
 
 ```yaml
 # Docker Compose
 worker:
   environment:
     - OMP_NUM_THREADS=4 # Adjust based on CPU cores
-    - WHISPER_DEVICE=cpu
-    - WHISPER_COMPUTE_TYPE=int8
+    - WHISPER_DEVICE=cuda
+    - WHISPER_COMPUTE_TYPE=float16
 ```
 
-**Recommendation:** Start with `OMP_NUM_THREADS = (CPU cores / 2)` for best performance.
+**Recommendation:** Ensure CUDA is properly installed and GPU is available for optimal performance.
 
 ### 3.8. Model Downloading Strategy
 
@@ -1225,16 +1226,16 @@ MODEL_DIR="${MODEL_DIR:-./data/models}"
 mkdir -p "$MODEL_DIR"/{whisper,chunkformer,llm}
 
 echo "Downloading ASR models..."
-huggingface-cli download erax-ai/EraX-WoW-Turbo-V1.1-CT2 \
+hf download erax-ai/EraX-WoW-Turbo-V1.1-CT2 \
   --local-dir "$MODEL_DIR/whisper/erax-wow-turbo" \
   --local-dir-use-symlinks False
 
-huggingface-cli download khanhld/chunkformer-large-vie \
+hf download khanhld/chunkformer-large-vie \
   --local-dir "$MODEL_DIR/chunkformer/large-vie" \
   --local-dir-use-symlinks False
 
 echo "Downloading LLM models..."
-huggingface-cli download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit \
+hf download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit \
   --local-dir "$MODEL_DIR/llm/qwen3-4b-awq" \
   --local-dir-use-symlinks False
 
@@ -1807,9 +1808,9 @@ docker exec maie-api du -sh /data/audio/*
 
 **Strategy:**
 
-- Use `uv` for reproducible dependency management
-- Pin all dependencies in `uv.lock`
-- Regular security audits: `uvx pip-audit` (or `pip-audit`)
+- Use `pixi` for reproducible dependency management
+- Optionally pin all dependencies in `pixi.lock`
+- Regular security audits: `pixi run pip-audit` (or `pip-audit`)
 - Subscribe to security advisories for critical packages
 
 **High-Risk Dependencies:**
@@ -2215,13 +2216,13 @@ api:
 
    ```bash
    # EraX-WoW-Turbo
-   huggingface-cli download erax-ai/EraX-WoW-Turbo-V1.1-CT2 --local-dir data/models/erax-wow-turbo
+   hf download erax-ai/EraX-WoW-Turbo-V1.1-CT2 --local-dir data/models/erax-wow-turbo
 
    # Qwen3-4B-Instruct AWQ
-   huggingface-cli download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit --local-dir data/models/qwen3-4b-awq
+   hf download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit --local-dir data/models/qwen3-4b-awq
 
    # ChunkFormer
-   huggingface-cli download khanhld/chunkformer-large-vie --local-dir data/models/chunkformer
+   hf download khanhld/chunkformer-large-vie --local-dir data/models/chunkformer
    ```
 
 5. Build and start services:

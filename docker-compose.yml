@@ -73,7 +73,7 @@ services:
       - LLM_TOP_P=0.9
       - LLM_TOP_K=20
       - LLM_MAX_TOKENS=4096
-    command: ["python3", "-m", "src.api.main"]
+    command: ["pixi", "run", "python", "-m", "src.api.main"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -109,7 +109,7 @@ services:
       - WHISPER_VAD_SPEECH_PAD_MS=400
       - WHISPER_DEVICE=cuda
       - WHISPER_COMPUTE_TYPE=float16
-      - WHISPER_CPU_FALLBACK=true
+      - WHISPER_CPU_FALLBACK=false
       - WHISPER_CONDITION_ON_PREVIOUS_TEXT=true
       - WHISPER_LANGUAGE=
       - OMP_NUM_THREADS=4
@@ -139,7 +139,7 @@ services:
       - LLM_TOP_P=0.9
       - LLM_TOP_K=20
       - LLM_MAX_TOKENS=4096
-    command: ["python3", "-m", "src.worker.main"]
+    command: ["pixi", "run", "python", "-m", "src.worker.main"]
     deploy:
       resources:
         reservations:
@@ -162,7 +162,7 @@ services:
 
   # RQ Dashboard - Queue monitoring
   rq-dashboard:
-    image: mdevilliers/rq-dashboard:latest
+    image: eoranged/rq-dashboard:latest
     container_name: maie-rq-dashboard
     restart: unless-stopped
     depends_on:

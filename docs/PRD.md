@@ -3,10 +3,10 @@
 |                       |                                          |
 | :-------------------- | :--------------------------------------- |
 | **Project Name**      | Modular Audio Intelligence Engine (MAIE) |
-| **Version**           | 1.3 (V1.0 Release Candidate)             |
+| **Version**           | 1.3 (V1.0 Production Ready)              |
 | **Status**            | **Approved**                             |
 | **Related Documents** | Project Brief V1.3, TDD V1.3             |
-| **Last Updated**      | October 7, 2025                          |
+| **Last Updated**      | October 15, 2025                         |
 
 #### 1. Introduction
 
@@ -21,7 +21,7 @@ Architecture Overview: The system uses a three-tier architecture with API server
 - FR-2: ASR Backend — The system provides two ASR backends for V1.0:
 
   - whisper: Default backend for V1.0, using Whisper-based models via CTranslate2 runtime. The default model variant is EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), which provides native punctuation and capitalization, optimized for throughput with VAD filtering.
-  
+
   - chunkformer: Alternative backend for long-form audio transcription, using ChunkFormer models optimized for single-request latency. The default model variant is `khanhld/chunkformer-large-vie`, which provides chunk-wise processing with configurable context windows and significantly faster processing for long audio files.
 
   **V1.0 ASR Feature Scope:**

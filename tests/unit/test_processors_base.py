@@ -40,6 +40,7 @@ def test_asrresult_error_field():
 
 class UnloadTrackerProcessor(base.Processor):
     """Tracks whether unload() was called when used as a context manager."""
+
     def __init__(self):
         self.unloaded = False
 

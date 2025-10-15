@@ -14,7 +14,9 @@ def test_openapi_title():
     """OpenAPI configuration should carry the project title."""
     cfg = getattr(api_main.app, "openapi_config", None)
     assert cfg is not None
-    assert getattr(cfg, "title", "").startswith("Modular Audio Intelligence Engine (MAIE)")
+    assert getattr(cfg, "title", "").startswith(
+        "Modular Audio Intelligence Engine (MAIE)"
+    )
 
 
 def test_health_route_registered():
@@ -22,7 +24,11 @@ def test_health_route_registered():
     routes = []
     for r in getattr(api_main.app, "routes", []):
         # Litestar route objects expose different attrs depending on version
-        path = getattr(r, "path", None) or getattr(r, "path_format", None) or getattr(r, "route", None)
+        path = (
+            getattr(r, "path", None)
+            or getattr(r, "path_format", None)
+            or getattr(r, "route", None)
+        )
         if path:
             routes.append(path)
         else:
@@ -35,7 +41,9 @@ def test_basic_dependencies_registered():
     """Application should register validation dependencies (auth uses guards now)."""
     deps = getattr(api_main.app, "dependencies", None)
     assert isinstance(deps, dict), "Expected app.dependencies to be a dict"
-    assert "validate_request_data" in deps, "Missing 'validate_request_data' dependency registration"
+    assert (
+        "validate_request_data" in deps
+    ), "Missing 'validate_request_data' dependency registration"
     # Note: api_key_guard is now applied via decorator, not registered as dependency
 
 

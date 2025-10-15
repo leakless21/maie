@@ -6,6 +6,7 @@ the documentation: probe audio metadata with ffprobe, decide if normalization
 is required, perform normalization with ffmpeg, and expose a convenience
 integration helper that calls the ASR factory.
 """
+
 from __future__ import annotations
 
 import json
@@ -20,6 +21,7 @@ logger = logging.getLogger(__name__)
 TARGET_SAMPLE_RATE = 16000
 TARGET_CHANNELS = 1
 MIN_DURATION_SEC = 1.0
+
 
 class AudioPreprocessor:
     """Normalize and validate audio for ASR backends.
@@ -41,11 +43,13 @@ class AudioPreprocessor:
         """
         cmd = [
             "ffprobe",
-            "-v", "error",
+            "-v",
+            "error",
             "-show_format",
             "-show_streams",
-            "-print_format", "json",
-            str(path)
+            "-print_format",
+            "json",
+            str(path),
         ]
         logger.debug("ffprobe cmd: %s", cmd)
         result = subprocess.run(cmd, capture_output=True, text=True)
@@ -56,7 +60,9 @@ class AudioPreprocessor:
 
         data = json.loads(getattr(result, "stdout", "{}"))
         streams = data.get("streams", [])
-        audio_stream = next((s for s in streams if s.get("codec_type") == "audio"), None)
+        audio_stream = next(
+            (s for s in streams if s.get("codec_type") == "audio"), None
+        )
         if audio_stream is None:
             raise ValueError("No audio stream found in file")
 
@@ -85,10 +91,14 @@ class AudioPreprocessor:
         cmd = [
             "ffmpeg",
             "-y",
-            "-i", str(input_path),
-            "-ar", str(TARGET_SAMPLE_RATE),
-            "-ac", str(TARGET_CHANNELS),
-            "-sample_fmt", "s16",
+            "-i",
+            str(input_path),
+            "-ar",
+            str(TARGET_SAMPLE_RATE),
+            "-ac",
+            str(TARGET_CHANNELS),
+            "-sample_fmt",
+            "s16",
             str(output_path),
         ]
         logger.debug("ffmpeg normalize cmd: %s", cmd)
@@ -108,7 +118,9 @@ class AudioPreprocessor:
         metadata = self._probe_audio(input_path)
 
         if metadata["duration"] < MIN_DURATION_SEC:
-            raise ValueError(f"Audio too short: {metadata['duration']}s < {MIN_DURATION_SEC}s")
+            raise ValueError(
+                f"Audio too short: {metadata['duration']}s < {MIN_DURATION_SEC}s"
+            )
 
         if self._needs_normalization(metadata):
             normalized = self._normalize_audio(input_path, metadata)
@@ -121,16 +133,15 @@ class AudioPreprocessor:
     def process_task_audio(self, task_id: str, raw_path: str) -> Any:
         """Integration helper: preprocess then delegate to ASR factory.
 
-        Calls ASRProcessorFactory.create(backend, config={...}) with the final
+        Calls ASRFactory.create(backend, config={...}) with the final
         audio path (normalized if produced).
         """
         metadata = self.preprocess(Path(raw_path))
         final_path = str(metadata.get("normalized_path") or Path(raw_path))
 
         # Import here to avoid import cycles at module import time
-        from src.processors.asr import factory as asr_factory_module
+        from src.processors.asr.factory import ASRFactory
 
-        return asr_factory_module.ASRProcessorFactory.create(
-            "whisper",
-            config={"task_id": task_id, "audio_path": final_path}
+        return ASRFactory.create(
+            "whisper", config={"task_id": task_id, "audio_path": final_path}
         )

@@ -37,11 +37,9 @@ maie/
 │   │   │   ├── factory.py                   # Factory pattern for ASR backends
 │   │   │   └── whisper.py                   # Whisper implementation
 │   │   ├── llm/
-│   │   │   ├── __init__.py                  # Exports: Enhancement/Summary processors
-│   │   │   ├── base.py                      # Abstract LLM processor
+│   │   │   ├── __init__.py                  # Exports: LLMProcessor, GenerationConfig helpers
 │   │   │   ├── config.py                    # Generation config hierarchy
-│   │   │   ├── enhancement_processor.py     # Text enhancement LLM
-│   │   │   └── summary_processor.py         # Summarization LLM
+│   │   │   └── processor.py                 # Unified LLMProcessor (enhancement + summarization)
 │   │   └── prompt/
 │   │       ├── __init__.py
 │   │       ├── renderer.py
@@ -92,8 +90,8 @@ maie/
 ├── .env                                     # Your actual config (gitignored)
 ├── .gitignore
 ├── .python-version                          # "3.13"
-├── pyproject.toml                           # UV dependencies
-├── uv.lock                                  # Locked dependencies
+├── pyproject.toml                           # Project metadata
+├── pixi.toml                                # Pixi environment manifest
 ├── Dockerfile
 ├── docker-compose.yml
 └── README.md
@@ -146,7 +144,7 @@ maie/
      - `whisper_vad_filter: bool` (default: True)
      - `whisper_vad_parameters: dict | None` (default: None)
      - `whisper_compute_type: Literal["float16", "int8_float16", "int8"]` (default: "int8_float16")
-     - `whisper_device: Literal["cuda", "cpu"]` (default: "cuda")
+     - `whisper_device: Literal["cuda", "auto"]` (default: "cuda", CPU not supported)
      - `whisper_condition_on_previous_text: bool` (default: True)
    - ChunkFormer
      - `chunkformer_model_name: str` (default: "khanhld/chunkformer-large-vie")
@@ -158,26 +156,28 @@ maie/
 
 5. **LLM Settings - Enhancement Task**:
 
-   - `llm_enhancement_model: str` - Model identifier
-   - `llm_enhancement_temperature: float | None` - **None = use model default**
-   - `llm_enhancement_top_p: float | None`
-   - `llm_enhancement_top_k: int | None`
-   - `llm_enhancement_max_tokens: int | None`
-   - `llm_enhancement_repetition_penalty: float | None`
+   - `llm_enhance_model: str` - Model identifier
+   - `llm_enhance_temperature: float | None` - **None = use model default**
+   - `llm_enhance_top_p: float | None`
+   - `llm_enhance_top_k: int | None`
+   - `llm_enhance_max_tokens: int | None`
+   - `llm_enhance_repetition_penalty: float | None`
 
 6. **LLM Settings - Summarization Task**:
 
-   - `llm_summary_model: str` - Model identifier
-   - `llm_summary_temperature: float | None` - **None = use model default**
-   - `llm_summary_top_p: float | None`
-   - `llm_summary_top_k: int | None`
-   - `llm_summary_max_tokens: int | None`
-   - `llm_summary_repetition_penalty: float | None`
+   - `llm_sum_model: str` - Model identifier
+   - `llm_sum_temperature: float | None` - **None = use model default**
+   - `llm_sum_top_p: float | None`
+   - `llm_sum_top_k: int | None`
+   - `llm_sum_max_tokens: int | None`
+   - `llm_sum_repetition_penalty: float | None`
 
 7. **LLM Settings - Shared**:
 
-   - `llm_gpu_memory_utilization: float` - vLLM GPU memory fraction (default: 0.9)
-   - `llm_max_model_len: int` - Context window size (default: 32768)
+   - `llm_enhance_gpu_memory_utilization: float` - vLLM GPU memory fraction for enhancement (default: 0.95)
+   - `llm_sum_gpu_memory_utilization: float` - vLLM GPU memory fraction for summarization (default: 0.95)
+   - `llm_enhance_max_model_len: int` - Context window size for enhancement (default: 32768)
+   - `llm_sum_max_model_len: int` - Context window size for summarization (default: 32768)
 
 8. **File Paths**:
 
@@ -353,6 +353,7 @@ model_config = SettingsConfigDict(
    - **Purpose**: Provide async Redis client for queue DB (DB 0)
    - **Import**: `import redis.asyncio as redis` and `from redis.asyncio import Redis`
    - **Returns**:
+
      ```python
      redis.from_url(
          settings.redis_url,
@@ -360,6 +361,7 @@ model_config = SettingsConfigDict(
          decode_responses=True
      )
      ```
+
    - **Usage**: Injected into controller methods for async operations
    - **Production Note**: For production, use connection pooling (see "Redis Connection Pooling" section below)
 
@@ -367,6 +369,7 @@ model_config = SettingsConfigDict(
 
    - **Purpose**: Provide async Redis client for results DB (DB 1)
    - **Returns**:
+
      ```python
      redis.from_url(
          settings.redis_url.replace("/0", f"/{settings.redis_results_db}"),
@@ -376,6 +379,7 @@ model_config = SettingsConfigDict(
          socket_connect_timeout=5.0
      )
      ```
+
    - **Usage**: Injected for status queries and result retrieval
    - **Rationale**: Separate client allows different timeout configuration for result operations
 
@@ -384,6 +388,7 @@ model_config = SettingsConfigDict(
    - **Purpose**: Provide synchronous Redis client for RQ
    - **Import**: `from redis import Redis as SyncRedis`
    - **Returns**:
+
      ```python
      SyncRedis.from_url(
          settings.redis_url,
@@ -391,6 +396,7 @@ model_config = SettingsConfigDict(
          decode_responses=True
      )
      ```
+
    - **Usage**: Used internally by `get_rq_queue()`
    - **Critical Note**: RQ requires synchronous Redis client; do NOT use async client with RQ
 
@@ -622,6 +628,7 @@ app = Litestar(
    - **Path**: `/v1`
    - **Guards**: `[api_key_guard]` - All endpoints require authentication
    - **Dependencies**:
+
      ```python
      {
          "queue_redis": Provide(get_redis_client),      # Async Redis for queue operations
@@ -644,6 +651,7 @@ app = Litestar(
    - **Logic Flow**:
 
      1. **Validate file size BEFORE reading entire file**:
+
         ```python
         # Check file.size attribute first to avoid loading large files into memory
         if file.size and file.size > settings.max_file_size_mb * 1024 * 1024:
@@ -652,6 +660,7 @@ app = Litestar(
                 detail=f"File too large: {file.size} bytes (max {settings.max_file_size_mb}MB)"
             )
         ```
+
      2. **Validate MIME type and format**:
 
         ```python
@@ -674,6 +683,7 @@ app = Litestar(
         ```
 
      3. **Sanitize filename**:
+
         ```python
         # Prevent path traversal attacks
         safe_filename = Path(file.filename or "audio.wav").name
@@ -683,6 +693,7 @@ app = Litestar(
                 detail="Invalid filename"
             )
         ```
+
      4. **Validate template_id**: If `Feature.SUMMARY in data.features`, require `data.template_id`
      5. **Check backpressure**: `depth = await queue_redis.llen("rq:queue:default")`, if `>= settings.max_queue_depth` → return 429
      6. **Generate task_id**: `uuid4()`
@@ -712,7 +723,9 @@ app = Litestar(
         - Key: `f"task:{task_id}"`
         - Fields: status="PENDING", submitted_at, request_params (JSON)
      9. **Enqueue job to Redis DB 0**:
+
         - **Critical**: Wrap sync RQ operation with `asyncio.to_thread()`
+
         ```python
         job = await asyncio.to_thread(
             rq_queue.enqueue,
@@ -728,6 +741,7 @@ app = Litestar(
             result_ttl=settings.result_ttl
         )
         ```
+
      10. **Return**: `ProcessResponse(task_id=task_id)`
 
    - **Error Handling**:
@@ -976,15 +990,19 @@ def setup_logging():
 
    - **Purpose**: Extract audio metadata using ffprobe
    - **Logic**:
+
      1. Run subprocess:
+
         ```
         ffprobe -v error
                 -show_entries format=duration:stream=sample_rate,channels,codec_name
                 -of json <path>
         ```
+
      2. Parse JSON stdout
      3. Extract: format (codec_name), duration, sample_rate, channels
      4. Return dict
+
    - **Error Handling**: Raise subprocess.CalledProcessError if ffprobe fails
 
 3. **`def _needs_normalization(self, metadata: dict) -> bool`**:
@@ -995,11 +1013,14 @@ def setup_logging():
      - `format not in ["pcm_s16le", "wav"]`
 
 4. **`def _normalize_audio(self, input_path: Path, metadata: dict) -> Path`**:
+
    - **Purpose**: Convert to WAV 16kHz mono using ffmpeg
    - **Logic**:
+
      1. Get task directory: `task_dir = input_path.parent`
      2. Create output path: `task_dir / "preprocessed.wav"`
      3. Run subprocess:
+
         ```
         ffmpeg -y -i <input_path>
                -ar 16000
@@ -1007,7 +1028,9 @@ def setup_logging():
                -sample_fmt s16
                <output_path>
         ```
+
      4. Return output_path
+
    - **Logging**: Log input/output paths, target parameters
    - **Note**: Saves preprocessed file in same task directory as raw file
 
@@ -1066,7 +1089,7 @@ class ASRBackend(Protocol):
 
 **Purpose**: Factory pattern for ASR backend instantiation with integrated audio processing
 
-**Class: `ASRProcessorFactory`**:
+**Class: `ASRFactory`**:
 
 **Class Attributes**:
 
@@ -1170,7 +1193,7 @@ segments, info = model.transcribe(
 **Note:** Our default `min_silence_duration_ms=500` is less aggressive than faster-whisper's default of 2000ms, preventing accidental speech cutoff.
 
 - Word timestamps: set `word_timestamps=True` when needed. Capture words from `segment.words`.
-- Links: official docs and examples — https://github.com/SYSTRAN/faster-whisper
+- Links: official docs and examples — <https://github.com/SYSTRAN/faster-whisper>
 
 Configuration tips:
 
@@ -1230,7 +1253,7 @@ Versioning: capture your own `checkpoint_hash` for local model dirs for reproduc
 
 #### ChunkFormer
 
-- Models: e.g., `khanhld/chunkformer-large-vie` (HF Hub). Research: https://arxiv.org/abs/2502.14673
+- Models: e.g., `khanhld/chunkformer-large-vie` (HF Hub). Research: <https://arxiv.org/abs/2502.14673>
 - Purpose: long-form ASR with chunking/context techniques to keep memory steady for very long audio.
 - Installation: `pip install chunkformer` (provides Python API and `chunkformer-decode` CLI)
 - Integration approach:
@@ -1274,7 +1297,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 - `right_context_size: int` - Right context frames for each chunk (default: 128)
 - `total_batch_duration: int` - Total batch duration in seconds (default: 14400 = 4 hours)
 - `return_timestamps: bool` - Include word/segment timestamps (default: True)
-- `device: str` - Device to run on: "cuda" or "cpu" (default: "cuda")
+- `device: str` - Device to run on: "cuda" or "auto" (default: "cuda", CPU not supported)
 - `model: ChunkFormerModel | None` - Lazy loaded model
 - `model_path: Path | None` - Resolved path to model
 - `checkpoint_hash: str | None` - Model checkpoint hash
@@ -1313,9 +1336,11 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 3. **`def execute(self, audio_data: str, **kwargs) -> ASRResult`\*\*:
 
    - **Flow**:
+
      1. Call `self._load_model()` (lazy loading)
      2. Start timer
      3. Single long-form transcription:
+
         ```python
         transcription = self.model.endless_decode(
             audio_path=audio_path,  # Path to audio file
@@ -1326,6 +1351,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
             return_timestamps=self.return_timestamps
         )
         ```
+
      4. Parse transcription result:
         - Extract text
         - Extract segments with timestamps if enabled
@@ -1362,17 +1388,20 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 
    - **Purpose**: Batch transcription from TSV file with optional WER calculation
    - **TSV Format**:
+
      ```
      audio_path    txt
      audio1.wav    Optional reference text
      audio2.wav    Optional reference text
      ```
+
    - **Logic**:
      - Reads audio paths from TSV
      - Performs batch transcription
      - If `txt` column provided, calculates Word Error Rate (WER)
      - Saves output back to TSV file
    - **Usage**:
+
      ```bash
      # Command-line interface
      chunkformer-decode \
@@ -1396,6 +1425,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 7. **`def get_version_info(self) -> dict`**:
 
    - **Returns**: Dict with comprehensive version info:
+
      ```python
      {
          "backend": "chunkformer",
@@ -1452,6 +1482,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
    ```
 
 2. **Batch Processing with TSV**:
+
    ```bash
    chunkformer-decode \
        --model_checkpoint path/to/local/checkpoint \
@@ -1492,7 +1523,7 @@ for i, transcription in enumerate(transcriptions):
     print(f"Audio {i+1}: {transcription}")
 ```
 
-Both backends are registered with the `ASRProcessorFactory` and discoverable via the `/v1/models` endpoint.
+Both backends are registered with the `ASRFactory` and discoverable via the `/v1/models` endpoint.
 
 **Use Cases**:
 
@@ -1685,52 +1716,26 @@ class PromptRenderer:
         return template.render(**context)
 ```
 
-### File: `src/processors/llm/enhancement_processor.py`
+### File: `src/processors/llm/processor.py`
 
-**Purpose**: LLM for text enhancement, using the new prompt rendering system.
+**Purpose**: Unified LLM processor that handles both text enhancement and structured summarization.
 
 ```python
 from src.processors.prompt.renderer import PromptRenderer
 
-class EnhancementLLMProcessor:
-    def __init__(self, prompt_renderer: PromptRenderer, ...):
-        self.prompt_renderer = prompt_renderer
-        # ... other initializations
+class LLMProcessor:
+    def __init__(self):
+        # Initializes PromptRenderer, environment configs, and lazy model loading
+        ...
 
-    def enhance_text(self, transcript: str) -> str:
-        # ...
-        prompt = self.prompt_renderer.render(
-            'text_enhancement_v1',
-            transcript=transcript
-        )
-        # ... LLM generation logic
-```
+    def enhance_text(self, transcript: str) -> dict:
+        # Render 'text_enhancement_v1' and generate enhanced text
+        ...
 
-### File: `src/processors/llm/summary_processor.py`
-
-**Purpose**: LLM for structured summarization, using the new prompt rendering system.
-
-```python
-import json
-from src.processors.prompt.renderer import PromptRenderer
-
-class SummaryLLMProcessor:
-    def __init__(self, prompt_renderer: PromptRenderer, ...):
-        self.prompt_renderer = prompt_renderer
-        # ... other initializations
-
-    def generate_summary(self, transcript: str, template_id: str, max_retries: int = 2) -> dict[str, Any]:
-        # ...
-        schema_path = settings.get_template_path(template_id)
-        with open(schema_path) as f:
-            schema = json.load(f)
-
-        prompt = self.prompt_renderer.render(
-            template_id,
-            transcript=transcript,
-            schema=json.dumps(schema, indent=2)
-        )
-        # ... LLM generation and validation logic
+    def generate_summary(self, transcript: str, template_id: str) -> dict:
+        # Load schema, render prompt, apply guided decoding (JSON schema),
+        # and retry once with validation feedback if needed
+        ...
 ```
 
 ---
@@ -1752,6 +1757,7 @@ This is the **RQ job function** that gets enqueued and executed by the worker.
 **Setup Phase**:
 
 1. Connect to Redis results DB:
+
    ```python
    results_client = redis.from_url(
        settings.redis_url.replace("/0", f"/{settings.redis_results_db}"),
@@ -1759,6 +1765,7 @@ This is the **RQ job function** that gets enqueued and executed by the worker.
    )
    task_key = f"task:{task_id}"
    ```
+
 2. Log task start
 3. Start timer
 
@@ -1891,6 +1898,7 @@ If not needs_enhancement:
 1. Catch all exceptions
 2. Log error with full traceback
 3. Update task in Redis:
+
    ```python
    results_client.hset(
        task_key,
@@ -1901,6 +1909,7 @@ If not needs_enhancement:
        }
    )
    ```
+
 4. Re-raise exception (for RQ retry mechanism)
 
 **Helper Functions**:
@@ -1911,11 +1920,14 @@ If not needs_enhancement:
    - Log status change
 
 2. **`def _calculate_edit_rate(original: str, enhanced: str) -> float`**:
+
    - **Purpose**: Calculate Levenshtein distance ratio
    - **Algorithm**:
+
      1. Create 2D DP matrix: `dp[len(original)+1][len(enhanced)+1]`
      2. Initialize: first row/column with indices
      3. Fill matrix:
+
         ```python
         for i in range(1, len1+1):
             for j in range(1, len2+1):
@@ -1926,8 +1938,10 @@ If not needs_enhancement:
                     dp[i-1][j-1] + cost  # substitution
                 )
         ```
+
      4. Distance: `dp[len1][len2]`
      5. Return: `distance / max(len1, len2)`
+
    - **Returns**: Float between 0.0 (identical) and 1.0 (completely different)
 
 ---
@@ -1942,14 +1956,17 @@ If not needs_enhancement:
 
    - **Purpose**: Ensure all required models exist before starting
    - **Logic**:
+
      1. Build list of required paths:
+
         ```python
         required_models = [
             settings.models_dir / "whisper" / settings.whisper_model_variant,
-            settings.models_dir / "llm" / settings.llm_enhancement_model.split("/")[-1],
-            settings.models_dir / "llm" / settings.llm_summary_model.split("/")[-1]
+            settings.models_dir / "llm" / settings.llm_enhance_model.split("/")[-1],
+            settings.models_dir / "llm" / settings.llm_sum_model.split("/")[-1]
         ]
         ```
+
      2. Check each path exists
      3. If any missing:
         - Log error with missing list
@@ -1960,6 +1977,7 @@ If not needs_enhancement:
 
    - **Purpose**: Let API know worker is alive
    - **Logic**:
+
      ```python
      redis_client.set(
          "worker:heartbeat",
@@ -1967,11 +1985,14 @@ If not needs_enhancement:
          ex=120  # Expire after 2 minutes
      )
      ```
+
    - Called periodically to update timestamp
 
 3. **`def main() -> None`**:
+
    - **Purpose**: Start RQ worker
    - **Flow**:
+
      1. Configure logging:
         - Remove default loguru handler
         - Add custom handler with format
@@ -1981,6 +2002,7 @@ If not needs_enhancement:
         - On RuntimeError: log error, `sys.exit(1)`
      4. Connect to Redis: `redis_client = redis.from_url(settings.redis_url, decode_responses=False)`
      5. Create RQ worker:
+
         ```python
         worker = Worker(
             ["default"],  # Queue names
@@ -1988,9 +2010,11 @@ If not needs_enhancement:
             name=settings.worker_name
         )
         ```
+
      6. Update heartbeat: `update_heartbeat(redis_client)`
      7. Log ready
      8. Start worker:
+
         ```python
         worker.work(
             with_scheduler=False,
@@ -1998,6 +2022,7 @@ If not needs_enhancement:
             logging_level="INFO"
         )
         ```
+
      9. Handle KeyboardInterrupt: log graceful shutdown
      10. Handle other exceptions: log error, `sys.exit(1)`
 
@@ -2022,6 +2047,7 @@ if __name__ == "__main__":
 
    - **Purpose**: Set test environment variables for every test
    - **Logic**:
+
      ```python
      monkeypatch.setenv("SECRET_API_KEY", "test-api-key-12345")
      monkeypatch.setenv("REDIS_URL", "redis://localhost:6379/15")  # Test DB
@@ -2030,12 +2056,14 @@ if __name__ == "__main__":
      monkeypatch.setenv("MODELS_DIR", str(tmp_path / "models"))
      # etc.
      ```
+
    - Auto-applies to all tests
 
 2. **`@pytest.fixture def mock_redis()`**:
 
    - **Purpose**: Mock Redis client for tests without Redis server
    - **Logic**:
+
      ```python
      with patch("redis.from_url") as mock:
          client = Mock()
@@ -2050,6 +2078,7 @@ if __name__ == "__main__":
 
    - **Purpose**: Mock vLLM for testing without GPU
    - **Logic**:
+
      ```python
      with patch("vllm.LLM") as mock:
          model = Mock()
@@ -2064,6 +2093,7 @@ if __name__ == "__main__":
 
    - **Purpose**: Mock Whisper for testing without GPU
    - **Logic**:
+
      ```python
      with patch("faster_whisper.WhisperModel") as mock:
          model = Mock()
@@ -2078,6 +2108,7 @@ if __name__ == "__main__":
 
    - **Purpose**: Mock ffprobe subprocess call
    - **Logic**:
+
      ```python
      with patch("subprocess.run") as mock:
          mock.return_value = Mock(
@@ -2178,14 +2209,13 @@ class TestConfigurationBasics:
 
    - FROM: `nvidia/cuda:12.1.0-runtime-ubuntu22.04`
    - Install: python3.11, ffmpeg, curl, git
-   - Install UV package manager
+   - Install Pixi package manager
    - Set WORKDIR: `/app`
 
 2. **Dependencies Stage**:
 
-   - COPY: `pyproject.toml`, `uv.lock`, `.python-version`
-   - Create venv: `uv venv`
-   - Install dependencies: `uv pip install -e .`
+   - COPY: `pixi.toml`, `.python-version`
+   - Install dependencies: `pixi install`
 
 3. **Application Stage**:
 
@@ -2239,6 +2269,7 @@ class TestConfigurationBasics:
    - Environment: `REDIS_URL=redis://redis:6379/0`
    - Depends_on: `redis` (with health condition)
    - Deploy: Reserve GPU 0
+
      ```yaml
      resources:
        reservations:
@@ -2265,13 +2296,15 @@ class TestConfigurationBasics:
 
 1. Set MODEL_DIR from env or default to `./data/models`
 2. Create subdirectories: `whisper/`, `llm/`
-3. Check if `huggingface-cli` installed, install if not
+3. Ensure `hf` CLI (from huggingface-hub) is available
 4. Download each model:
+
    ```bash
-   huggingface-cli download erax-ai/EraX-WoW-Turbo-V1.1-CT2 \
+   hf download erax-ai/EraX-WoW-Turbo-V1.1-CT2 \
      --local-dir "$MODEL_DIR/whisper/erax-wow-turbo" \
      --local-dir-use-symlinks False
    ```
+
 5. Verify downloads (check directories exist and not empty)
 6. Show disk usage summary
 
@@ -2513,7 +2546,7 @@ temperature = 1.0  # Very creative
 # Merged: temperature = 0.7
 
 # 3. Environment variables (.env)
-LLM_ENHANCEMENT_TEMPERATURE=0.1  # Deployment override
+LLM_ENHANCE_TEMPERATURE=0.1  # Deployment override
 # Merged: temperature = 0.1
 
 # 4. Runtime parameters (if provided)
@@ -2910,6 +2943,7 @@ Total:               ~120s
    ```
 
 3. **Build Images**:
+
    ```bash
    docker-compose build
    ```
@@ -2956,10 +2990,11 @@ Total:               ~120s
 7. **Monitor**:
 
    - Check logs: `docker-compose logs -f`
-   - Watch RQ dashboard: http://localhost:9181
+   - Watch RQ dashboard: <http://localhost:9181>
    - Monitor GPU: `watch -n 1 nvidia-smi`
 
 8. **Load Test**:
+
    ```bash
    ./scripts/load_test.sh test.mp3 10
    ```
@@ -2989,7 +3024,7 @@ ls -lh data/models/llm/
 
 **Solutions**:
 
-1. Reduce `LLM_GPU_MEMORY_UTILIZATION` in `.env` (try 0.85)
+1. Reduce `LLM_ENHANCE_GPU_MEMORY_UTILIZATION` or `LLM_SUM_GPU_MEMORY_UTILIZATION` in `.env` (try 0.85)
 2. Ensure models are being unloaded (check logs)
 3. Kill other GPU processes: `nvidia-smi` → `kill`
 

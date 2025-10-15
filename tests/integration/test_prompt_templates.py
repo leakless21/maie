@@ -8,6 +8,7 @@ Tests cover:
 - Interview transcript template rendering
 - Template validation and output format
 """
+
 import pytest
 from pathlib import Path
 import json
@@ -34,7 +35,7 @@ class TestTextEnhancementTemplate:
         """Test rendering with transcript variable."""
         transcript = "hello world this is a test transcript"
         result = renderer.render("text_enhancement_v1", text_input=transcript)
-        
+
         # Should contain the transcript
         assert transcript in result
         # Should contain enhancement instructions
@@ -43,7 +44,7 @@ class TestTextEnhancementTemplate:
     def test_rendering_with_empty_transcript(self, renderer):
         """Test rendering with empty transcript."""
         result = renderer.render("text_enhancement_v1", text_input="")
-        
+
         # Should still render without errors
         assert isinstance(result, str)
         # May be empty if no text_input provided, which is acceptable
@@ -53,7 +54,7 @@ class TestTextEnhancementTemplate:
         """Test rendering with very long transcript (10K+ chars)."""
         long_transcript = "This is a test sentence. " * 500  # ~12K characters
         result = renderer.render("text_enhancement_v1", text_input=long_transcript)
-        
+
         # Should handle long input
         assert len(result) > len(long_transcript)
         assert long_transcript in result
@@ -62,7 +63,7 @@ class TestTextEnhancementTemplate:
         """Test rendering with special characters."""
         special_transcript = "Hello! @#$%^&*()_+-=[]{}|;':\",./<>? World!"
         result = renderer.render("text_enhancement_v1", text_input=special_transcript)
-        
+
         # Should handle special characters (may be HTML-escaped)
         # Check that the content is there, even if escaped
         assert "Hello!" in result
@@ -74,7 +75,7 @@ class TestTextEnhancementTemplate:
         """Test output format is correct."""
         transcript = "hello world test"
         result = renderer.render("text_enhancement_v1", text_input=transcript)
-        
+
         # Should be a string
         assert isinstance(result, str)
         # Should contain the input
@@ -98,126 +99,145 @@ class TestMeetingNotesTemplate:
         return PromptRenderer(template_loader)
 
     def test_rendering_with_all_variables(self, renderer):
-        """Test rendering with all variables."""
-        context = {
-            "title": "Weekly Team Meeting",
-            "date": "2024-01-15",
-            "participants": ["Alice", "Bob", "Charlie"],
-            "summary": "Discussed project progress and upcoming deadlines.",
-            "key_points": [
-                "Project is on track",
-                "Deadline is next Friday",
-                "Need to hire additional developer"
-            ],
-            "action_items": [
-                {"description": "Review code changes", "assignee": "Alice"},
-                {"description": "Prepare presentation", "assignee": "Bob"}
-            ],
-            "decisions": [
-                "Approved new feature design",
-                "Decided to use React for frontend"
-            ]
-        }
-        
+        """Test rendering with all expected variables for LLM prompt."""
+        # The template expects schema and transcript variables for LLM processing
+        schema = """{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "abstract": {"type": "string"},
+    "main_points": {"type": "array", "items": {"type": "string"}},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  },
+  "required": ["title", "abstract", "main_points", "tags"]
+}"""
+
+        transcript = "chào mọi người hôm nay chúng ta họp để bàn về dự án website mới tôi là minh trưởng nhóm dự án hôm nay có hùng và lan tham gia"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should contain all provided information
-        assert "Weekly Team Meeting" in result
-        assert "2024-01-15" in result
-        assert "Alice" in result
-        assert "Project is on track" in result
-        assert "Review code changes" in result
-        assert "Approved new feature design" in result
+
+        # Should contain the instruction text and examples
+        assert "You are an expert Vietnamese meeting analyst" in result
+        assert "meeting transcript to analyze:" in result.lower()
+        assert transcript in result
+        # Schema is HTML-escaped in templates (Jinja2 security feature)
+        assert "type" in result and "object" in result
+        assert "title" in result
+        assert "abstract" in result
 
     def test_rendering_with_minimal_variables(self, renderer):
         """Test rendering with minimal variables."""
-        context = {
-            "summary": "Brief meeting summary",
-            "key_points": ["Point 1", "Point 2"]
-        }
-        
+        # Template requires schema and transcript
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        transcript = "brief meeting transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should contain provided information
-        assert "Brief meeting summary" in result
-        assert "Point 1" in result
-        assert "Point 2" in result
-        # Should handle missing optional fields gracefully
-        assert "No action items identified" in result
-        assert "No decisions made" in result
+
+        # Should contain the basic instruction and transcript
+        assert "You are an expert Vietnamese meeting analyst" in result
+        assert transcript in result
+        # Schema is HTML-escaped
+        assert "type" in result and "object" in result
+        assert "title" in result
 
     def test_list_rendering_key_points(self, renderer):
-        """Test list rendering for key points."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["First point", "Second point", "Third point"]
-        }
-        
+        """Test that template handles schema with array properties."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "main_points": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "meeting about multiple points"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should render as bullet points
-        assert "- First point" in result
-        assert "- Second point" in result
-        assert "- Third point" in result
+
+        # Should contain the schema and transcript
+        assert "main_points" in result
+        assert "array" in result
+        assert transcript in result
 
     def test_list_rendering_action_items(self, renderer):
-        """Test list rendering for action items."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1"],
-            "action_items": [
-                {"description": "Task 1", "assignee": "Person A"},
-                {"description": "Task 2", "assignee": "Person B"}
-            ]
+        """Test that template handles complex schema structures."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "action_items": {
+      "type": "array", 
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": {"type": "string"},
+          "assignee": {"type": "string"}
         }
-        
+      }
+    }
+  }
+}"""
+        transcript = "meeting with action items"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should render action items with assignees
-        assert "- [ ] Task 1 (Assigned to: Person A)" in result
-        assert "- [ ] Task 2 (Assigned to: Person B)" in result
+
+        # Should contain the complex schema structure
+        assert "action_items" in result
+        assert "description" in result
+        assert "assignee" in result
+        assert transcript in result
 
     def test_conditional_rendering_no_action_items(self, renderer):
-        """Test conditional rendering when no action items."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1"]
-        }
-        
+        """Test template rendering with minimal schema."""
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        transcript = "simple meeting transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should show "No action items identified"
-        assert "No action items identified" in result
+
+        # Should render the basic template structure
+        assert "You are an expert Vietnamese meeting analyst" in result
+        assert transcript in result
 
     def test_conditional_rendering_no_decisions(self, renderer):
-        """Test conditional rendering when no decisions."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1"]
-        }
-        
+        """Test template rendering with different schema configurations."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "decisions": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "meeting with decisions schema"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should show "No decisions made"
-        assert "No decisions made" in result
+
+        # Should include decisions in schema
+        assert "decisions" in result
+        assert transcript in result
 
     def test_output_markdown_format_is_valid(self, renderer):
-        """Test output markdown format is valid."""
-        context = {
-            "title": "Test Meeting",
-            "summary": "Test summary",
-            "key_points": ["Point 1", "Point 2"]
-        }
-        
+        """Test that template renders as valid prompt text."""
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        transcript = "test meeting transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("meeting_notes_v1", **context)
-        
-        # Should contain markdown headers
-        assert "# Test Meeting" in result
-        assert "## Meeting Summary" in result
-        assert "## Key Points" in result
-        # Should contain bullet points
-        assert "- Point 1" in result
-        assert "- Point 2" in result
+
+        # Should be a valid string with instruction content
+        assert isinstance(result, str)
+        assert len(result) > 100  # Should be substantial content
+        assert "instruction" in result.lower()
+        assert transcript in result
 
 
 class TestGenericSummaryTemplate:
@@ -236,103 +256,112 @@ class TestGenericSummaryTemplate:
 
     def test_rendering_with_transcript_and_schema_variables(self, renderer):
         """Test rendering with transcript and schema variables."""
-        context = {
-            "title": "Document Summary",
-            "source_type": "Meeting Recording",
-            "date": "2024-01-15",
-            "summary": "This is a comprehensive summary of the meeting.",
-            "key_points": ["Point 1", "Point 2", "Point 3"],
-            "highlights": ["Highlight 1", "Highlight 2"],
-            "important_details": ["Detail 1", "Detail 2"]
-        }
-        
+        schema = """{
+  "type": "object",
+  "properties": {
+    "title": {"type": "string"},
+    "summary": {"type": "string"},
+    "key_topics": {"type": "array", "items": {"type": "string"}},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "công ty chúng tôi vừa ra mắt sản phẩm mới"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
-        # Should contain all provided information
-        assert "Document Summary" in result
-        assert "Meeting Recording" in result
-        assert "2024-01-15" in result
-        assert "comprehensive summary" in result
-        assert "Point 1" in result
-        assert "Highlight 1" in result
-        assert "Detail 1" in result
+
+        # Should contain the instruction and transcript
+        assert "You are an expert Vietnamese content analyst" in result
+        assert "transcript to analyze:" in result.lower()
+        assert transcript in result
+        # Schema is HTML-escaped
+        assert "type" in result and "object" in result
+        assert "title" in result and "summary" in result
 
     def test_rendering_with_minimal_variables(self, renderer):
         """Test rendering with minimal variables."""
-        context = {
-            "summary": "Basic summary",
-            "key_points": ["Key point 1"]
-        }
-        
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        transcript = "basic transcript content"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
-        # Should contain provided information
-        assert "Basic summary" in result
-        assert "Key point 1" in result
-        # Should handle missing optional fields
-        assert "No highlights identified" in result
-        assert "No important details noted" in result
+
+        # Should contain the basic instruction and transcript
+        assert "You are an expert Vietnamese content analyst" in result
+        assert transcript in result
+        # Schema is HTML-escaped
+        assert "type" in result and "object" in result
 
     def test_conditional_rendering_no_highlights(self, renderer):
-        """Test conditional rendering when no highlights."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1"]
-        }
-        
+        """Test template rendering with schema that includes highlights."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "highlights": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "transcript with highlights schema"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
-        # Should show "No highlights identified"
-        assert "No highlights identified" in result
+
+        # Should include highlights in schema
+        assert "highlights" in result
+        assert transcript in result
 
     def test_conditional_rendering_no_important_details(self, renderer):
-        """Test conditional rendering when no important details."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1"]
-        }
-        
+        """Test template rendering with schema that includes important details."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "important_details": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "transcript with important details schema"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
-        # Should show "No important details noted"
-        assert "No important details noted" in result
+
+        # Should include important_details in schema
+        assert "important_details" in result
+        assert transcript in result
 
     def test_multiline_transcript_handling(self, renderer):
         """Test multiline transcript handling."""
-        multiline_summary = """This is a multi-line summary.
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        multiline_transcript = """This is a multi-line transcript.
         
 It contains multiple paragraphs and should be handled properly.
         
 The formatting should be preserved."""
-        
-        context = {
-            "summary": multiline_summary,
-            "key_points": ["Point 1"]
-        }
-        
+
+        context = {"schema": schema, "transcript": multiline_transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
+
         # Should preserve multiline content
-        assert "multi-line summary" in result
+        assert "multi-line transcript" in result
         assert "multiple paragraphs" in result
+        assert multiline_transcript in result
 
     def test_output_markdown_format_is_valid(self, renderer):
-        """Test output markdown format is valid."""
-        context = {
-            "title": "Test Document",
-            "summary": "Test summary",
-            "key_points": ["Point 1", "Point 2"]
-        }
-        
+        """Test that template renders as valid prompt text."""
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        transcript = "test document transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("generic_summary_v1", **context)
-        
-        # Should contain markdown headers
-        assert "# Test Document" in result
-        assert "## Summary" in result
-        assert "## Key Points" in result
-        # Should contain bullet points
-        assert "- Point 1" in result
-        assert "- Point 2" in result
+
+        # Should be a valid string with instruction content
+        assert isinstance(result, str)
+        assert len(result) > 100  # Should be substantial content
+        assert "instruction" in result.lower()
+        assert transcript in result
 
 
 class TestInterviewTranscriptTemplate:
@@ -350,119 +379,119 @@ class TestInterviewTranscriptTemplate:
         return PromptRenderer(template_loader)
 
     def test_rendering_with_all_expected_variables(self, renderer):
-        """Test rendering with all expected variables."""
-        context = {
-            "title": "Product Manager Interview",
-            "interviewee_name": "Jane Smith",
-            "interviewer_name": "John Doe",
-            "date": "2024-01-15",
-            "duration": "45 minutes",
-            "summary": "Comprehensive interview about product management experience.",
-            "topics": ["Product Strategy", "Team Management", "Technical Skills"],
-            "quotes": [
-                {"text": "I believe in data-driven decisions", "speaker": "Jane Smith"},
-                {"text": "Communication is key to success", "speaker": "Jane Smith"}
-            ],
-            "insights": ["Strong technical background", "Excellent communication skills"],
-            "follow_up_questions": ["What's your experience with agile?", "How do you handle conflicts?"]
-        }
-        
+        """Test rendering with all expected variables for LLM prompt."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "interview_summary": {"type": "string"},
+    "key_insights": {"type": "array", "items": {"type": "string"}},
+    "participant_sentiment": {"type": "string", "enum": ["positive", "neutral", "negative", "mixed"]},
+    "tags": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "xin chào tôi là hoa phóng viên hôm nay tôi có cuộc phỏng vấn"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should contain all provided information
-        assert "Product Manager Interview" in result
-        assert "Jane Smith" in result
-        assert "John Doe" in result
-        assert "2024-01-15" in result
-        assert "45 minutes" in result
-        assert "Comprehensive interview" in result
-        assert "Product Strategy" in result
-        assert "I believe in data-driven decisions" in result
-        assert "Strong technical background" in result
-        # Follow-up questions may be HTML-escaped
-        assert "What" in result and "agile" in result
+
+        # Should contain the instruction text and examples
+        assert "You are an expert Vietnamese interview analyst" in result
+        assert "interview transcript to analyze:" in result.lower()
+        assert transcript in result
+        # Schema is HTML-escaped
+        assert "interview_summary" in result
+        assert "key_insights" in result
+        assert "participant_sentiment" in result
 
     def test_rendering_with_minimal_variables(self, renderer):
         """Test rendering with minimal variables."""
-        context = {
-            "summary": "Brief interview summary",
-            "topics": ["Topic 1"],
-            "insights": ["Insight 1"]
-        }
-        
+        schema = '{"type": "object", "properties": {"interview_summary": {"type": "string"}}}'
+        transcript = "brief interview transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should contain provided information
-        assert "Brief interview summary" in result
-        assert "Topic 1" in result
-        assert "Insight 1" in result
-        # Should handle missing optional fields
-        assert "No notable quotes identified" in result
-        assert "No follow-up questions noted" in result
+
+        # Should contain the basic instruction and transcript
+        assert "You are an expert Vietnamese interview analyst" in result
+        assert transcript in result
+        # Schema is HTML-escaped
+        assert "interview_summary" in result
 
     def test_quotes_rendering_with_speaker(self, renderer):
-        """Test quotes rendering with speaker attribution."""
-        context = {
-            "summary": "Test summary",
-            "topics": ["Topic 1"],
-            "insights": ["Insight 1"],
-            "quotes": [
-                {"text": "This is a quote", "speaker": "Speaker Name"}
-            ]
+        """Test that template handles quotes in schema."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "quotes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "text": {"type": "string"},
+          "speaker": {"type": "string"}
         }
-        
+      }
+    }
+  }
+}"""
+        transcript = "interview with quotes"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should render quotes with proper attribution
-        assert '> "This is a quote" - Speaker Name' in result
+
+        # Should contain quotes structure in schema
+        assert "quotes" in result
+        assert "text" in result
+        assert "speaker" in result
+        assert transcript in result
 
     def test_conditional_rendering_no_quotes(self, renderer):
-        """Test conditional rendering when no quotes."""
-        context = {
-            "summary": "Test summary",
-            "topics": ["Topic 1"],
-            "insights": ["Insight 1"]
-        }
-        
+        """Test template rendering with schema without quotes."""
+        schema = '{"type": "object", "properties": {"interview_summary": {"type": "string"}}}'
+        transcript = "interview transcript without quotes"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should show "No notable quotes identified"
-        assert "No notable quotes identified" in result
+
+        # Should render the basic template structure
+        assert "You are an expert Vietnamese interview analyst" in result
+        assert transcript in result
 
     def test_conditional_rendering_no_follow_up_questions(self, renderer):
-        """Test conditional rendering when no follow-up questions."""
-        context = {
-            "summary": "Test summary",
-            "topics": ["Topic 1"],
-            "insights": ["Insight 1"]
-        }
-        
+        """Test template rendering with schema that includes follow-up questions."""
+        schema = """{
+  "type": "object",
+  "properties": {
+    "follow_up_questions": {"type": "array", "items": {"type": "string"}}
+  }
+}"""
+        transcript = "interview with follow-up questions schema"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should show "No follow-up questions noted"
-        assert "No follow-up questions noted" in result
+
+        # Should include follow_up_questions in schema
+        assert "follow_up_questions" in result
+        assert transcript in result
 
     def test_output_structure_is_correct(self, renderer):
         """Test output structure is correct."""
-        context = {
-            "title": "Test Interview",
-            "summary": "Test summary",
-            "topics": ["Topic 1", "Topic 2"],
-            "insights": ["Insight 1", "Insight 2"]
-        }
-        
+        schema = '{"type": "object", "properties": {"interview_summary": {"type": "string"}}}'
+        transcript = "test interview transcript"
+
+        context = {"schema": schema, "transcript": transcript}
+
         result = renderer.render("interview_transcript_v1", **context)
-        
-        # Should contain proper markdown structure
-        assert "# Test Interview" in result
-        assert "## Interview Summary" in result
-        assert "## Key Topics Discussed" in result
-        assert "## Key Insights" in result
-        # Should contain bullet points
-        assert "- Topic 1" in result
-        assert "- Topic 2" in result
-        assert "- Insight 1" in result
-        assert "- Insight 2" in result
+
+        # Should contain proper instruction structure
+        assert "You are an expert Vietnamese interview analyst" in result
+        assert "interview transcript to analyze:" in result.lower()
+        assert transcript in result
 
 
 class TestTemplateValidation:
@@ -485,9 +514,9 @@ class TestTemplateValidation:
             "text_enhancement_v1",
             "meeting_notes_v1",
             "generic_summary_v1",
-            "interview_transcript_v1"
+            "interview_transcript_v1",
         ]
-        
+
         for template_name in templates:
             # Should not raise TemplateNotFound
             result = renderer.render(template_name, summary="test", key_points=["test"])
@@ -502,9 +531,9 @@ class TestTemplateValidation:
             "text_enhancement_v1",
             "meeting_notes_v1",
             "generic_summary_v1",
-            "interview_transcript_v1"
+            "interview_transcript_v1",
         ]
-        
+
         for template_name in templates:
             result = renderer.render(template_name)
             assert isinstance(result, str)
@@ -513,32 +542,27 @@ class TestTemplateValidation:
 
     def test_template_output_consistency(self, renderer):
         """Test that template output is consistent across multiple renders."""
-        context = {
-            "summary": "Test summary",
-            "key_points": ["Point 1", "Point 2"]
-        }
-        
+        context = {"summary": "Test summary", "key_points": ["Point 1", "Point 2"]}
+
         # Render multiple times
         results = []
         for _ in range(5):
             result = renderer.render("meeting_notes_v1", **context)
             results.append(result)
-        
+
         # All results should be identical
         assert all(result == results[0] for result in results)
 
     def test_template_handles_large_data(self, renderer):
         """Test that templates handle large data gracefully."""
-        large_context = {
-            "summary": "Large summary " * 100,
-            "key_points": [f"Point {i}" for i in range(100)],
-            "action_items": [{"description": f"Task {i}", "assignee": f"Person {i}"} for i in range(50)]
-        }
-        
-        result = renderer.render("meeting_notes_v1", **large_context)
-        
+        schema = '{"type": "object", "properties": {"title": {"type": "string"}}}'
+        large_transcript = "Large transcript " * 100
+
+        context = {"schema": schema, "transcript": large_transcript}
+
+        result = renderer.render("meeting_notes_v1", **context)
+
         # Should handle large data without errors
         assert isinstance(result, str)
         assert len(result) > 1000  # Should be substantial output
-        assert "Point 0" in result
-        assert "Point 99" in result
+        assert "Large transcript" in result

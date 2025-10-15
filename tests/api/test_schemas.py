@@ -1,4 +1,5 @@
 """Concise tests for src.api.schemas using RED-style one-line expectations."""
+
 from uuid import uuid4
 import pytest
 from pydantic import ValidationError
@@ -14,7 +15,7 @@ def sample_asr_backend():
         "model_path": "/models/whisper-small",
         "checkpoint_hash": "abc123",
         "compute_type": "cpu",
-        "decoding_params": {"beam_size": 5}
+        "decoding_params": {"beam_size": 5},
     }
 
 
@@ -29,7 +30,7 @@ def sample_llm():
         "thinking": True,
         "reasoning_parser": None,
         "structured_output": {"type": "json"},
-        "decoding_params": {"max_tokens": 200}
+        "decoding_params": {"max_tokens": 200},
     }
 
 
@@ -45,20 +46,19 @@ def test_enums_have_expected_members():
 
 def test_process_request_defaults_and_template_validation():
     """RED: minimal ProcessRequestSchema with template_id constructs; SUMMARY without template_id raises ValidationError."""
-    req = schemas.ProcessRequestSchema(
-        file="audio.wav",
-        template_id="meeting_notes_v1"
-    )
+    req = schemas.ProcessRequestSchema(file="audio.wav", template_id="meeting_notes_v1")
     assert isinstance(req, schemas.ProcessRequestSchema)
     assert schemas.Feature.CLEAN_TRANSCRIPT in req.features
 
     with pytest.raises(ValidationError):
-        schemas.ProcessRequestSchema(file="audio.wav", features=[schemas.Feature.SUMMARY])
+        schemas.ProcessRequestSchema(
+            file="audio.wav", features=[schemas.Feature.SUMMARY]
+        )
 
     req2 = schemas.ProcessRequestSchema(
         file="audio.wav",
         features=[schemas.Feature.SUMMARY],
-        template_id="nonexistent_template"
+        template_id="nonexistent_template",
     )
     assert req2.template_id == "nonexistent_template"
 
@@ -71,8 +71,7 @@ def test_process_response_and_status_response_roundtrip():
     assert j["task_id"] == tid
 
     status = schemas.StatusResponseSchema(
-        task_id=tid,
-        status=schemas.TaskStatus.PENDING.value
+        task_id=tid, status=schemas.TaskStatus.PENDING.value
     )
     d = status.model_dump()
     assert d["status"] == "PENDING"
@@ -83,9 +82,7 @@ def test_versions_and_nested_models(sample_asr_backend, sample_llm):
     asr = schemas.ASRBackendSchema(**sample_asr_backend)
     llm = schemas.LLMSchema(**sample_llm)
     versions = schemas.VersionsSchema(
-        pipeline_version="1.0.0",
-        asr_backend=asr,
-        llm=llm
+        pipeline_version="1.0.0", asr_backend=asr, llm=llm
     )
     out = versions.model_dump()
     assert out["pipeline_version"] == "1.0.0"
@@ -111,7 +108,7 @@ def test_models_and_template_responses_defaults_and_fields():
             id="t1",
             name="tmpl",
             description="d",
-            schema_url="http://example.com/schema"
+            schema_url="http://example.com/schema",
         )
         tpl_resp = schemas.TemplatesResponseSchema(templates=[tmpl])
         assert tpl_resp.templates[0].id == "t1"
@@ -124,7 +121,7 @@ def test_metrics_and_results_validation():
         processing_time_seconds=1.5,
         rtf=0.15,
         vad_coverage=0.9,
-        asr_confidence_avg=0.85
+        asr_confidence_avg=0.85,
     )
     assert metrics.edit_rate_cleaning is None
 
@@ -134,7 +131,7 @@ def test_metrics_and_results_validation():
             processing_time_seconds=1.5,
             rtf=0.15,
             vad_coverage=0.9,
-            asr_confidence_avg=0.85
+            asr_confidence_avg=0.85,
         )
 
 
@@ -147,5 +144,7 @@ def test_json_schema_generation_includes_features():
 
 def test_results_schema_smoke():
     """RED: ResultsSchema stores provided fields; clean_transcript equals provided 'clean'."""
-    r = schemas.ResultsSchema(raw_transcript="raw", clean_transcript="clean", summary={"k": "v"})
+    r = schemas.ResultsSchema(
+        raw_transcript="raw", clean_transcript="clean", summary={"k": "v"}
+    )
     assert r.clean_transcript == "clean"

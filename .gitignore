@@ -17,6 +17,7 @@ venv/
 env/
 ENV/
 .ENV
+.pixi/
 
 # UV package manager
 .uv/
@@ -142,3 +143,6 @@ requirements.txt
 requirements-dev.txt
 
 .github
+# pixi environments
+.pixi/*
+!.pixi/config.toml

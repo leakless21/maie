@@ -1,4 +1,5 @@
 """Concise test docstrings for src.config.Settings (RED-style expectations)."""
+
 import os
 import tempfile
 from pathlib import Path
@@ -48,28 +49,28 @@ class TestSettingsDefaults:
             assert config.whisper_device == "cuda"
 
     def test_llm_enhance_settings_defaults(self):
-        """RED: llm_enhance model, gpu util 0.95, max_tokens 4096, temperature 0.0."""
+        """RED: llm_enhance model, gpu util 0.95, max_model_len 32768, sampling defaults are None."""
         with patch.dict(os.environ, {}, clear=True):
             config = Settings()
-            assert config.llm_enhance_model == "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit"
+            assert config.llm_enhance_model == "data/models/qwen3-4b-instruct-2507-awq"
             assert config.llm_enhance_gpu_memory_utilization == 0.95
             assert config.llm_enhance_max_model_len == 32768
             assert config.llm_enhance_temperature == 0.0
-            assert config.llm_enhance_top_p == 0.9
-            assert config.llm_enhance_top_k == 20
-            assert config.llm_enhance_max_tokens == 4096
+            assert config.llm_enhance_top_p is None
+            assert config.llm_enhance_top_k is None
+            assert config.llm_enhance_max_tokens is None
 
     def test_llm_sum_settings_defaults(self):
-        """RED: summarization model defaults, temperature 0.7, max_tokens 4096."""
+        """RED: summarization model defaults, temperature 0.7, sampling defaults are None."""
         with patch.dict(os.environ, {}, clear=True):
             config = Settings()
             assert config.llm_sum_model == "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit"
             assert config.llm_sum_gpu_memory_utilization == 0.95
             assert config.llm_sum_max_model_len == 32768
             assert config.llm_sum_temperature == 0.7
-            assert config.llm_sum_top_p == 0.9
-            assert config.llm_sum_top_k == 20
-            assert config.llm_sum_max_tokens == 4096
+            assert config.llm_sum_top_p is None
+            assert config.llm_sum_top_k is None
+            assert config.llm_sum_max_tokens is None
 
     def test_file_path_defaults(self):
         """RED: default paths set for audio, models, templates, chat-templates."""
@@ -78,7 +79,6 @@ class TestSettingsDefaults:
             assert config.audio_dir == Path("data/audio")
             assert config.models_dir == Path("data/models")
             assert config.templates_dir == Path("templates")
-            assert config.chat_templates_dir == Path("assets/chat-templates")
 
     def test_worker_settings_defaults(self):
         """RED: worker_name 'maie-worker', job_timeout 600, result_ttl 86400."""
@@ -97,7 +97,7 @@ class TestEnvironmentVariableLoading:
         env_vars = {
             "PIPELINE_VERSION": "2.0.0",
             "ENVIRONMENT": "production",
-            "DEBUG": "true"
+            "DEBUG": "true",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = Settings()
@@ -111,7 +111,7 @@ class TestEnvironmentVariableLoading:
             "API_HOST": "127.0.0.1",
             "API_PORT": "9000",
             "SECRET_API_KEY": "test_secret_key",
-            "MAX_FILE_SIZE_MB": "1000"
+            "MAX_FILE_SIZE_MB": "1000",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = Settings()
@@ -125,7 +125,7 @@ class TestEnvironmentVariableLoading:
         env_vars = {
             "REDIS_URL": "redis://redis.example.com:6380/1",
             "REDIS_RESULTS_DB": "2",
-            "MAX_QUEUE_DEPTH": "100"
+            "MAX_QUEUE_DEPTH": "100",
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = Settings()
@@ -139,14 +139,12 @@ class TestEnvironmentVariableLoading:
             "AUDIO_DIR": "/tmp/audio",
             "MODELS_DIR": "/tmp/models",
             "TEMPLATES_DIR": "/tmp/templates",
-            "CHAT_TEMPLATES_DIR": "/tmp/chat-templates"
         }
         with patch.dict(os.environ, env_vars, clear=True):
             config = Settings()
             assert config.audio_dir == Path("/tmp/audio")
             assert config.models_dir == Path("/tmp/models")
             assert config.templates_dir == Path("/tmp/templates")
-            assert config.chat_templates_dir == Path("/tmp/chat-templates")
 
 
 class TestFieldValidators:
@@ -158,32 +156,27 @@ class TestFieldValidators:
             test_audio_dir = Path(temp_dir) / "audio"
             test_models_dir = Path(temp_dir) / "models"
             test_templates_dir = Path(temp_dir) / "templates"
-            test_chat_templates_dir = Path(temp_dir) / "chat-templates"
 
             env_vars = {
                 "AUDIO_DIR": str(test_audio_dir),
                 "MODELS_DIR": str(test_models_dir),
                 "TEMPLATES_DIR": str(test_templates_dir),
-                "CHAT_TEMPLATES_DIR": str(test_chat_templates_dir)
             }
 
             with patch.dict(os.environ, env_vars, clear=True):
                 assert not test_audio_dir.exists()
                 assert not test_models_dir.exists()
                 assert not test_templates_dir.exists()
-                assert not test_chat_templates_dir.exists()
 
                 config = Settings()
 
                 assert test_audio_dir.exists()
                 assert test_models_dir.exists()
                 assert test_templates_dir.exists()
-                assert test_chat_templates_dir.exists()
 
                 assert config.audio_dir == test_audio_dir
                 assert config.models_dir == test_models_dir
                 assert config.templates_dir == test_templates_dir
-                assert config.chat_templates_dir == test_chat_templates_dir
 
     def test_directory_creation_with_parents(self):
         """RED: mkdir(parents=True) should create nested parent directories."""
@@ -260,13 +253,17 @@ class TestEdgeCasesAndErrorConditions:
 
     def test_invalid_gpu_memory_utilization_too_low(self):
         """RED: too-low GPU utilization raises ValueError."""
-        with patch.dict(os.environ, {"LLM_ENHANCE_GPU_MEMORY_UTILIZATION": "0.05"}, clear=True):
+        with patch.dict(
+            os.environ, {"LLM_ENHANCE_GPU_MEMORY_UTILIZATION": "0.05"}, clear=True
+        ):
             with pytest.raises(ValueError):
                 Settings()
 
     def test_invalid_gpu_memory_utilization_too_high(self):
         """RED: too-high GPU utilization raises ValueError."""
-        with patch.dict(os.environ, {"LLM_ENHANCE_GPU_MEMORY_UTILIZATION": "1.5"}, clear=True):
+        with patch.dict(
+            os.environ, {"LLM_ENHANCE_GPU_MEMORY_UTILIZATION": "1.5"}, clear=True
+        ):
             with pytest.raises(ValueError):
                 Settings()
 
@@ -346,41 +343,40 @@ class TestSmokeTests:
         config = Settings()
 
         # Core settings
-        assert hasattr(config, 'pipeline_version')
-        assert hasattr(config, 'environment')
-        assert hasattr(config, 'debug')
+        assert hasattr(config, "pipeline_version")
+        assert hasattr(config, "environment")
+        assert hasattr(config, "debug")
 
         # API settings
-        assert hasattr(config, 'api_host')
-        assert hasattr(config, 'api_port')
-        assert hasattr(config, 'secret_api_key')
-        assert hasattr(config, 'max_file_size_mb')
+        assert hasattr(config, "api_host")
+        assert hasattr(config, "api_port")
+        assert hasattr(config, "secret_api_key")
+        assert hasattr(config, "max_file_size_mb")
 
         # Redis settings
-        assert hasattr(config, 'redis_url')
-        assert hasattr(config, 'redis_results_db')
-        assert hasattr(config, 'max_queue_depth')
+        assert hasattr(config, "redis_url")
+        assert hasattr(config, "redis_results_db")
+        assert hasattr(config, "max_queue_depth")
 
         # ASR settings
-        assert hasattr(config, 'whisper_model_variant')
-        assert hasattr(config, 'whisper_beam_size')
-        assert hasattr(config, 'whisper_vad_filter')
-        assert hasattr(config, 'whisper_compute_type')
+        assert hasattr(config, "whisper_model_variant")
+        assert hasattr(config, "whisper_beam_size")
+        assert hasattr(config, "whisper_vad_filter")
+        assert hasattr(config, "whisper_compute_type")
 
         # LLM settings
-        assert hasattr(config, 'llm_enhance_model')
-        assert hasattr(config, 'llm_sum_model')
+        assert hasattr(config, "llm_enhance_model")
+        assert hasattr(config, "llm_sum_model")
 
         # File paths
-        assert hasattr(config, 'audio_dir')
-        assert hasattr(config, 'models_dir')
-        assert hasattr(config, 'templates_dir')
-        assert hasattr(config, 'chat_templates_dir')
+        assert hasattr(config, "audio_dir")
+        assert hasattr(config, "models_dir")
+        assert hasattr(config, "templates_dir")
 
         # Worker settings
-        assert hasattr(config, 'worker_name')
-        assert hasattr(config, 'job_timeout')
-        assert hasattr(config, 'result_ttl')
+        assert hasattr(config, "worker_name")
+        assert hasattr(config, "job_timeout")
+        assert hasattr(config, "result_ttl")
 
 
 class TestPydanticSettingsBestPractices:
@@ -389,23 +385,23 @@ class TestPydanticSettingsBestPractices:
     def test_settings_config_has_validate_default_true(self):
         """RED: SettingsConfigDict should have validate_default=True for early error detection."""
         config = Settings.model_config
-        assert 'validate_default' in config or hasattr(config, 'validate_default')
+        assert "validate_default" in config or hasattr(config, "validate_default")
         # If present as dict or attribute, it should be True
         if isinstance(config, dict):
-            assert config.get('validate_default', False) is True
+            assert config.get("validate_default", False) is True
         else:
-            assert getattr(config, 'validate_default', False) is True
+            assert getattr(config, "validate_default", False) is True
 
     def test_settings_config_has_env_nested_delimiter(self):
         """RED: SettingsConfigDict should have env_nested_delimiter for nested config support."""
         config = Settings.model_config
         # Check for env_nested_delimiter (commonly '__' for nested env vars)
         if isinstance(config, dict):
-            assert 'env_nested_delimiter' in config
-            assert config.get('env_nested_delimiter') == '__'
+            assert "env_nested_delimiter" in config
+            assert config.get("env_nested_delimiter") == "__"
         else:
-            assert hasattr(config, 'env_nested_delimiter')
-            assert getattr(config, 'env_nested_delimiter') == '__'
+            assert hasattr(config, "env_nested_delimiter")
+            assert getattr(config, "env_nested_delimiter") == "__"
 
     def test_settings_validates_defaults_on_instantiation(self):
         """RED: When validate_default=True, invalid defaults should raise errors immediately."""
@@ -417,7 +413,9 @@ class TestPydanticSettingsBestPractices:
                 # If we get here, all defaults are valid
                 assert config is not None
             except ValueError:
-                pytest.fail("Default values should be valid, but validation raised ValueError")
+                pytest.fail(
+                    "Default values should be valid, but validation raised ValueError"
+                )
 
     def test_nested_env_vars_with_delimiter(self):
         """RED: env_nested_delimiter='__' allows nested configuration like REDIS__POOL__SIZE."""
@@ -425,8 +423,8 @@ class TestPydanticSettingsBestPractices:
         # For now, test that delimiter is configured
         config = Settings.model_config
         if isinstance(config, dict):
-            delimiter = config.get('env_nested_delimiter')
+            delimiter = config.get("env_nested_delimiter")
         else:
-            delimiter = getattr(config, 'env_nested_delimiter', None)
-        
-        assert delimiter == '__', f"Expected '__' but got {delimiter}"
+            delimiter = getattr(config, "env_nested_delimiter", None)
+
+        assert delimiter == "__", f"Expected '__' but got {delimiter}"

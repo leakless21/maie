@@ -10,6 +10,7 @@ This module exposes a preconfigured Litestar `app` object with:
 
 The implementation avoids performing network I/O at import time to keep unit tests deterministic.
 """
+
 from __future__ import annotations
 
 from typing import Dict, Any
@@ -36,6 +37,7 @@ openapi_config = OpenAPIConfig(
     version="1.0.0",
     description="API for the Modular Audio Intelligence Engine providing audio processing capabilities",
 )
+
 
 # Simple exception handlers
 def _handle_not_authorized(_: Any, exc: Exception) -> Response:
@@ -77,7 +79,9 @@ litestar_kwargs: Dict[str, Any] = {
 
 # Attach a conservative CORS config if available
 if CORSConfig is not None:
-    litestar_kwargs["cors_config"] = CORSConfig(allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"])
+    litestar_kwargs["cors_config"] = CORSConfig(
+        allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"]
+    )
 
 # Instantiate the app
 app = Litestar(**litestar_kwargs)

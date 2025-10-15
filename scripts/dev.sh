@@ -79,16 +79,16 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check if uv is available
-if ! command -v uv &> /dev/null; then
-  echo "Error: uv is not installed. Please install uv to manage the Python environment."
-  echo "You can install it with: pip install uv"
+# Check if pixi is available
+if ! command -v pixi &> /dev/null; then
+  echo "Error: pixi is not installed. Please install pixi to manage the environment."
+  echo "Install: curl -fsSL https://pixi.sh/install.sh | bash"
   exit 1
 fi
 
 # Sync dependencies
-echo "Syncing dependencies with uv..."
-uv sync
+echo "Installing dependencies with pixi..."
+pixi install
 
 # Start services based on options
 if [[ "$API_ONLY" == true && "$WORKER_ONLY" == true ]]; then
@@ -97,21 +97,21 @@ if [[ "$API_ONLY" == true && "$WORKER_ONLY" == true ]]; then
 elif [[ "$API_ONLY" == true ]]; then
   echo "Starting API server on $HOST:$PORT..."
   if [[ "$RELOAD" == true ]]; then
-    exec uv run uvicorn src.api.main:app --host "$HOST" --port "$PORT" --reload
+    exec pixi run api --host "$HOST" --port "$PORT" --reload
   else
-    exec uv run uvicorn src.api.main:app --host "$HOST" --port "$PORT"
+    exec pixi run api --host "$HOST" --port "$PORT"
   fi
 elif [[ "$WORKER_ONLY" == true ]]; then
   echo "Starting worker process..."
-  exec uv run python -m src.worker.main
+  exec pixi run worker
 else
   echo "Starting API server on $HOST:$PORT and worker process..."
   
   # Start API server in background
   if [[ "$RELOAD" == true ]]; then
-    uv run uvicorn src.api.main:app --host "$HOST" --port "$PORT" --reload &
+    pixi run api --host "$HOST" --port "$PORT" --reload &
   else
-    uv run uvicorn src.api.main:app --host "$HOST" --port "$PORT" &
+    pixi run api --host "$HOST" --port "$PORT" &
   fi
   API_PID=$!
   
@@ -119,7 +119,7 @@ else
   sleep 2
   
   # Start worker in foreground
-  uv run python -m src.worker.main &
+  pixi run worker &
   WORKER_PID=$!
   
   # Function to handle script termination

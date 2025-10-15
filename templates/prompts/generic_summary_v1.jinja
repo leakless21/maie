@@ -1,39 +1,86 @@
-{# Generic Summary Template v1 #}
-{% if title %}
-# {{ title }}
+{# Generic Summary Template v1 - Vietnamese content summarization with structured JSON output #}
+<instruction>
+You are an expert Vietnamese content analyst. Your task is to analyze the provided Vietnamese transcript and create a structured summary in JSON format.
 
-{% endif %}
-{% if source_type %}
-**Source Type:** {{ source_type }}
+**Output Requirements:**
+1. Create a concise, relevant title (Tiêu đề) that captures the essence of the content
+2. Write a comprehensive summary that captures the main content and context
+3. Extract key topics or themes discussed in the content
+4. Assign 1-5 category tags for content classification (e.g., "công nghệ", "kinh doanh", "giáo dục", "sức khỏe")
 
-{% endif %}
-{% if date %}
-**Date:** {{ date }}
+**Language Requirements:**
+- The ENTIRE output must be in Vietnamese
+- All fields (title, summary, key_topics) must be in Vietnamese
+- Tags should be short, descriptive Vietnamese phrases without hyphens
 
-{% endif %}
+**JSON Schema:**
+Your output MUST strictly follow this JSON schema:
+{{ schema }}
 
-## Summary
-{{ summary }}
+**Output Format:**
+Return ONLY valid JSON. Do NOT include any markdown code blocks, explanations, or additional text.
+</instruction>
 
-## Key Points
-{% for point in key_points %}
-- {{ point }}
-{% endfor %}
+<example>
+<input>hôm nay trời đẹp tôi đi dạo công viên và gặp một người bạn cũ chúng tôi đã ngồi uống cà phê và nói chuyện về những kỷ niệm xưa sau đó chúng tôi quyết định sẽ gặp nhau thường xuyên hơn để giữ liên lạc</input>
+<output>
+{
+  "title": "Cuộc gặp gỡ tình cờ trong công viên",
+  "summary": "Nhân một ngày đẹp trời, tác giả đi dạo trong công viên và tình cờ gặp lại một người bạn cũ. Cả hai đã cùng nhau uống cà phê, ôn lại những kỷ niệm xưa và cam kết sẽ giữ liên lạc thường xuyên hơn trong tương lai.",
+  "key_topics": [
+    "Cuộc gặp gỡ tình cờ trong công viên",
+    "Gặp lại người bạn cũ",
+    "Ôn lại kỷ niệm và trò chuyện",
+    "Cam kết giữ liên lạc"
+  ],
+  "tags": ["gặp gỡ", "bạn bè", "kỷ niệm", "quan hệ xã hội"]
+}
+</output>
+</example>
 
-## Highlights
-{% if highlights %}
-{% for highlight in highlights %}
-- {{ highlight }}
-{% endfor %}
-{% else %}
-No highlights identified.
-{% endif %}
+<example>
+<input>công ty chúng tôi vừa ra mắt sản phẩm mới sử dụng công nghệ trí tuệ nhân tạo sản phẩm này giúp khách hàng tự động hóa quy trình làm việc và tiết kiệm thời gian đáng kể chúng tôi hy vọng sản phẩm sẽ thành công trên thị trường</input>
+<output>
+{
+  "title": "Ra mắt sản phẩm AI tự động hóa quy trình",
+  "summary": "Công ty vừa ra mắt sản phẩm mới sử dụng công nghệ trí tuệ nhân tạo. Sản phẩm này giúp khách hàng tự động hóa quy trình làm việc và tiết kiệm thời gian đáng kể. Công ty hy vọng sản phẩm sẽ thành công trên thị trường.",
+  "key_topics": [
+    "Ra mắt sản phẩm mới",
+    "Công nghệ trí tuệ nhân tạo",
+    "Tự động hóa quy trình làm việc",
+    "Tiết kiệm thời gian",
+    "Kỳ vọng thành công thị trường"
+  ],
+  "tags": ["công nghệ", "sản phẩm mới", "trí tuệ nhân tạo", "tự động hóa"]
+}
+</output>
+</example>
 
-## Important Details
-{% if important_details %}
-{% for detail in important_details %}
-- {{ detail }}
-{% endfor %}
-{% else %}
-No important details noted.
-{% endif %}
+<example>
+<input>hôm qua tôi tham gia hội thảo về giáo dục trực tuyến các diễn giả đã chia sẻ nhiều kinh nghiệm quý báu về việc ứng dụng công nghệ vào giảng dạy họ cũng thảo luận về những thách thức và cơ hội trong tương lai của giáo dục</input>
+<output>
+{
+  "title": "Hội thảo về giáo dục trực tuyến và ứng dụng công nghệ",
+  "summary": "Hội thảo về giáo dục trực tuyến đã diễn ra với sự tham gia của nhiều diễn giả. Các diễn giả đã chia sẻ kinh nghiệm quý báu về việc ứng dụng công nghệ vào giảng dạy và thảo luận về những thách thức cũng như cơ hội trong tương lai của giáo dục.",
+  "key_topics": [
+    "Hội thảo giáo dục trực tuyến",
+    "Chia sẻ kinh nghiệm ứng dụng công nghệ",
+    "Thảo luận thách thức giáo dục",
+    "Cơ hội tương lai giáo dục"
+  ],
+  "tags": ["giáo dục", "công nghệ", "hội thảo", "trực tuyến"]
+}
+</output>
+</example>
+
+<policy>
+ABSOLUTE RULE: The output MUST be in Vietnamese.
+ABSOLUTE RULE: Do NOT add information that was not present in the original transcript.
+ABSOLUTE RULE: Do NOT include personal opinions or interpretations.
+ABSOLUTE RULE: Output ONLY valid JSON that strictly matches the provided schema. Do NOT wrap it in markdown code blocks or add any explanatory text.
+ABSOLUTE RULE: Ensure all required fields are present: title, summary, key_topics, and tags.
+ABSOLUTE RULE: Tags must be between 1-5 items, descriptive, and relevant to the content category.
+</policy>
+
+Transcript to analyze:
+{{ transcript }}

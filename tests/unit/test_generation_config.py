@@ -30,7 +30,7 @@ class TestGenerationConfigDataclass:
     def test_all_fields_optional_with_none_defaults(self):
         """All fields should be optional and default to None."""
         config = GenerationConfig()
-        
+
         assert config.temperature is None
         assert config.top_p is None
         assert config.top_k is None
@@ -54,9 +54,9 @@ class TestGenerationConfigDataclass:
             frequency_penalty=0.1,
             min_p=0.05,
             stop=["</s>", "\n\n"],
-            seed=42
+            seed=42,
         )
-        
+
         assert config.temperature == 0.7
         assert config.top_p == 0.95
         assert config.top_k == 50
@@ -71,7 +71,7 @@ class TestGenerationConfigDataclass:
     def test_partial_initialization(self):
         """Should allow partial initialization with some fields."""
         config = GenerationConfig(temperature=0.8, max_tokens=500)
-        
+
         assert config.temperature == 0.8
         assert config.max_tokens == 500
         assert config.top_p is None
@@ -85,9 +85,9 @@ class TestGenerationConfigMerging:
         """Self values should take priority over other values."""
         config1 = GenerationConfig(temperature=0.7, top_p=0.9)
         config2 = GenerationConfig(temperature=0.5, top_p=0.95, max_tokens=1000)
-        
+
         merged = config1.merge_with(config2)
-        
+
         # Self values should win
         assert merged.temperature == 0.7
         assert merged.top_p == 0.9
@@ -98,9 +98,9 @@ class TestGenerationConfigMerging:
         """None values should propagate correctly."""
         config1 = GenerationConfig(temperature=None, top_p=0.9)
         config2 = GenerationConfig(temperature=0.5, top_p=None, max_tokens=1000)
-        
+
         merged = config1.merge_with(config2)
-        
+
         # None in self should use other value
         assert merged.temperature == 0.5
         # Non-None in self should win
@@ -112,9 +112,9 @@ class TestGenerationConfigMerging:
         """merge_with() should return new instance, not mutate original."""
         config1 = GenerationConfig(temperature=0.7)
         config2 = GenerationConfig(temperature=0.5)
-        
+
         merged = config1.merge_with(config2)
-        
+
         # Original should be unchanged
         assert config1.temperature == 0.7
         assert config2.temperature == 0.5
@@ -128,9 +128,9 @@ class TestGenerationConfigMerging:
         """Merging empty configs should work."""
         config1 = GenerationConfig()
         config2 = GenerationConfig()
-        
+
         merged = config1.merge_with(config2)
-        
+
         # All fields should be None
         assert merged.temperature is None
         assert merged.top_p is None
@@ -146,11 +146,11 @@ class TestGenerationConfigSamplingParams:
             temperature=0.7,
             top_p=None,  # Should be filtered out
             max_tokens=1000,
-            seed=None    # Should be filtered out
+            seed=None,  # Should be filtered out
         )
-        
+
         params = config.to_sampling_params()
-        
+
         assert "temperature" in params
         assert params["temperature"] == 0.7
         assert "max_tokens" in params
@@ -161,9 +161,9 @@ class TestGenerationConfigSamplingParams:
     def test_to_sampling_params_all_none(self):
         """Should return empty dict when all values are None."""
         config = GenerationConfig()
-        
+
         params = config.to_sampling_params()
-        
+
         assert params == {}
 
     def test_to_sampling_params_all_values(self):
@@ -178,11 +178,11 @@ class TestGenerationConfigSamplingParams:
             frequency_penalty=0.1,
             min_p=0.05,
             stop=["</s>"],
-            seed=42
+            seed=42,
         )
-        
+
         params = config.to_sampling_params()
-        
+
         expected = {
             "temperature": 0.7,
             "top_p": 0.95,
@@ -193,16 +193,16 @@ class TestGenerationConfigSamplingParams:
             "frequency_penalty": 0.1,
             "min_p": 0.05,
             "stop": ["</s>"],
-            "seed": 42
+            "seed": 42,
         }
-        
+
         assert params == expected
 
     def test_to_sampling_params_vllm_compatible(self):
         """Output should be compatible with vLLM SamplingParams."""
         config = GenerationConfig(temperature=0.7, max_tokens=1000)
         params = config.to_sampling_params()
-        
+
         # Should be able to create SamplingParams from the dict
         # (We'll test this integration later)
         assert isinstance(params, dict)
@@ -215,9 +215,9 @@ class TestGenerationConfigRepr:
     def test_repr_shows_only_non_none_fields(self):
         """Should show only non-None fields in repr."""
         config = GenerationConfig(temperature=0.7, top_p=0.95)
-        
+
         repr_str = repr(config)
-        
+
         assert "temperature=0.7" in repr_str
         assert "top_p=0.95" in repr_str
         assert "max_tokens" not in repr_str  # Should not show None values
@@ -225,9 +225,9 @@ class TestGenerationConfigRepr:
     def test_repr_empty_config(self):
         """Should handle empty config gracefully."""
         config = GenerationConfig()
-        
+
         repr_str = repr(config)
-        
+
         assert "GenerationConfig" in repr_str
         # Should not crash and should be readable
 
@@ -238,7 +238,7 @@ class TestLibraryDefaults:
     def test_library_defaults_returns_vllm_defaults(self):
         """Should return vLLM default values."""
         defaults = get_library_defaults()
-        
+
         assert isinstance(defaults, GenerationConfig)
         assert defaults.temperature == 1.0
         assert defaults.top_p == 1.0
@@ -252,7 +252,7 @@ class TestLibraryDefaults:
         """Should return new instance each time."""
         defaults1 = get_library_defaults()
         defaults2 = get_library_defaults()
-        
+
         assert defaults1 is not defaults2
         assert defaults1.temperature == defaults2.temperature
 
@@ -264,9 +264,9 @@ class TestLoadModelConfig:
         """Should return empty config when file doesn't exist."""
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "nonexistent_model"
-            
+
             config = load_model_generation_config(model_path)
-            
+
             assert isinstance(config, GenerationConfig)
             assert config.temperature is None
             assert config.max_tokens is None
@@ -276,22 +276,22 @@ class TestLoadModelConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Create generation_config.json
             config_data = {
                 "temperature": 0.7,
                 "top_p": 0.95,
                 "top_k": 50,
                 "max_new_tokens": 1000,  # Should map to max_tokens
-                "repetition_penalty": 1.1
+                "repetition_penalty": 1.1,
             }
-            
+
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(config_data, f)
-            
+
             config = load_model_generation_config(model_path)
-            
+
             assert config.temperature == 0.7
             assert config.top_p == 0.95
             assert config.top_k == 50
@@ -303,17 +303,15 @@ class TestLoadModelConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
-            config_data = {
-                "max_length": 2000  # Should map to max_tokens
-            }
-            
+
+            config_data = {"max_length": 2000}  # Should map to max_tokens
+
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(config_data, f)
-            
+
             config = load_model_generation_config(model_path)
-            
+
             assert config.max_tokens == 2000
 
     def test_load_model_config_invalid_json(self):
@@ -321,14 +319,14 @@ class TestLoadModelConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Create invalid JSON file
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 f.write("invalid json content")
-            
+
             config = load_model_generation_config(model_path)
-            
+
             # Should return empty config and not crash
             assert isinstance(config, GenerationConfig)
             assert config.temperature is None
@@ -338,19 +336,19 @@ class TestLoadModelConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             config_data = {
                 "temperature": 0.7,
                 "unknown_field": "should_be_ignored",
-                "another_unknown": 123
+                "another_unknown": 123,
             }
-            
+
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(config_data, f)
-            
+
             config = load_model_generation_config(model_path)
-            
+
             assert config.temperature == 0.7
             # Unknown fields should not cause errors
 
@@ -363,34 +361,31 @@ class TestBuildGenerationConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Model config
-            model_config_data = {
-                "temperature": 0.8,
-                "max_tokens": 2000
-            }
+            model_config_data = {"temperature": 0.8, "max_tokens": 2000}
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(model_config_data, f)
-            
+
             # Environment overrides
             env_config = GenerationConfig(
                 temperature=0.6,  # Should override model
-                top_p=0.9         # Should override library default
+                top_p=0.9,  # Should override library default
             )
-            
+
             # Runtime overrides
             runtime_config = GenerationConfig(
                 temperature=0.5,  # Should override env
-                max_tokens=1000   # Should override model
+                max_tokens=1000,  # Should override model
             )
-            
+
             final_config = build_generation_config(
                 model_path=model_path,
                 env_overrides=env_config,
-                runtime_overrides=runtime_config
+                runtime_overrides=runtime_config,
             )
-            
+
             # Runtime should win
             assert final_config.temperature == 0.5
             assert final_config.max_tokens == 1000
@@ -404,21 +399,19 @@ class TestBuildGenerationConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Model config
             model_config_data = {"temperature": 0.8}
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(model_config_data, f)
-            
+
             env_config = GenerationConfig(top_p=0.9)
-            
+
             final_config = build_generation_config(
-                model_path=model_path,
-                env_overrides=env_config,
-                runtime_overrides=None
+                model_path=model_path, env_overrides=env_config, runtime_overrides=None
             )
-            
+
             # Model should win for temperature
             assert final_config.temperature == 0.8
             # Env should win for top_p
@@ -432,15 +425,13 @@ class TestBuildGenerationConfig:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
             # No generation_config.json file
-            
+
             env_config = GenerationConfig(temperature=0.7)
-            
+
             final_config = build_generation_config(
-                model_path=model_path,
-                env_overrides=env_config,
-                runtime_overrides=None
+                model_path=model_path, env_overrides=env_config, runtime_overrides=None
             )
-            
+
             # Env should win
             assert final_config.temperature == 0.7
             # Library defaults for others
@@ -451,22 +442,22 @@ class TestBuildGenerationConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Model config
             model_config_data = {"temperature": 0.8}
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(model_config_data, f)
-            
+
             empty_env = GenerationConfig()
             empty_runtime = GenerationConfig()
-            
+
             final_config = build_generation_config(
                 model_path=model_path,
                 env_overrides=empty_env,
-                runtime_overrides=empty_runtime
+                runtime_overrides=empty_runtime,
             )
-            
+
             # Model should win
             assert final_config.temperature == 0.8
             # Library defaults for others
@@ -477,22 +468,20 @@ class TestBuildGenerationConfig:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "test_model"
             model_path.mkdir()
-            
+
             # Model config
             model_config_data = {"temperature": 0.8}
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(model_config_data, f)
-            
+
             # Env config with None temperature (should skip to model)
             env_config = GenerationConfig(temperature=None, top_p=0.9)
-            
+
             final_config = build_generation_config(
-                model_path=model_path,
-                env_overrides=env_config,
-                runtime_overrides=None
+                model_path=model_path, env_overrides=env_config, runtime_overrides=None
             )
-            
+
             # Model should win (env had None)
             assert final_config.temperature == 0.8
             # Env should win for top_p
@@ -507,47 +496,47 @@ class TestIntegration:
         with tempfile.TemporaryDirectory() as tmpdir:
             model_path = Path(tmpdir) / "qwen3-4b-instruct"
             model_path.mkdir()
-            
+
             # Model has some defaults
             model_config_data = {
                 "temperature": 0.7,
                 "max_new_tokens": 2048,
-                "repetition_penalty": 1.05
+                "repetition_penalty": 1.05,
             }
             config_file = model_path / "generation_config.json"
-            with open(config_file, 'w') as f:
+            with open(config_file, "w") as f:
                 json.dump(model_config_data, f)
-            
+
             # Environment overrides for deployment
             env_config = GenerationConfig(
                 temperature=0.1,  # More deterministic for production
-                top_p=0.9,        # Override library default
-                max_tokens=1000   # Override model default
+                top_p=0.9,  # Override library default
+                max_tokens=1000,  # Override model default
             )
-            
+
             # Runtime overrides for specific request
             runtime_config = GenerationConfig(
                 temperature=0.05,  # Even more deterministic for this request
-                seed=42            # Reproducible generation
+                seed=42,  # Reproducible generation
             )
-            
+
             # Build final config
             final_config = build_generation_config(
                 model_path=model_path,
                 env_overrides=env_config,
-                runtime_overrides=runtime_config
+                runtime_overrides=runtime_config,
             )
-            
+
             # Verify hierarchy worked correctly
             assert final_config.temperature == 0.05  # Runtime wins
-            assert final_config.top_p == 0.9         # Env wins
-            assert final_config.max_tokens == 1000   # Env wins over model
+            assert final_config.top_p == 0.9  # Env wins
+            assert final_config.max_tokens == 1000  # Env wins over model
             assert final_config.repetition_penalty == 1.05  # Model wins
-            assert final_config.seed == 42           # Runtime wins
+            assert final_config.seed == 42  # Runtime wins
             # Library defaults for unspecified fields
             assert final_config.presence_penalty == 0.0
             assert final_config.frequency_penalty == 0.0
-            
+
             # Verify SamplingParams conversion works
             sampling_params = final_config.to_sampling_params()
             assert sampling_params["temperature"] == 0.05
@@ -557,7 +546,7 @@ class TestIntegration:
             assert sampling_params["seed"] == 42
             assert sampling_params["presence_penalty"] == 0.0
             assert sampling_params["frequency_penalty"] == 0.0
-            
+
             # Should not include None values
             assert "stop" not in sampling_params
             assert "min_p" not in sampling_params
@@ -574,19 +563,26 @@ class TestIntegration:
             frequency_penalty=0.1,
             min_p=0.05,
             stop=["</s>", "\n\n"],
-            seed=42
+            seed=42,
         )
-        
+
         sampling_params_dict = config.to_sampling_params()
-        
+
         # Verify all expected keys are present
         expected_keys = {
-            "temperature", "top_p", "top_k", "max_tokens",
-            "repetition_penalty", "presence_penalty", "frequency_penalty",
-            "min_p", "stop", "seed"
+            "temperature",
+            "top_p",
+            "top_k",
+            "max_tokens",
+            "repetition_penalty",
+            "presence_penalty",
+            "frequency_penalty",
+            "min_p",
+            "stop",
+            "seed",
         }
         assert set(sampling_params_dict.keys()) == expected_keys
-        
+
         # Verify types are correct for vLLM
         assert isinstance(sampling_params_dict["temperature"], float)
         assert isinstance(sampling_params_dict["top_p"], float)
@@ -598,7 +594,7 @@ class TestIntegration:
         assert isinstance(sampling_params_dict["min_p"], float)
         assert isinstance(sampling_params_dict["stop"], list)
         assert isinstance(sampling_params_dict["seed"], int)
-        
+
         # Verify values are reasonable
         assert 0.0 <= sampling_params_dict["temperature"] <= 2.0
         assert 0.0 <= sampling_params_dict["top_p"] <= 1.0

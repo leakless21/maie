@@ -98,16 +98,16 @@ if [[ "$DOWNLOAD_ALL" == true ]]; then
   DOWNLOAD_QWEN=true
 fi
 
-# Check if uv is available
-if ! command -v uv &> /dev/null; then
-  echo "Error: uv is not installed. Please install uv to manage the Python environment."
-  echo "You can install it with: pip install uv"
+# Check if pixi is available
+if ! command -v pixi &> /dev/null; then
+  echo "Error: pixi is not installed. Please install pixi to manage the environment."
+  echo "Install: curl -fsSL https://pixi.sh/install.sh | bash"
   exit 1
 fi
 
 # Sync dependencies
-echo "Syncing dependencies with uv..."
-uv sync
+echo "Installing dependencies with pixi..."
+pixi install --environment dev
 
 # Create models directory if it doesn't exist
 mkdir -p "$MODELS_DIR"
@@ -118,7 +118,7 @@ export HF_HOME="$MODELS_DIR"
 # Authenticate if token provided
 if [[ -n "$HF_TOKEN" ]]; then
   echo "Authenticating with Hugging Face..."
-  uv run hf auth login --token "$HF_TOKEN"
+  pixi run hf auth login --token "$HF_TOKEN"
 fi
 
 # Initialize exit code
@@ -136,7 +136,7 @@ download_model() {
     echo "  $description already exists at $model_path, skipping..."
   else
     echo "  Downloading $description..."
-    if uv run hf download "$model_name" --local-dir "$model_path"; then
+    if pixi run hf download "$model_name" --local-dir "$model_path"; then
       echo "  Successfully downloaded $description to $model_path"
     else
       echo "  Failed to download $description: $model_name"

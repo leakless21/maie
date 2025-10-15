@@ -4,40 +4,80 @@ version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = [
-    "chunkformer>=1.0.0",
-    "litestar[standard]>=2.18.0",
-    "vllm>=0.11.0",
-    "pydantic-settings>=2.0.0",
-    "redis[hiredis]>=5.0.0",
-    "rq>=1.15.0",
-    "huggingface-hub>=0.19.0",
-    "loguru>=0.7.0",
-    "pydantic>=2.11.10",
-    "faster-whisper>=1.2.0",
-    "ctranslate2>=4.6.0",
-    "torch>=2.8.0",
-    "torchaudio>=2.8.0",
-]
+dependencies = ["soxr>=1.0.0,<2", "pytest>=8.4.2,<9", "pytest-timeout>=2.4.0,<3", "isort>=7.0.0,<8", "transformers>=4.57.1,<5", "fakeredis>=2.32.0,<3"]
+
 
 [dependency-groups]
-dev = [
-    "black>=25.9.0",
-    "pytest>=8.4.2",
-    "pytest-asyncio>=1.2.0",
-    "pytest-cov>=7.0.0",
-    "ruff>=0.13.3",
-]
+dev = ["pytest>=8.4.2,<9", "pytest-timeout>=2.4.0,<3", "isort>=7.0.0,<8", "pytest-mock>=3.15.1,<4"]
 
-[[tool.uv.index]]
-name = "pytorch-cu128"
-url = "https://download.pytorch.org/whl/cu128"
-explicit = true
 
-[tool.uv.sources]
-torch = [
-  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+[tool.pytest.ini_options]
+minversion = "8.0"
+addopts = [
+    "--strict-markers",
+    "--strict-config",
+    "--tb=short",
+    "--disable-warnings",
 ]
-torchvision = [
-  { index = "pytorch-cu128", marker = "sys_platform == 'linux' or sys_platform == 'win32'" },
+markers = [
+    "integration: marks tests as integration tests (may require real libraries)",
+    "slow: marks tests as slow (>5 seconds)",
+    "gpu: marks tests as requiring GPU hardware",
+    "real_llm: marks tests that make real LLM API calls (requires API keys)",
+    "unit: marks tests as unit tests (fast, mocked)",
+    "asyncio: marks tests as async tests",
 ]
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+timeout = 300
+timeout_method = "thread"
+
+[tool.pixi.workspace]
+channels = ["conda-forge", "pytorch", "nvidia"]
+platforms = ["linux-64"]
+
+[tool.pixi.dependencies]
+python = "3.12.*"
+ffmpeg = ">=8.0.0,<9"
+
+[tool.pixi.pypi-dependencies]
+maie = { path = ".", editable = true }
+chunkformer = ">=1.2.1, <2"
+litestar = { version = ">=2.18.0, <3", extras = ["standard"] }
+vllm = ">=0.11.0, <0.12"
+pydantic-settings = ">=2.11.0, <3"
+redis = { version = ">=6.4.0, <7", extras = ["hiredis"] }
+rq = ">=2.6.0, <3"
+huggingface-hub = ">=0.35.3, <0.36"
+loguru = ">=0.7.3, <0.8"
+pydantic = ">=2.12.2, <3"
+faster-whisper = ">=1.2.0, <2"
+ctranslate2 = ">=4.6.0, <5"
+torch = { version = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" }
+torchaudio = { version = "==2.8.0", index = "https://download.pytorch.org/whl/cu128" }
+jsonschema = ">=4.25.1, <5"
+python-Levenshtein = ">=0.27.1, <0.28"
+flashinfer-python = ">=0.4.1, <0.5"
+
+[tool.pixi.feature.dev.pypi-dependencies]
+black = ">=25.9.0, <26"
+pytest-asyncio = ">=1.2.0, <2"
+pytest-cov = ">=7.0.0, <8"
+ruff = ">=0.14.0, <0.15"
+
+[tool.pixi.feature.dev.tasks]
+test = "pytest"
+test-debug = "pytest -vv --tb=long --showlocals -ra -s"
+lint = "ruff check --fix"
+format = "black ."
+api = "uvicorn src.api.main:app"
+worker = "python -m src.worker.main"
+style = "black . && isort . && ruff check --fix"  # Combined formatting and linting
+download-models = "bash scripts/download-models.sh"  # Keep existing bash script
+
+[tool.pixi.environments]
+default = { solve-group = "default" }
+dev = { features = ["dev"], solve-group = "default" }
+

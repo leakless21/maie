@@ -90,54 +90,54 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-# Check if uv is available
-if ! command -v uv &> /dev/null; then
-  echo "Error: uv is not installed. Please install uv to manage the Python environment."
-  echo "You can install it with: pip install uv"
+# Check if pixi is available
+if ! command -v pixi &> /dev/null; then
+  echo "Error: pixi is not installed. Please install pixi to manage the environment."
+  echo "Install: curl -fsSL https://pixi.sh/install.sh | bash"
   exit 1
 fi
 
 # Sync dependencies
-echo "Syncing dependencies with uv..."
-uv sync --dev
+echo "Installing dependencies with pixi..."
+pixi install
 
 # Initialize exit code
 EXIT_CODE=0
 
-# Run Black formatter
+# Run Black formatter (via pixi format)
 if [[ "$BLACK" == true ]]; then
-  echo "Running Black formatter..."
+  echo "Running Black formatter (via pixi format)..."
   if [[ "$FIX" == true ]]; then
-    echo "  Formatting files with Black..."
-    uv run black src/ tests/ scripts/ || EXIT_CODE=1
+    echo "  Formatting files with pixi format..."
+    pixi run format || EXIT_CODE=1
   else
-    echo "  Checking Black formatting..."
-    uv run black --check src/ tests/ scripts/ || EXIT_CODE=1
+    echo "  Checking Black formatting with pixi format (black --check)..."
+    pixi run format -- --check src/ tests/ scripts/ || EXIT_CODE=1
   fi
 fi
 
-# Run isort import sorter
+# Run isort import sorter (via pixi style)
 if [[ "$ISORT" == true ]]; then
-  echo "Running isort import sorter..."
+  echo "Running isort import sorter (via pixi style)..."
   if [[ "$FIX" == true ]]; then
-    echo "  Sorting imports with isort..."
-    uv run isort src/ tests/ scripts/ || EXIT_CODE=1
+    echo "  Running combined style (black + isort + ruff --fix)..."
+    pixi run style || EXIT_CODE=1
   else
-    echo "  Checking import sorting with isort..."
-    uv run isort --check-only src/ tests/ scripts/ || EXIT_CODE=1
+    echo "  Checking imports/formatting with pixi style (checks)..."
+    pixi run style -- --check-only src/ tests/ scripts/ || EXIT_CODE=1
   fi
 fi
 
-# Run flake8 linter if requested
+# Run flake8 linter if requested (via pixi lint)
 if [[ "$FLAKE8" == true ]]; then
-  echo "Running flake8 linter..."
-  uv run flake8 src/ tests/ scripts/ || EXIT_CODE=1
+  echo "Running lint task (via pixi lint)..."
+  pixi run lint src/ tests/ scripts/ || EXIT_CODE=1
 fi
 
 # Run mypy type checker if requested
 if [[ "$MYPY" == true ]]; then
   echo "Running mypy type checker..."
-  uv run mypy src/ tests/ || EXIT_CODE=1
+  pixi run mypy src/ tests/ || EXIT_CODE=1
 fi
 
 # Summary

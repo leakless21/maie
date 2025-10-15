@@ -8,21 +8,6 @@ set -euo pipefail
 export ENVIRONMENT="${ENVIRONMENT:-test}"
 export LOG_LEVEL="${LOG_LEVEL:-WARNING}"
 
-# Setup cuDNN from venv if available (needed for GPU tests with CTranslate2)
-# This ensures that faster-whisper can find cuDNN libraries when using GPU
-# Note: We need to detect this BEFORE running uv, using the venv's Python
-CUDNN_LIB_DIR=""
-if [[ -f ".venv/bin/python" ]]; then
-  CUDNN_LIB_DIR=$(.venv/bin/python -c "import site, os; sp = site.getsitepackages(); cudnn_dir = next((os.path.join(s, 'nvidia', 'cudnn', 'lib') for s in sp if os.path.isdir(os.path.join(s, 'nvidia', 'cudnn', 'lib'))), None); print(cudnn_dir if cudnn_dir else '')" 2>/dev/null || echo "")
-elif command -v python &> /dev/null; then
-  CUDNN_LIB_DIR=$(python -c "import site, os; sp = site.getsitepackages(); cudnn_dir = next((os.path.join(s, 'nvidia', 'cudnn', 'lib') for s in sp if os.path.isdir(os.path.join(s, 'nvidia', 'cudnn', 'lib'))), None); print(cudnn_dir if cudnn_dir else '')" 2>/dev/null || echo "")
-fi
-
-if [[ -n "$CUDNN_LIB_DIR" ]]; then
-  export LD_LIBRARY_PATH="${CUDNN_LIB_DIR}:${LD_LIBRARY_PATH:-}"
-  echo "Added cuDNN to LD_LIBRARY_PATH: $CUDNN_LIB_DIR"
-fi
-
 # Function to display help
 show_help() {
 cat << EOF
@@ -37,6 +22,7 @@ OPTIONS:
   --verbose                     Run with verbose output
   --unit                        Run only unit tests
   --integration                 Run only integration tests
+  --e2e                         Run only E2E tests (requires running services)
   --pattern PATTERN             Run tests matching pattern
   --file FILE                   Run tests from specific file
 
@@ -44,12 +30,15 @@ EXAMPLES:
   $(basename "$0")              # Run all tests quietly
   $(basename "$0") --coverage   # Run all tests with coverage
   $(basename "$0") --unit       # Run only unit tests
+  $(basename "$0") --integration # Run only integration tests
+  $(basename "$0") --e2e        # Run only E2E tests
   $(basename "$0") --pattern "test_api" # Run tests matching pattern
   $(basename "$0") --file tests/unit/test_config.py # Run specific test file
 
 NOTE:
-  - Only one test type (--unit, --integration) can be specified at a time
+  - Only one test type (--unit, --integration, --e2e) can be specified at a time
   - --pattern and --file options cannot be used with test type filters
+  - E2E tests require docker-compose services to be running
 EOF
 }
 
@@ -59,6 +48,7 @@ QUIET=true
 VERBOSE=false
 UNIT_ONLY=false
 INTEGRATION_ONLY=false
+E2E_ONLY=false
 PATTERN=""
 TEST_FILE=""
 
@@ -91,6 +81,10 @@ while [[ $# -gt 0 ]]; do
       INTEGRATION_ONLY=true
       shift
       ;;
+    --e2e)
+      E2E_ONLY=true
+      shift
+      ;;
     --pattern)
       if [[ $# -lt 2 ]] || [[ "$2" == --* ]]; then
         echo "Error: --pattern requires a pattern argument"
@@ -119,6 +113,7 @@ done
 TEST_TYPE_COUNT=0
 [[ "$UNIT_ONLY" == true ]] && TEST_TYPE_COUNT=$((TEST_TYPE_COUNT + 1))
 [[ "$INTEGRATION_ONLY" == true ]] && TEST_TYPE_COUNT=$((TEST_TYPE_COUNT + 1))
+[[ "$E2E_ONLY" == true ]] && TEST_TYPE_COUNT=$((TEST_TYPE_COUNT + 1))
 
 if [[ $TEST_TYPE_COUNT -gt 1 ]]; then
   echo "Error: Cannot specify multiple test types (--unit, --integration) simultaneously"
@@ -147,28 +142,30 @@ if [[ ! -d "tests" ]]; then
   exit 1
 fi
 
-# Check if uv is available
-if ! command -v uv &> /dev/null; then
-  echo "Error: uv is not installed. Please install uv to manage the Python environment."
-  echo "You can install it with: pip install uv"
+# Check if pixi is available
+if ! command -v pixi &> /dev/null; then
+  echo "Error: pixi is not installed. Please install pixi to manage the environment."
+  echo "Install: curl -fsSL https://pixi.sh/install.sh | bash"
   exit 1
 fi
 
 # Sync dependencies
-echo "Syncing dependencies with uv..."
-uv sync --dev
+echo "Installing dependencies with pixi..."
+pixi install --environment dev
 
-# Build pytest command using array (safer than string concatenation)
-PYTEST_CMD=(uv run pytest)
+# Build pytest command using pixi tasks (use tasks instead of calling pytest directly)
+# Choose test-debug when VERBOSE is true (pyproject defines test-debug with -vv, long TB, showlocals)
+PYTEST_TASK="test"
+if [[ "$VERBOSE" == true ]]; then
+  PYTEST_TASK="test-debug"
+fi
+PYTEST_CMD=(pixi run "$PYTEST_TASK")
 
-# Add verbosity flags
-if [[ "$QUIET" == true ]]; then
+# Add verbosity flags only when not using the test-debug task
+if [[ "$QUIET" == true ]] && [[ "$VERBOSE" != true ]]; then
   PYTEST_CMD+=(-q)
 fi
-
-if [[ "$VERBOSE" == true ]]; then
-  PYTEST_CMD+=(-v)
-fi
+# Note: when VERBOSE is true we rely on the test-debug task's verbosity settings
 
 # Add coverage flags if requested
 if [[ "$COVERAGE" == true ]]; then
@@ -188,6 +185,12 @@ elif [[ "$INTEGRATION_ONLY" == true ]]; then
     exit 1
   fi
   PYTEST_CMD+=(tests/integration/)
+elif [[ "$E2E_ONLY" == true ]]; then
+  if [[ ! -d "tests/e2e" ]]; then
+    echo "Error: tests/e2e directory not found"
+    exit 1
+  fi
+  PYTEST_CMD+=(tests/e2e/)
 elif [[ -n "$TEST_FILE" ]]; then
   PYTEST_CMD+=("$TEST_FILE")
 elif [[ -n "$PATTERN" ]]; then

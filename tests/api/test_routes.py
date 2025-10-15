@@ -1,4 +1,5 @@
 """Tests for API route handlers."""
+
 import json
 import uuid
 from io import BytesIO
@@ -60,7 +61,9 @@ class TestProcessController:
     def test_process_audio_success(self, app, valid_audio_file):
         """Test successful audio processing request."""
         with TestClient(app=app) as client:
-            with patch("src.api.routes.ProcessController.process_audio") as mock_process:
+            with patch(
+                "src.api.routes.ProcessController.process_audio"
+            ) as mock_process:
                 task_id = uuid.uuid4()
                 mock_process.return_value = {"task_id": str(task_id)}
 
@@ -147,7 +150,9 @@ class TestProcessController:
     def test_process_audio_default_features(self, app, valid_audio_file):
         """Test that default features are applied when not specified."""
         with TestClient(app=app) as client:
-            with patch("src.api.routes.ProcessController.process_audio") as mock_process:
+            with patch(
+                "src.api.routes.ProcessController.process_audio"
+            ) as mock_process:
                 task_id = uuid.uuid4()
                 mock_process.return_value = {"task_id": str(task_id)}
 
@@ -163,12 +168,12 @@ class TestProcessController:
 
 class TestFileUploadSecurity:
     """Test file upload security patterns (streaming, sanitization, MIME validation)."""
-    
+
     @pytest.fixture
     def app(self):
         """Create a test Litestar app with ProcessController."""
         return Litestar(route_handlers=[ProcessController])
-    
+
     @pytest.fixture
     def valid_audio_file(self):
         """Create a valid audio file for testing."""
@@ -189,47 +194,51 @@ class TestFileUploadSecurity:
             + b"\x00" * 64
         )
         return BytesIO(wav_header)
-    
-    @pytest.mark.skip(reason="Future enhancement: Size check before read requires Content-Length header validation or streaming implementation")
+
+    @pytest.mark.skip(
+        reason="Future enhancement: Size check before read requires Content-Length header validation or streaming implementation"
+    )
     def test_file_size_checked_before_reading_content(self, app):
         """File size validation MUST happen before reading entire file to prevent DoS."""
         import inspect
         from src.api import routes
-        
+
         # Get source code of the entire routes module
         source = inspect.getsource(routes)
-        
+
         # Find the process_audio method definition
-        process_audio_start = source.find('async def process_audio(')
+        process_audio_start = source.find("async def process_audio(")
         assert process_audio_start > 0, "process_audio method not found"
-        
+
         # Extract just the process_audio method (roughly)
-        method_source = source[process_audio_start:process_audio_start + 5000]
-        
+        method_source = source[process_audio_start : process_audio_start + 5000]
+
         # Check that file.size or file_size_mb comparison appears before file.read()
         size_check_pos = -1
         file_read_pos = -1
-        
+
         # Look for size validation patterns
-        if 'file_size_mb' in method_source or 'max_size_mb' in method_source:
-            size_check_pos = method_source.find('max_size_mb')
-        if size_check_pos < 0 and 'file.size' in method_source:
-            size_check_pos = method_source.find('file.size')
-        
+        if "file_size_mb" in method_source or "max_size_mb" in method_source:
+            size_check_pos = method_source.find("max_size_mb")
+        if size_check_pos < 0 and "file.size" in method_source:
+            size_check_pos = method_source.find("file.size")
+
         # Look for file read patterns
-        if 'await file.read()' in method_source:
-            file_read_pos = method_source.find('await file.read()')
-        
+        if "await file.read()" in method_source:
+            file_read_pos = method_source.find("await file.read()")
+
         # If file is read entirely, size check must come first
         if file_read_pos > 0:
             assert size_check_pos > 0, "File size must be checked"
-            assert size_check_pos < file_read_pos, \
-                "File size must be validated BEFORE reading entire file content to prevent DoS"
+            assert (
+                size_check_pos < file_read_pos
+            ), "File size must be validated BEFORE reading entire file content to prevent DoS"
         # Otherwise, should use streaming approach
         else:
-            assert 'aiofiles' in method_source or size_check_pos > 0, \
-                "Should either use aiofiles streaming or check size before reading"
-    
+            assert (
+                "aiofiles" in method_source or size_check_pos > 0
+            ), "Should either use aiofiles streaming or check size before reading"
+
     def test_filename_sanitization_for_path_traversal(self, app, valid_audio_file):
         """Filenames must be sanitized to prevent path traversal attacks."""
         with TestClient(app=app) as client:
@@ -240,41 +249,50 @@ class TestFileUploadSecurity:
                 "subdir/../../../secrets.txt",
                 "test/../../etc/hosts",
             ]
-            
+
             for filename in malicious_filenames:
                 with patch("src.api.routes.save_audio_file") as mock_save:
                     # Mock save to check what path is actually used
                     mock_save.return_value = Path(f"/data/audio/{uuid.uuid4()}.wav")
-                    
+
                     response = client.post(
                         "/v1/process",
                         files={"file": (filename, valid_audio_file, "audio/wav")},
                         data={"features": json.dumps(["clean_transcript"])},
                     )
-                    
+
                     # Should not fail, but should sanitize filename
                     # Implementation should use UUID, not user filename
                     if mock_save.called:
                         call_args = mock_save.call_args
                         # Check that saved path doesn't contain '..' or malicious patterns
-                        saved_path = str(call_args[0][1]) if len(call_args[0]) > 1 else str(call_args[1].get('file_path', ''))
-                        assert '..' not in saved_path, f"Path traversal not prevented: {saved_path}"
-    
+                        saved_path = (
+                            str(call_args[0][1])
+                            if len(call_args[0]) > 1
+                            else str(call_args[1].get("file_path", ""))
+                        )
+                        assert (
+                            ".." not in saved_path
+                        ), f"Path traversal not prevented: {saved_path}"
+
     def test_mime_type_validation(self, app):
         """Both MIME type and file extension must be validated."""
         with TestClient(app=app) as client:
             # Test file with wrong MIME type
             fake_audio = BytesIO(b"fake content")
-            
+
             response = client.post(
                 "/v1/process",
                 files={"file": ("malware.exe", fake_audio, "application/x-executable")},
                 data={"features": json.dumps(["clean_transcript"])},
             )
-            
+
             # Should be rejected
-            assert response.status_code in [HTTP_415_UNSUPPORTED_MEDIA_TYPE, HTTP_422_UNPROCESSABLE_ENTITY]
-    
+            assert response.status_code in [
+                HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                HTTP_422_UNPROCESSABLE_ENTITY,
+            ]
+
     def test_file_extension_validation(self, app):
         """File extension must be in allowed list (.wav, .mp3, .m4a, .flac)."""
         with TestClient(app=app) as client:
@@ -285,20 +303,22 @@ class TestFileUploadSecurity:
                 "test.txt",
                 "data.json",
             ]
-            
+
             for filename in disallowed_extensions:
                 fake_file = BytesIO(b"fake content")
-                
+
                 response = client.post(
                     "/v1/process",
                     files={"file": (filename, fake_file, "application/octet-stream")},
                     data={"features": json.dumps(["clean_transcript"])},
                 )
-                
+
                 # Should be rejected
-                assert response.status_code in [HTTP_415_UNSUPPORTED_MEDIA_TYPE, HTTP_422_UNPROCESSABLE_ENTITY], \
-                    f"Extension {filename} should be rejected"
-    
+                assert response.status_code in [
+                    HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                    HTTP_422_UNPROCESSABLE_ENTITY,
+                ], f"Extension {filename} should be rejected"
+
     def test_uses_uuid_for_storage_not_user_filename(self, app, valid_audio_file):
         """Stored filenames must use UUID, not user-provided names."""
         with TestClient(app=app) as client:
@@ -306,52 +326,66 @@ class TestFileUploadSecurity:
                 task_id = uuid.uuid4()
                 expected_path = Path(f"/data/audio/{task_id}.wav")
                 mock_save.return_value = expected_path
-                
+
                 with patch("src.api.routes.create_task_in_redis"):
                     with patch("src.api.routes.enqueue_job"):
                         response = client.post(
                             "/v1/process",
-                            files={"file": ("user_provided_name.wav", valid_audio_file, "audio/wav")},
+                            files={
+                                "file": (
+                                    "user_provided_name.wav",
+                                    valid_audio_file,
+                                    "audio/wav",
+                                )
+                            },
                             data={"features": json.dumps(["clean_transcript"])},
                         )
-                        
+
                         if response.status_code == HTTP_202_ACCEPTED:
                             # Verify save was called
                             assert mock_save.called
-                            
+
                             # Check arguments - should include task_id
                             call_args = mock_save.call_args
                             # task_id should be in arguments
-                            assert len(call_args[0]) >= 2, "save_audio_file should receive task_id"
-    
-    @pytest.mark.skip(reason="Future enhancement: Streaming implementation with aiofiles not yet implemented")
+                            assert (
+                                len(call_args[0]) >= 2
+                            ), "save_audio_file should receive task_id"
+
+    @pytest.mark.skip(
+        reason="Future enhancement: Streaming implementation with aiofiles not yet implemented"
+    )
     def test_file_streaming_with_aiofiles(self, app):
         """Files should be streamed to disk using aiofiles, not loaded entirely in memory."""
         from src.api.routes import save_audio_file
         import inspect
-        
+
         source = inspect.getsource(save_audio_file)
-        
+
         # Should use aiofiles for streaming
-        assert 'aiofiles' in source or 'async with' in source, \
-            "save_audio_file should use aiofiles for streaming to prevent memory exhaustion"
-        
+        assert (
+            "aiofiles" in source or "async with" in source
+        ), "save_audio_file should use aiofiles for streaming to prevent memory exhaustion"
+
         # Should NOT load entire file in memory
-        assert 'file_content' not in source or 'chunks' in source or 'read(' in source, \
-            "Should stream in chunks, not load entire file"
-    
-    @pytest.mark.skip(reason="Future enhancement: Chunk-based streaming not yet implemented")
+        assert (
+            "file_content" not in source or "chunks" in source or "read(" in source
+        ), "Should stream in chunks, not load entire file"
+
+    @pytest.mark.skip(
+        reason="Future enhancement: Chunk-based streaming not yet implemented"
+    )
     def test_file_streaming_uses_chunks(self, app):
         """File streaming should read in small chunks (e.g., 8KB) not entire file."""
         from src.api.routes import save_audio_file
         import inspect
-        
+
         source = inspect.getsource(save_audio_file)
-        
+
         # Look for chunk size configuration
         # Common patterns: .read(8192), .read(8*1024), CHUNK_SIZE
-        chunk_patterns = ['8192', '8*1024', '8 * 1024', 'CHUNK_SIZE', 'chunk_size']
-        
+        chunk_patterns = ["8192", "8*1024", "8 * 1024", "CHUNK_SIZE", "chunk_size"]
+
         has_chunking = any(pattern in source for pattern in chunk_patterns)
         assert has_chunking, "File streaming should use explicit chunk size (e.g., 8KB)"
 

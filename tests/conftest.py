@@ -5,84 +5,183 @@ Testing Strategy:
 - Unit tests: Fast, use mocks, test logic in isolation
 - Integration tests: Use real libraries when available, marked with @pytest.mark.integration
 - E2E tests: Full system tests with real models
+- Real LLM tests: Tests with actual LLM API calls, marked with @pytest.mark.real_llm
 
 Markers:
 - @pytest.mark.integration: Requires real libraries (faster-whisper, etc.)
 - @pytest.mark.slow: Tests that take >5 seconds
 - @pytest.mark.gpu: Requires GPU hardware
+- @pytest.mark.real_llm: Tests that make real LLM API calls (requires API keys)
 
 Note: Integration tests require CUDA library path configuration on Linux.
 Use scripts/run_integration_tests.sh to run tests with proper environment setup.
 See docs/whisper-cuda-fix.md for details.
 """
+
+import os
 import sys
 import pytest
 from pathlib import Path
 from types import ModuleType
+import builtins
 
 # Ensure project root is on sys.path so tests can import src.*
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
+
+# Provide a global alias 'mock_src' so tests can reference
+# 'mock_src.processors.llm.processor.torch' in with-patch contexts.
+try:  # pragma: no cover - test scaffolding convenience
+    import src as _src_module
+
+    builtins.mock_src = _src_module  # type: ignore[attr-defined]
+except Exception:
+    pass
 
 
 # ============================================================================
 # Pytest Configuration
 # ============================================================================
 
+
 def pytest_configure(config):
     """Register custom markers."""
     config.addinivalue_line(
-        "markers", "integration: marks tests as integration tests (may require real libraries)"
+        "markers",
+        "integration: marks tests as integration tests (may require real libraries)",
     )
+    config.addinivalue_line("markers", "slow: marks tests as slow (>5 seconds)")
+    config.addinivalue_line("markers", "gpu: marks tests as requiring GPU hardware")
     config.addinivalue_line(
-        "markers", "slow: marks tests as slow (>5 seconds)"
+        "markers",
+        "real_llm: marks tests that make real LLM API calls (requires API keys)",
     )
-    config.addinivalue_line(
-        "markers", "gpu: marks tests as requiring GPU hardware"
-    )
+
+
+@pytest.fixture(autouse=True)
+def setup_huggingface_cache(tmp_path):
+    """Set up a writable Hugging Face cache directory for tests."""
+    import tempfile
+    import shutil
+
+    # Create a temporary directory for HF cache
+    hf_cache_dir = tmp_path / "huggingface_cache"
+    hf_cache_dir.mkdir()
+
+    # Set environment variables
+    original_hf_home = os.environ.get("HF_HOME")
+    original_hf_cache = os.environ.get("HUGGINGFACE_HUB_CACHE")
+
+    os.environ["HF_HOME"] = str(hf_cache_dir)
+    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hf_cache_dir)
+
+    yield hf_cache_dir
+
+    # Cleanup
+    if original_hf_home is not None:
+        os.environ["HF_HOME"] = original_hf_home
+    else:
+        os.environ.pop("HF_HOME", None)
+
+    if original_hf_cache is not None:
+        os.environ["HUGGINGFACE_HUB_CACHE"] = original_hf_cache
+    else:
+        os.environ.pop("HUGGINGFACE_HUB_CACHE", None)
+
+
+# ============================================================================
+# Real LLM Testing Configuration
+# ============================================================================
+
+
+def has_real_llm_config():
+    """Check if real LLM testing is configured."""
+    # Check for required environment variables or config files
+    required_vars = [
+        "LLM_TEST_MODEL_PATH",  # Path to local model
+        "LLM_TEST_API_KEY",  # API key for cloud models (optional)
+    ]
+
+    # At least one model path should be available
+    model_path = os.getenv("LLM_TEST_MODEL_PATH")
+    if model_path and Path(model_path).exists():
+        return True
+
+    # Or API key for cloud testing
+    if os.getenv("LLM_TEST_API_KEY"):
+        return True
+
+    return False
+
+
+@pytest.fixture
+def skip_if_no_real_llm_config():
+    """Skip test if real LLM configuration is not available."""
+    if not has_real_llm_config():
+        pytest.skip(
+            "Real LLM testing not configured. Set LLM_TEST_MODEL_PATH or LLM_TEST_API_KEY environment variables."
+        )
+
+
+@pytest.fixture
+def real_llm_config():
+    """Provide real LLM configuration for testing."""
+    if not has_real_llm_config():
+        pytest.skip("Real LLM configuration not available")
+
+    return {
+        "model_path": os.getenv("LLM_TEST_MODEL_PATH"),
+        "api_key": os.getenv("LLM_TEST_API_KEY"),
+        "temperature": float(os.getenv("LLM_TEST_TEMPERATURE", "0.1")),
+        "max_tokens": int(os.getenv("LLM_TEST_MAX_TOKENS", "100")),
+        "timeout": int(os.getenv("LLM_TEST_TIMEOUT", "30")),
+    }
 
 
 # ============================================================================
 # Mock faster-whisper Module (for unit tests)
 # ============================================================================
 
+
 class MockWhisperModel:
     """Mock WhisperModel for testing without real library."""
-    
-    def __init__(self, model_size_or_path, device="cuda", compute_type="float16", **kwargs):
+
+    def __init__(
+        self, model_size_or_path, device="cuda", compute_type="float16", **kwargs
+    ):
         self.model_path = model_size_or_path
         self.device = device
         self.compute_type = compute_type
         self.kwargs = kwargs
         self.closed = False
         self.transcribe_call_count = 0
-        
+
     def transcribe(self, audio, **kwargs):
         """Mock transcribe that returns realistic structure.
-        
+
         Returns (segments_generator, info) tuple matching faster-whisper API.
         """
         self.transcribe_call_count += 1
         self.last_transcribe_kwargs = kwargs
-        
+
         # Create mock segment
         class MockSegment:
             def __init__(self):
                 self.start = 0.0
                 self.end = 1.5
                 self.text = "hello world from mock"
-                
+
         def segments_generator():
             yield MockSegment()
-        
+
         # Create mock info
         class MockInfo:
             def __init__(self):
                 self.language = "en"
                 self.language_probability = 0.95
-                
+
         return segments_generator(), MockInfo()
-    
+
     def close(self):
         """Mock cleanup."""
         self.closed = True
@@ -173,20 +272,21 @@ def inject_mock_faster_whisper(mock_faster_whisper):
     """Inject mock faster-whisper into sys.modules and clear cache."""
     original = sys.modules.get("faster_whisper")
     sys.modules["faster_whisper"] = mock_faster_whisper
-    
+
     # Clear the cached module in whisper.py if it was already imported
     import src.processors.asr.whisper as whisper_module
+
     original_cache = whisper_module._FASTER_WHISPER_MODULE
     original_failed = whisper_module._FASTER_WHISPER_IMPORT_FAILED
     whisper_module._FASTER_WHISPER_MODULE = None
     whisper_module._FASTER_WHISPER_IMPORT_FAILED = False
-    
+
     yield mock_faster_whisper
-    
+
     # Cleanup
     whisper_module._FASTER_WHISPER_MODULE = original_cache
     whisper_module._FASTER_WHISPER_IMPORT_FAILED = original_failed
-    
+
     if original is not None:
         sys.modules["faster_whisper"] = original
     else:
@@ -201,19 +301,21 @@ def inject_mock_faster_whisper(mock_faster_whisper):
 _HAS_FASTER_WHISPER = None
 _HAS_GPU = None
 
+
 def has_faster_whisper():
     """Check if faster-whisper is actually installed and can be imported.
-    
+
     Result is cached to avoid repeated imports which can cause issues with
     PyTorch 2.8's module initialization.
     """
     global _HAS_FASTER_WHISPER
-    
+
     if _HAS_FASTER_WHISPER is not None:
         return _HAS_FASTER_WHISPER
-    
+
     try:
         import faster_whisper
+
         _HAS_FASTER_WHISPER = True
         return True
     except (ImportError, RuntimeError) as e:
@@ -225,17 +327,18 @@ def has_faster_whisper():
 
 def has_gpu():
     """Check if GPU is available.
-    
+
     Result is cached to avoid repeated torch imports which can cause issues with
     PyTorch 2.8's module re-initialization bug.
     """
     global _HAS_GPU
-    
+
     if _HAS_GPU is not None:
         return _HAS_GPU
-    
+
     try:
         import torch
+
         _HAS_GPU = torch.cuda.is_available()
         return _HAS_GPU
     except (ImportError, RuntimeError) as e:
@@ -260,6 +363,7 @@ def skip_if_no_gpu():
 # ============================================================================
 # Test Assets
 # ============================================================================
+
 
 @pytest.fixture
 def test_assets_dir():
@@ -286,6 +390,7 @@ def sample_audio_bytes(sample_audio_path):
 # Model Paths
 # ============================================================================
 
+
 @pytest.fixture
 def whisper_model_path():
     """Path to local Whisper model (if exists)."""
@@ -302,9 +407,28 @@ def skip_if_no_whisper_model(whisper_model_path):
         pytest.skip("Whisper model not found at data/models/era-x-wow-turbo-v1.1-ct2")
 
 
+@pytest.fixture
+def local_llm_model_path():
+    """Path to local LLM model."""
+    model_path = Path("data/models/qwen3-4b-instruct-2507-awq")
+    if model_path.exists():
+        return str(model_path)
+    return None
+
+
+@pytest.fixture
+def skip_if_no_local_llm(local_llm_model_path):
+    """Skip if local LLM model not available."""
+    if local_llm_model_path is None:
+        pytest.skip(
+            "Local LLM model not found at data/models/qwen3-4b-instruct-2507-awq"
+        )
+
+
 # ============================================================================
 # Temporary Files
 # ============================================================================
+
 
 @pytest.fixture
 def temp_audio_file(tmp_path):
@@ -312,24 +436,26 @@ def temp_audio_file(tmp_path):
     import wave
     import struct
     import math
-    
+
     audio_path = tmp_path / "test_audio.wav"
-    
+
     # Generate 1 second of 440Hz sine wave
     sample_rate = 16000
     duration = 1.0
     frequency = 440.0
     amplitude = 16000
-    
+
     with wave.open(str(audio_path), "wb") as wf:
         wf.setnchannels(1)  # Mono
         wf.setsampwidth(2)  # 16-bit
         wf.setframerate(sample_rate)
-        
+
         for i in range(int(sample_rate * duration)):
-            value = int(amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate))
+            value = int(
+                amplitude * math.sin(2.0 * math.pi * frequency * i / sample_rate)
+            )
             wf.writeframes(struct.pack("<h", value))
-    
+
     return audio_path
 
 
@@ -337,15 +463,16 @@ def temp_audio_file(tmp_path):
 # Configuration Mocking
 # ============================================================================
 
+
 @pytest.fixture
 def mock_config(monkeypatch):
     """Provide a fixture to easily mock config values."""
     from src import config
-    
+
     class ConfigMocker:
         def set(self, key, value):
             monkeypatch.setattr(config.settings, key, value)
-            
+
         def set_whisper_defaults(self):
             """Set common Whisper config defaults."""
             self.set("whisper_device", "cuda")
@@ -356,8 +483,8 @@ def mock_config(monkeypatch):
             self.set("whisper_vad_speech_pad_ms", 400)
             self.set("whisper_condition_on_previous_text", True)
             self.set("whisper_language", None)
-            self.set("whisper_cpu_fallback", True)
-    
+            self.set("whisper_cpu_fallback", False)
+
     return ConfigMocker()
 
 
@@ -365,12 +492,13 @@ def mock_config(monkeypatch):
 # Cleanup
 # ============================================================================
 
+
 @pytest.fixture(autouse=True)
 def cleanup_modules():
     """Clean up sys.modules after each test to prevent cross-contamination."""
     before = dict(sys.modules)
     yield
-    
+
     # Remove any modules added during test
     to_remove = set(sys.modules) - set(before)
     for module_name in to_remove:

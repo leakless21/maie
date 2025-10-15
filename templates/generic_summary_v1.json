@@ -4,6 +4,11 @@
   "description": "Generic structured summary format with categorization tags",
   "type": "object",
   "properties": {
+    "title": {
+      "type": "string",
+      "description": "A concise, relevant title that captures the essence of the content",
+      "maxLength": 200
+    },
     "summary": {
       "type": "string",
       "description": "A comprehensive summary of the content",
@@ -30,6 +35,6 @@
       "maxItems": 5
     }
   },
-  "required": ["summary", "key_topics", "tags"],
+  "required": ["title", "summary", "key_topics", "tags"],
   "additionalProperties": false
 }

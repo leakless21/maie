@@ -30,10 +30,9 @@ RUN apt-get update && apt-get install -y \
 # Create symbolic link for python3
 RUN ln -sf python3.13 /usr/bin/python3
 
-# Install UV package manager
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:${PATH}"
-ENV PATH="/root/.local/bin:${PATH}"
+# Install Pixi package manager
+RUN curl -fsSL https://pixi.sh/install.sh | bash
+ENV PATH="/root/.pixi/bin:${PATH}"
 
 # Create application directory
 WORKDIR /app
@@ -46,15 +45,9 @@ COPY . .
 # ============================================================================
 FROM base AS dependencies
 
-# Create virtual environment and install dependencies
-RUN python3 -m venv /opt/venv
-ENV PATH="/opt/venv/bin:$PATH"
-
-# Copy pyproject.toml and lock file
-COPY pyproject.toml uv.lock ./
-
-# Install dependencies with UV
-RUN uv sync --locked
+# Copy Pixi manifest and install dependencies
+COPY pixi.toml ./
+RUN pixi install
 
 # ============================================================================
 # PRODUCTION STAGE - Final image with minimal footprint
@@ -74,12 +67,10 @@ RUN groupadd -r maie && useradd -r -g maie maie
 WORKDIR /app
 RUN chown -R maie:maie /app
 
-# Copy virtual environment from dependencies stage
-COPY --from=dependencies --chown=maie:maie /opt/venv /opt/venv
-
-# Activate virtual environment
-ENV PATH="/opt/venv/bin:$PATH"
-ENV VIRTUAL_ENV="/opt/venv"
+# Copy Pixi environment and binary from dependencies stage
+COPY --from=dependencies --chown=maie:maie /root/.pixi /home/maie/.pixi
+# Ensure Pixi is on PATH for the non-root user
+ENV PATH="/home/maie/.pixi/bin:$PATH"
 
 # Copy application code
 COPY --chown=maie:maie . .

@@ -21,6 +21,7 @@ Behavior required by tests:
 The faster_whisper import is performed at call time to allow tests to
 inject a fake module into sys.modules before the backend is imported.
 """
+
 from __future__ import annotations
 
 import logging
@@ -47,6 +48,7 @@ class WhisperBackend(ASRBackend):
     - mapping of model.transcribe() result to ASRResult
     - safe unload that calls .close() when available
     """
+
     @staticmethod
     def _looks_like_path(p: str) -> bool:
         if not isinstance(p, str):
@@ -72,6 +74,9 @@ class WhisperBackend(ASRBackend):
         the backend will load that path.
 
         If neither is present, the backend will not attempt to load a model.
+
+        Note: For offline deployment, all models must be available locally.
+        The backend will NOT attempt to download models from HuggingFace.
         """
         self.model_path = model_path
         self.model = None
@@ -83,7 +88,11 @@ class WhisperBackend(ASRBackend):
             if env_model:
                 self.model_path = env_model
             else:
-                config_model = getattr(cfg.settings, "whisper_model_path", None) if hasattr(cfg, 'settings') else None
+                config_model = (
+                    getattr(cfg.settings, "whisper_model_path", None)
+                    if hasattr(cfg, "settings")
+                    else None
+                )
                 if config_model is not None:
                     self.model_path = str(config_model)
 
@@ -91,16 +100,6 @@ class WhisperBackend(ASRBackend):
         # - If an explicit constructor arg was provided: always try to load
         # - If coming from env/config: only load if it's a named model (e.g. "tiny.en")
         #   or a filesystem path that actually exists.
-        
-        
-        
-        
-        
-        
-        
-        
-        
-        
 
         should_load = False
         if self.model_path is not None:
@@ -108,7 +107,9 @@ class WhisperBackend(ASRBackend):
                 should_load = True
             else:
                 # env/config derived
-                if not self._looks_like_path(self.model_path) or os.path.exists(self.model_path):
+                if not self._looks_like_path(self.model_path) or os.path.exists(
+                    self.model_path
+                ):
                     should_load = True
 
         # prefer explicit constructor argument if provided
@@ -120,34 +121,41 @@ class WhisperBackend(ASRBackend):
 
     def _load_model(self, **kwargs) -> None:
         """
-        Load the faster-whisper model with CPU fallback support.
+        Load the faster-whisper model with GPU requirement (no CPU fallback).
 
         Raises:
             FileNotFoundError: when the explicit model_path does not exist.
             RuntimeError: on any underlying loading error.
         """
         global _FASTER_WHISPER_MODULE, _FASTER_WHISPER_IMPORT_FAILED
-        
+
         # Use cached import to avoid PyTorch 2.8 re-import bug
         if _FASTER_WHISPER_IMPORT_FAILED:
             if self.model_path is not None:
-                raise RuntimeError("faster_whisper is not installed or could not be imported")
+                raise RuntimeError(
+                    "faster_whisper is not installed or could not be imported"
+                )
             return
-            
+
         if _FASTER_WHISPER_MODULE is None:
             # lazy import so tests can inject fake module into sys.modules
             try:
                 import faster_whisper as fw  # type: ignore
+
                 _FASTER_WHISPER_MODULE = fw
-            except Exception as exc:  # pragma: no cover - defensive for missing dependency
+            except (
+                Exception
+            ) as exc:  # pragma: no cover - defensive for missing dependency
                 LOGGER.debug("faster_whisper not available: %s", exc)
                 _FASTER_WHISPER_IMPORT_FAILED = True
                 # If model_path was explicitly provided we should surface an error,
                 # otherwise leave model as None (constructor may have skipped load).
                 if self.model_path is not None:
-                    raise RuntimeError("faster_whisper is not installed or could not be imported") from exc
+                    raise RuntimeError(
+                        "faster_whisper is not installed or could not be imported"
+                    ) from exc
                 return
-        
+
         fw = _FASTER_WHISPER_MODULE
 
         if self.model_path is None:
@@ -157,7 +165,9 @@ class WhisperBackend(ASRBackend):
 
         # Verify path exists only when it looks like a filesystem path.
         # Named models like "tiny.en" should be allowed to download and load.
-        if self._looks_like_path(self.model_path) and not os.path.exists(self.model_path):
+        if self._looks_like_path(self.model_path) and not os.path.exists(
+            self.model_path
+        ):
             LOGGER.error("Whisper model path does not exist: %s", self.model_path)
             raise FileNotFoundError(f"Model path not found: {self.model_path}")
 
@@ -167,31 +177,58 @@ class WhisperBackend(ASRBackend):
                 return default
             return str(val).strip().lower() in {"1", "true", "yes", "y", "on"}
 
-        device = os.getenv("WHISPER_DEVICE") or getattr(cfg.settings, "whisper_device", "cuda")
-        compute_type = os.getenv("WHISPER_COMPUTE_TYPE") or getattr(cfg.settings, "whisper_compute_type", "float16")
-        cpu_fallback = _parse_bool(os.getenv("WHISPER_CPU_FALLBACK"), getattr(cfg.settings, "whisper_cpu_fallback", True))
-        
+        device = os.getenv("WHISPER_DEVICE") or getattr(
+            cfg.settings, "whisper_device", "cuda"
+        )
+        compute_type = os.getenv("WHISPER_COMPUTE_TYPE") or getattr(
+            cfg.settings, "whisper_compute_type", "float16"
+        )
+
+        # Check GPU availability and raise error if not available
+        if device == "auto" or device.startswith("cuda"):
+            try:
+                import torch as _torch
+
+                if not _torch.cuda.is_available():
+                    raise RuntimeError(
+                        "CUDA is not available. GPU is required for offline deployment."
+                    )
+            except ImportError:
+                raise RuntimeError(
+                    "PyTorch is not installed. GPU is required for offline deployment."
+                )
+            except Exception as e:
+                raise RuntimeError(f"Failed to check CUDA availability: {e}")
+
+        # Ensure device is set to cuda if auto was specified
+        if device == "auto":
+            device = "cuda"
+
         # Get cpu_threads from env or config for CPU performance tuning
         cpu_threads = os.getenv("WHISPER_CPU_THREADS")
         if cpu_threads is None:
             cpu_threads = getattr(cfg.settings, "whisper_cpu_threads", None)
-        
-        load_kwargs = {
-            "device": device,
-            "compute_type": compute_type
-        }
-        
+
+        load_kwargs = {"device": device, "compute_type": compute_type}
+
         # Add cpu_threads if specified
         if cpu_threads is not None:
             load_kwargs["cpu_threads"] = int(cpu_threads)
-        
+
         # Filter kwargs to only include valid WhisperModel parameters
         valid_whisper_params = {
-            'device', 'device_index', 'compute_type', 'cpu_threads',
-            'num_workers', 'download_root', 'local_files_only', 'files',
-            'revision', 'use_auth_token'
+            "device",
+            "device_index",
+            "compute_type",
+            "cpu_threads",
+            "num_workers",
+            "download_root",
+            "local_files_only",
+            "files",
+            "revision",
+            "use_auth_token",
         }
-        
+
         # Allow tests/consumers to pass extra loader kwargs, but filter out invalid ones
         for key, value in kwargs.items():
             if key in valid_whisper_params:
@@ -199,11 +236,17 @@ class WhisperBackend(ASRBackend):
 
         # Check if we're in test mode (fake module provides load_model)
         # Note: In tests, sys.modules is monkey-patched to replace the real module
-        is_test_mode = hasattr(fw, 'load_model') and callable(getattr(fw, 'load_model', None))
+        is_test_mode = hasattr(fw, "load_model") and callable(
+            getattr(fw, "load_model", None)
+        )
 
         try:
-            LOGGER.debug("Loading whisper model from %s with kwargs=%s", self.model_path, load_kwargs)
-            
+            LOGGER.debug(
+                "Loading whisper model from %s with kwargs=%s",
+                self.model_path,
+                load_kwargs,
+            )
+
             if is_test_mode:
                 self.model = fw.load_model(self.model_path, **load_kwargs)
                 # Annotate device for tests
@@ -213,33 +256,26 @@ class WhisperBackend(ASRBackend):
                     pass
             else:
                 # Production mode - use WhisperModel
+                # For offline deployment: require local models, disable downloads
                 try:
+                    # Enforce local_files_only for offline deployment
+                    load_kwargs["local_files_only"] = True
                     self.model = fw.WhisperModel(self.model_path, **load_kwargs)
                     try:
                         setattr(self.model, "device", load_kwargs.get("device"))
                     except Exception:
                         pass
                 except Exception as cuda_exc:
-                    # Try CPU fallback if enabled and CUDA failed
-                    dev = str(load_kwargs.get("device"))
-                    if cpu_fallback and (dev == "auto" or dev.startswith("cuda")):
-                        LOGGER.warning(
-                            "Failed to load model on %s: %s. Attempting CPU fallback...",
-                            load_kwargs.get("device"),
-                            str(cuda_exc)
-                        )
-                        load_kwargs["device"] = "cpu"
-                        load_kwargs["compute_type"] = "int8"  # Use int8 for CPU efficiency
-                        self.model = fw.WhisperModel(self.model_path, **load_kwargs)
-                        try:
-                            setattr(self.model, "device", load_kwargs.get("device"))
-                        except Exception:
-                            pass
-                        LOGGER.info("Successfully loaded model on CPU with int8 compute type")
-                    else:
-                        raise
-            
-            LOGGER.info("Loaded whisper model from %s on device=%s", self.model_path, load_kwargs["device"])
+                    # No CPU fallback - GPU is required for offline deployment
+                    raise RuntimeError(
+                        f"Failed to load model on GPU: {cuda_exc}. GPU is required for offline deployment."
+                    ) from cuda_exc
+
+            LOGGER.info(
+                "Loaded whisper model from %s on device=%s",
+                self.model_path,
+                load_kwargs["device"],
+            )
         except Exception as exc:
             LOGGER.exception("Failed to load whisper model from %s", self.model_path)
             raise RuntimeError("Failed to load whisper model") from exc
@@ -247,18 +283,18 @@ class WhisperBackend(ASRBackend):
     def _prepare_transcribe_kwargs(self, user_kwargs: Dict[str, Any]) -> Dict[str, Any]:
         """
         Prepare transcription kwargs by applying config defaults.
-        
+
         User-provided kwargs take precedence over config values.
         Implements VAD filtering and other advanced features from settings.
-        
+
         Args:
             user_kwargs: User-provided kwargs to transcribe()
-            
+
         Returns:
             Combined kwargs dict with config defaults + user overrides
         """
         transcribe_kwargs = {}
-        
+
         # Apply beam_size from env or config
         env_beam = os.getenv("WHISPER_BEAM_SIZE")
         beam_size = None
@@ -271,23 +307,31 @@ class WhisperBackend(ASRBackend):
             beam_size = getattr(cfg.settings, "whisper_beam_size", None)
         if beam_size is not None:
             transcribe_kwargs["beam_size"] = beam_size
-        
+
         # Apply condition_on_previous_text from env or config
         env_condition = os.getenv("WHISPER_CONDITION_ON_PREVIOUS_TEXT")
         if env_condition is not None:
-            condition_on_previous = str(env_condition).strip().lower() in {"1", "true", "yes", "y", "on"}
+            condition_on_previous = str(env_condition).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            }
         else:
-            condition_on_previous = getattr(cfg.settings, "whisper_condition_on_previous_text", None)
+            condition_on_previous = getattr(
+                cfg.settings, "whisper_condition_on_previous_text", None
+            )
         if condition_on_previous is not None:
             transcribe_kwargs["condition_on_previous_text"] = condition_on_previous
-        
+
         # Apply language from env or config (None = auto-detect)
         language = os.getenv("WHISPER_LANGUAGE")
         if language is None:
             language = getattr(cfg.settings, "whisper_language", None)
         if language is not None:
             transcribe_kwargs["language"] = language
-        
+
         # Apply VAD filter settings (env overrides config)
         env_vad = os.getenv("WHISPER_VAD_FILTER")
         if env_vad is not None:
@@ -296,7 +340,7 @@ class WhisperBackend(ASRBackend):
             vad_filter = getattr(cfg.settings, "whisper_vad_filter", False)
         if vad_filter:
             transcribe_kwargs["vad_filter"] = True
-            
+
             # Build VAD parameters from config
             vad_params = {}
             env_min_silence = os.getenv("WHISPER_VAD_MIN_SILENCE_MS")
@@ -307,10 +351,12 @@ class WhisperBackend(ASRBackend):
                 except ValueError:
                     vad_min_silence = None
             if vad_min_silence is None:
-                vad_min_silence = getattr(cfg.settings, "whisper_vad_min_silence_ms", None)
+                vad_min_silence = getattr(
+                    cfg.settings, "whisper_vad_min_silence_ms", None
+                )
             if vad_min_silence is not None:
                 vad_params["min_silence_duration_ms"] = vad_min_silence
-            
+
             env_speech_pad = os.getenv("WHISPER_VAD_SPEECH_PAD_MS")
             vad_speech_pad = None
             if env_speech_pad is not None:
@@ -319,17 +365,19 @@ class WhisperBackend(ASRBackend):
                 except ValueError:
                     vad_speech_pad = None
             if vad_speech_pad is None:
-                vad_speech_pad = getattr(cfg.settings, "whisper_vad_speech_pad_ms", None)
+                vad_speech_pad = getattr(
+                    cfg.settings, "whisper_vad_speech_pad_ms", None
+                )
             if vad_speech_pad is not None:
                 vad_params["speech_pad_ms"] = vad_speech_pad
-            
+
             if vad_params:
                 transcribe_kwargs["vad_parameters"] = vad_params
                 LOGGER.debug("Applying VAD filter with parameters: %s", vad_params)
-        
+
         # User kwargs override config defaults
         transcribe_kwargs.update(user_kwargs)
-        
+
         return transcribe_kwargs
 
     def execute(self, audio_data: bytes, **kwargs) -> ASRResult:
@@ -356,68 +404,76 @@ class WhisperBackend(ASRBackend):
         import tempfile
         import os
         from pathlib import Path
-        
+
         # Convert audio_data to file path if needed
         audio_path = audio_data
         tmp_file_path = None
         cleanup_needed = False
-        
+
         try:
             # If audio_data is bytes, write to temp file
             if isinstance(audio_data, bytes):
-                with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as tmp_file:
+                with tempfile.NamedTemporaryFile(
+                    suffix=".wav", delete=False
+                ) as tmp_file:
                     tmp_file.write(audio_data)
                     tmp_file_path = tmp_file.name
                 audio_path = tmp_file_path
                 cleanup_needed = True
-            
-            LOGGER.debug("Transcribing audio file: %s with kwargs: %s", audio_path, transcribe_kwargs)
-            
+
+            LOGGER.debug(
+                "Transcribing audio file: %s with kwargs: %s",
+                audio_path,
+                transcribe_kwargs,
+            )
+
             # faster_whisper returns (segments_generator, info)
             # segments is a generator, not a list
-            segments_generator, info = self.model.transcribe(audio_path, **transcribe_kwargs)
-            
+            segments_generator, info = self.model.transcribe(
+                audio_path, **transcribe_kwargs
+            )
+
             # Convert segments generator to list of dicts
             segments_dict = []
             text_parts = []
-            
+
             for segment in segments_generator:
                 segment_dict = {
                     "start": segment.start,
                     "end": segment.end,
-                    "text": segment.text
+                    "text": segment.text,
                 }
                 segments_dict.append(segment_dict)
                 text_parts.append(segment.text)
-            
+
             # Combine all segment texts
             text = " ".join(text_parts).strip()
-            
+
             # Extract language and duration from TranscriptionInfo
-            language = info.language if hasattr(info, 'language') else None
-            duration = info.duration if hasattr(info, 'duration') else None
-            
+            language = info.language if hasattr(info, "language") else None
+            duration = info.duration if hasattr(info, "duration") else None
+
             # Note: faster-whisper doesn't provide a single confidence score
             # Individual segments may have their own scores
             return ASRResult(
-                text=text, 
-                segments=segments_dict, 
-                language=language, 
+                text=text,
+                segments=segments_dict,
+                language=language,
                 confidence=None,
-                duration=duration
+                duration=duration,
             )
-                    
+
         except Exception as exc:
             LOGGER.exception("Model transcription failed")
             return ASRResult(
-                text="", 
-                segments=[], 
-                language=None, 
+                text="",
+                segments=[],
+                language=None,
                 confidence=None,
-                duration=None, 
-                error={"type": type(exc).__name__, "message": str(exc)}
+                duration=None,
+                error={"type": type(exc).__name__, "message": str(exc)},
             )
-                    
+
         finally:
             # Clean up temp file if we created one
             if cleanup_needed and tmp_file_path and os.path.exists(tmp_file_path):
@@ -425,7 +481,9 @@ class WhisperBackend(ASRBackend):
                     os.unlink(tmp_file_path)
                     LOGGER.debug("Cleaned up temp file: %s", tmp_file_path)
                 except Exception as cleanup_exc:
-                    LOGGER.warning("Failed to cleanup temp file %s: %s", tmp_file_path, cleanup_exc)
+                    LOGGER.warning(
+                        "Failed to cleanup temp file %s: %s", tmp_file_path, cleanup_exc
+                    )
 
     def unload(self) -> None:
         """
@@ -469,26 +527,26 @@ class WhisperBackend(ASRBackend):
     def get_version_info(self) -> VersionInfo:
         """
         Return standardized version metadata with actual configuration values.
-        
+
         Provides complete model metadata for reproducibility (NFR-1).
         """
         import hashlib
         from pathlib import Path
-        
+
         # Calculate checkpoint hash for reproducibility (NFR-1)
         checkpoint_hash = "unknown"
         if self.model_path and os.path.exists(str(self.model_path)):
             model_dir = Path(self.model_path)
-            
+
             # Try to hash key model files for CT2 models
             for filename in ["model.bin", "config.json", "vocabulary.json"]:
                 model_file = model_dir / filename
                 if model_file.exists():
-                    with open(model_file, 'rb') as f:
+                    with open(model_file, "rb") as f:
                         file_hash = hashlib.sha256(f.read()).hexdigest()
                         checkpoint_hash = f"{filename}:{file_hash[:16]}"
                     break
-        
+
         return {
             "backend": "whisper",
             "model_variant": getattr(cfg.settings, "whisper_model_variant", "unknown"),
@@ -499,7 +557,9 @@ class WhisperBackend(ASRBackend):
             "cpu_threads": getattr(cfg.settings, "whisper_cpu_threads", None),
             "beam_size": getattr(cfg.settings, "whisper_beam_size", None),
             "vad_filter": getattr(cfg.settings, "whisper_vad_filter", False),
-            "condition_on_previous_text": getattr(cfg.settings, "whisper_condition_on_previous_text", True),
+            "condition_on_previous_text": getattr(
+                cfg.settings, "whisper_condition_on_previous_text", True
+            ),
             "language": getattr(cfg.settings, "whisper_language", None),
             "version": "1.0.0",
             "library": "faster-whisper",

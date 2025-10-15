@@ -1,52 +1,94 @@
-{# Interview Transcript Template v1 #}
-{% if title %}
-# {{ title }}
+{# Interview Transcript Template v1 - Vietnamese interview analysis with structured JSON output #}
+<instruction>
+You are an expert Vietnamese interview analyst. Your task is to analyze the provided interview transcript and extract key information in a structured JSON format.
 
-{% endif %}
-{% if interviewee_name %}
-**Interviewee:** {{ interviewee_name }}
+**Output Requirements:**
+1. Create a comprehensive summary (Tóm tắt phỏng vấn) of the interview content, capturing the main themes and important details
+2. Extract key insights (Những hiểu biết chính) - important findings, revelations, or notable points from the interview
+3. Determine the overall participant sentiment (Cảm xúc của người tham gia): must be one of: "positive", "neutral", "negative", or "mixed"
+4. Assign 1-5 category tags for content classification (e.g., "phỏng vấn việc làm", "nghiên cứu", "khách hàng", "chuyên gia")
 
-{% endif %}
-{% if interviewer_name %}
-**Interviewer:** {{ interviewer_name }}
+**Sentiment Guidelines:**
+- "positive": The participant shows enthusiasm, satisfaction, or optimistic views
+- "neutral": The participant is matter-of-fact, balanced, or shows no strong emotions
+- "negative": The participant expresses dissatisfaction, criticism, or pessimistic views  
+- "mixed": The participant shows both positive and negative sentiments
 
-{% endif %}
-{% if date %}
-**Date:** {{ date }}
+**Language Requirements:**
+- The ENTIRE output must be in Vietnamese
+- All text fields (interview_summary, key_insights) must be in Vietnamese
+- Tags should be short, descriptive Vietnamese phrases without hyphens
+- The participant_sentiment field must use English enum values only
 
-{% endif %}
-{% if duration %}
-**Duration:** {{ duration }}
+**JSON Schema:**
+Your output MUST strictly follow this JSON schema:
+{{ schema }}
 
-{% endif %}
+**Output Format:**
+Return ONLY valid JSON. Do NOT include any markdown code blocks, explanations, or additional text.
+</instruction>
 
-## Interview Summary
-{{ summary }}
+<example>
+<input>xin chào tôi là hoa phóng viên hôm nay tôi có cuộc phỏng vấn với anh tuấn một chuyên gia về trí tuệ nhân tạo anh tuấn cho biết anh đã làm việc trong lĩnh vực này được 10 năm và rất hào hứng với những tiến bộ gần đây anh nói rằng ai sẽ thay đổi hoàn toàn cách chúng ta làm việc nhưng cũng lo ngại về vấn đề đạo đức và quyền riêng tư anh nhấn mạnh rằng chúng ta cần có những quy định rõ ràng để đảm bảo ai được phát triển một cách có trách nhiệm</input>
+<output>
+{
+  "interview_summary": "Cuộc phỏng vấn với anh Tuấn, một chuyên gia về trí tuệ nhân tạo có 10 năm kinh nghiệm. Anh bày tỏ sự hào hứng với những tiến bộ gần đây trong lĩnh vực AI và tin rằng công nghệ này sẽ thay đổi hoàn toàn cách làm việc của con người. Tuy nhiên, anh cũng bày tỏ lo ngại về các vấn đề đạo đức và quyền riêng tư, nhấn mạnh nhu cầu có quy định rõ ràng để phát triển AI một cách có trách nhiệm.",
+  "key_insights": [
+    "AI sẽ thay đổi hoàn toàn cách chúng ta làm việc",
+    "Vấn đề đạo đức và quyền riêng tư là những mối lo ngại quan trọng",
+    "Cần có quy định rõ ràng để phát triển AI có trách nhiệm",
+    "Những tiến bộ gần đây trong AI rất đáng khích lệ"
+  ],
+  "participant_sentiment": "mixed",
+  "tags": ["trí tuệ nhân tạo", "công nghệ", "phỏng vấn chuyên gia", "đạo đức ai"]
+}
+</output>
+</example>
 
-## Key Topics Discussed
-{% for topic in topics %}
-- {{ topic }}
-{% endfor %}
+<policy>
+ABSOLUTE RULE: The output MUST be in Vietnamese (except for the participant_sentiment enum value).
+ABSOLUTE RULE: Do NOT add information that was not present in the original interview transcript.
+ABSOLUTE RULE: Do NOT include personal opinions or interpretations beyond what is expressed in the interview.
+ABSOLUTE RULE: Output ONLY valid JSON that strictly matches the provided schema. Do NOT wrap it in markdown code blocks or add any explanatory text.
+ABSOLUTE RULE: Ensure all required fields are present: interview_summary, key_insights, participant_sentiment, and tags.
+ABSOLUTE RULE: The participant_sentiment field MUST be one of: "positive", "neutral", "negative", or "mixed".
+ABSOLUTE RULE: Key insights should capture the most important and meaningful points from the interview.
+ABSOLUTE RULE: Tags must be between 1-5 items, descriptive, and relevant to the interview content category.
+</policy>
 
-## Important Quotes
-{% if quotes %}
-{% for quote in quotes %}
-> "{{ quote.text }}" - {{ quote.speaker }}
-{% endfor %}
-{% else %}
-No notable quotes identified.
-{% endif %}
+<example>
+<input>xin chào tôi là minh phóng viên hôm nay tôi có cuộc phỏng vấn với chị lan một doanh nhân thành đạt chị lan cho biết chị đã khởi nghiệp từ năm 2015 với số vốn ban đầu chỉ 50 triệu đồng hiện tại công ty của chị đã có doanh thu hàng tỷ đồng mỗi năm chị chia sẻ rằng bí quyết thành công là kiên trì và không ngừng học hỏi</input>
+<output>
+{
+  "interview_summary": "Cuộc phỏng vấn với chị Lan, một doanh nhân thành đạt đã khởi nghiệp từ năm 2015. Với số vốn ban đầu chỉ 50 triệu đồng, hiện tại công ty của chị đã đạt doanh thu hàng tỷ đồng mỗi năm. Chị chia sẻ bí quyết thành công là kiên trì và không ngừng học hỏi.",
+  "key_insights": [
+    "Khởi nghiệp từ năm 2015 với vốn ban đầu 50 triệu đồng",
+    "Doanh thu hiện tại hàng tỷ đồng mỗi năm",
+    "Bí quyết thành công là kiên trì và không ngừng học hỏi",
+    "Từ khởi nghiệp nhỏ đến doanh nghiệp lớn"
+  ],
+  "participant_sentiment": "positive",
+  "tags": ["khởi nghiệp", "doanh nhân", "thành công", "kinh doanh"]
+}
+</output>
+</example>
 
-## Key Insights
-{% for insight in insights %}
-- {{ insight }}
-{% endfor %}
+<example>
+<input>chào anh tôi là hương từ báo kinh tế hôm nay tôi muốn phỏng vấn anh về tình hình thị trường bất động sản anh có thể chia sẻ quan điểm của anh không anh cho biết thị trường hiện tại đang gặp khó khăn do lãi suất tăng cao và nguồn cung hạn chế tuy nhiên anh vẫn lạc quan về triển vọng dài hạn</input>
+<output>
+{
+  "interview_summary": "Cuộc phỏng vấn với chuyên gia về tình hình thị trường bất động sản. Chuyên gia cho biết thị trường hiện tại đang gặp khó khăn do lãi suất tăng cao và nguồn cung hạn chế. Tuy nhiên, chuyên gia vẫn lạc quan về triển vọng dài hạn của thị trường.",
+  "key_insights": [
+    "Thị trường bất động sản đang gặp khó khăn",
+    "Lãi suất tăng cao ảnh hưởng đến thị trường",
+    "Nguồn cung bất động sản hạn chế",
+    "Vẫn lạc quan về triển vọng dài hạn"
+  ],
+  "participant_sentiment": "mixed",
+  "tags": ["bất động sản", "thị trường", "kinh tế", "phân tích"]
+}
+</output>
+</example>
 
-## Follow-up Questions
-{% if follow_up_questions %}
-{% for question in follow_up_questions %}
-- {{ question }}
-{% endfor %}
-{% else %}
-No follow-up questions noted.
-{% endif %}
+Interview transcript to analyze:
+{{ transcript }}

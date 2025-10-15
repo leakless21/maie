@@ -13,18 +13,17 @@ from .pipeline import (
     process_audio_task,
     TaskStatus,
     ProcessingResult,
-    handle_processing_error
+    handle_processing_error,
 )
 
 __all__ = [
     # Main worker functions
-    'start_worker',
-    'setup_redis_connection',
-    'verify_models',
-    
+    "start_worker",
+    "setup_redis_connection",
+    "verify_models",
     # Pipeline processing functions
-    'process_audio_task',
-    'TaskStatus',
-    'ProcessingResult',
-    'handle_processing_error'
+    "process_audio_task",
+    "TaskStatus",
+    "ProcessingResult",
+    "handle_processing_error",
 ]
