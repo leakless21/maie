@@ -2,10 +2,13 @@
 ASR Factory module implementing the Factory Pattern for ASR backends with integrated audio processing.
 """
 
-from typing import Dict, Type, Any
-from src.processors.base import ASRBackend
-from src.processors.audio.preprocessor import AudioPreprocessor
+from typing import Any, Dict, Type
+
+from src.processors.asr.chunkformer import ChunkFormerBackend
+from src.processors.asr.whisper import WhisperBackend
 from src.processors.audio.metrics import AudioMetricsCollector
+from src.processors.audio.preprocessor import AudioPreprocessor
+from src.processors.base import ASRBackend
 
 
 class ASRFactory:
@@ -76,8 +79,5 @@ class ASRFactory:
 
 
 # Register the supported backends
-from src.processors.asr.whisper import WhisperBackend
-from src.processors.asr.chunkformer import ChunkFormerBackend
-
 ASRFactory.register_backend("whisper", WhisperBackend)
 ASRFactory.register_backend("chunkformer", ChunkFormerBackend)

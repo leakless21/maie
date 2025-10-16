@@ -25,6 +25,47 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, description="Enable debug logging")
 
     # ============================================================
+    # Logging Settings
+    # ============================================================
+    # Environment-driven logging configuration centralization
+    log_level: str = Field(
+        default="DEBUG",
+        description="Logging level (e.g., DEBUG, INFO, WARNING)",
+    )
+    log_dir: Path = Field(default=Path("logs"), description="Directory for log files")
+    log_rotation: str = Field(
+        default="500 MB",
+        description="Rotation policy (e.g., '500 MB', '00:00' for daily)",
+    )
+    log_retention: str = Field(
+        default="30 days", description="Retention policy for rotated logs"
+    )
+    log_compression: str = Field(
+        default="zip", description="Compression for rotated logs (zip, gz, etc.)"
+    )
+    log_console_serialize: bool = Field(
+        default=False,
+        description="Serialize console logs as JSON (recommended true in containers)",
+    )
+    log_file_serialize: bool = Field(
+        default=False, description="Serialize file logs as JSON"
+    )
+    loguru_diagnose: bool = Field(
+        default=False, description="Enable diagnose traces (disable in production)"
+    )
+    loguru_backtrace: bool = Field(
+        default=True, description="Enable backtrace on exceptions"
+    )
+    loguru_format: str | None = Field(
+        default=None,
+        description="Optional Loguru format string for development console",
+    )
+    enable_loguru: bool = Field(
+        default=True,
+        description="Global kill switch to enable/disable Loguru configuration",
+    )
+
+    # ============================================================
     # API Server Settings
     # ============================================================
     api_host: str = Field(default="0.0.0.0", description="API server host")
@@ -161,11 +202,15 @@ class Settings(BaseSettings):
     llm_enhance_max_tokens: int | None = Field(
         default=None, description="Maximum tokens to generate"
     )
+    llm_enhance_use_beam_search: bool = Field(
+        default=False, description="Use beam search decoding strategy"
+    )
     llm_enhance_quantization: str | None = Field(
         default=None, description="Quantization method (awq, compressed-tensors, etc.)"
     )
+
     # ============================================================
-    # LLM Settings
+    # LLM Settings - Summarization Task
     # ============================================================
     llm_sum_model: str = Field(
         default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit",
@@ -203,6 +248,9 @@ class Settings(BaseSettings):
     templates_dir: Path = Field(
         default=Path("templates"), description="JSON schema templates"
     )
+    chat_templates_dir: Path = Field(
+        default=Path("assets/chat-templates"), description="Jinja chat templates"
+    )
 
     # ============================================================
     # Worker Settings
@@ -212,58 +260,111 @@ class Settings(BaseSettings):
     result_ttl: int = Field(
         default=86400, description="Result retention in seconds (24h)"
     )
+    worker_concurrency: int = Field(default=2, description="Worker concurrency level")
+    worker_prefetch_multiplier: int = Field(
+        default=4, description="Prefetch multiplier for worker queue"
+    )
+    worker_prefetch_timeout: int = Field(
+        default=30, description="Timeout for worker fetch operations (seconds)"
+    )
 
     # ============================================================
-    # Pydantic Settings Config
+    # Feature Flags
+    # ============================================================
+    enable_enhancement: bool = Field(
+        default=True, description="Enable LLM-based enhancement post-processing"
+    )
+
+    # ============================================================
+    # Validation
     # ============================================================
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
+        env_nested_delimiter="__",
         case_sensitive=False,
-        extra="ignore",  # Ignore unknown env vars
-        validate_default=True,  # Validate default values on instantiation
-        env_nested_delimiter="__",  # Support nested config like REDIS__POOL__SIZE
+        extra="ignore",
+        validate_default=True,
     )
 
-    @field_validator("audio_dir", "models_dir", "templates_dir")
+    @field_validator("log_level")
+    @classmethod
+    def validate_log_level(cls, value: str) -> str:
+        allowed_levels = {
+            "TRACE",
+            "DEBUG",
+            "INFO",
+            "SUCCESS",
+            "WARNING",
+            "ERROR",
+            "CRITICAL",
+        }
+        upper_value = value.upper()
+        if upper_value not in allowed_levels:
+            raise ValueError(
+                f"Invalid log level: {value}. Must be one of {allowed_levels}."
+            )
+        return upper_value
+
+    @field_validator("log_retention")
+    @classmethod
+    def validate_log_retention(cls, value: str) -> str:
+        """
+        Validate retention format to avoid silent mistakes like non-parsable values.
+        Accept simple strings like '30 days' or '1 week'. The actual parsing is delegated to Loguru.
+        """
+        if not value or not value.strip():
+            raise ValueError("log_retention cannot be empty.")
+        return value
+
+    @field_validator("log_dir")
+    @classmethod
+    def validate_log_dir(cls, value: Path) -> Path:
+        if value.is_file():
+            raise ValueError("log_dir must be a directory path.")
+        return value
+
+    @field_validator("audio_dir", "models_dir", "templates_dir", "chat_templates_dir")
     @classmethod
     def create_directories(cls, path: Path) -> Path:
-        """Ensure directories exist on initialization when safe to create.
-
-        Creation rules:
-        - If the path already exists, do nothing.
-        - If any ancestor directory (excluding the filesystem root "/") exists,
-          create the missing parents (safe case, e.g. inside a tempdir).
-        - Otherwise, avoid creating top-level paths (like /test) to prevent
-          permission errors during test runs.
-        """
+        """Ensure directories exist on initialization when safe to create."""
         try:
             if path.exists():
                 return path
 
-            # Find any existing ancestor that is not the filesystem root.
             for ancestor in path.parents:
                 if ancestor == Path("/"):
-                    # Stop at root — do not treat root as a safe existing ancestor.
                     break
                 if ancestor.exists():
-                    # Safe to create the full directory tree under this ancestor.
                     path.mkdir(parents=True, exist_ok=True)
                     return path
-
-            # No safe ancestor found (e.g., /test or other top-level absolute paths).
-            # Do not attempt to create directories in that case; just return the path.
             return path
         except PermissionError:
-            # Propagate permission errors for callers/tests that expect them
             raise
 
     @field_validator("api_port")
     @classmethod
     def validate_api_port(cls, value: int) -> int:
-        """Validate api_port is in the valid TCP port range."""
         if not (1 <= value <= 65535):
             raise ValueError("api_port must be between 1 and 65535")
+        return value
+
+    @field_validator(
+        "whisper_cpu_threads",
+        "chunkformer_batch_size",
+        "llm_enhance_top_k",
+        "llm_enhance_max_tokens",
+        "llm_sum_top_k",
+        "llm_sum_max_tokens",
+        mode="before",
+    )
+    @classmethod
+    def coerce_optional_ints(cls, value):
+        """Parse optional integer fields, converting empty strings to None."""
+        if value == "" or value is None:
+            return None
+        if isinstance(value, str):
+            return int(value)
         return value
 
     def get_model_path(self, model_type: str) -> Path:
@@ -275,5 +376,7 @@ class Settings(BaseSettings):
         return self.templates_dir / f"{template_id}.json"
 
 
-# Global settings instance
 settings = Settings()
+
+
+__all__ = ["Settings", "settings"]

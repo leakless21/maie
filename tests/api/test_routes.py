@@ -4,7 +4,7 @@ import json
 import uuid
 from io import BytesIO
 from pathlib import Path
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import patch
 
 import pytest
 from litestar import Litestar
@@ -25,7 +25,7 @@ from src.api.routes import (
     StatusController,
     TemplatesController,
 )
-from src.api.schemas import Feature, TaskStatus
+from src.api.schemas import TaskStatus
 
 
 class TestProcessController:
@@ -109,7 +109,7 @@ class TestProcessController:
     def test_process_audio_file_too_large(self, app, valid_audio_file):
         """Test request with file exceeding size limit."""
         with TestClient(app=app) as client:
-            with patch("src.config.settings.max_file_size_mb", 0.0001):  # Tiny limit
+            with patch("src.config.settings.settings.max_file_size_mb", 0.0001):  # Tiny limit
                 response = client.post(
                     "/v1/process",
                     files={"file": ("test.wav", valid_audio_file, "audio/wav")},
@@ -251,7 +251,7 @@ class TestFileUploadSecurity:
             ]
 
             for filename in malicious_filenames:
-                with patch("src.api.routes.save_audio_file") as mock_save:
+                with patch("src.api.routes.save_audio_file_streaming") as mock_save:
                     # Mock save to check what path is actually used
                     mock_save.return_value = Path(f"/data/audio/{uuid.uuid4()}.wav")
 
@@ -322,7 +322,7 @@ class TestFileUploadSecurity:
     def test_uses_uuid_for_storage_not_user_filename(self, app, valid_audio_file):
         """Stored filenames must use UUID, not user-provided names."""
         with TestClient(app=app) as client:
-            with patch("src.api.routes.save_audio_file") as mock_save:
+            with patch("src.api.routes.save_audio_file_streaming") as mock_save:
                 task_id = uuid.uuid4()
                 expected_path = Path(f"/data/audio/{task_id}.wav")
                 mock_save.return_value = expected_path
@@ -350,44 +350,41 @@ class TestFileUploadSecurity:
                             # task_id should be in arguments
                             assert (
                                 len(call_args[0]) >= 2
-                            ), "save_audio_file should receive task_id"
+                            ), "save_audio_file_streaming should receive task_id"
 
-    @pytest.mark.skip(
-        reason="Future enhancement: Streaming implementation with aiofiles not yet implemented"
-    )
     def test_file_streaming_with_aiofiles(self, app):
         """Files should be streamed to disk using aiofiles, not loaded entirely in memory."""
-        from src.api.routes import save_audio_file
+        from src.api.routes import save_audio_file_streaming
         import inspect
 
-        source = inspect.getsource(save_audio_file)
+        source = inspect.getsource(save_audio_file_streaming)
 
         # Should use aiofiles for streaming
         assert (
             "aiofiles" in source or "async with" in source
-        ), "save_audio_file should use aiofiles for streaming to prevent memory exhaustion"
+        ), "save_audio_file_streaming should use aiofiles for streaming to prevent memory exhaustion"
 
         # Should NOT load entire file in memory
         assert (
             "file_content" not in source or "chunks" in source or "read(" in source
         ), "Should stream in chunks, not load entire file"
 
-    @pytest.mark.skip(
-        reason="Future enhancement: Chunk-based streaming not yet implemented"
-    )
     def test_file_streaming_uses_chunks(self, app):
-        """File streaming should read in small chunks (e.g., 8KB) not entire file."""
-        from src.api.routes import save_audio_file
+        """File streaming should read in small chunks (e.g., 64KB) not entire file."""
+        from src.api.routes import save_audio_file_streaming
         import inspect
 
-        source = inspect.getsource(save_audio_file)
+        source = inspect.getsource(save_audio_file_streaming)
 
-        # Look for chunk size configuration
-        # Common patterns: .read(8192), .read(8*1024), CHUNK_SIZE
-        chunk_patterns = ["8192", "8*1024", "8 * 1024", "CHUNK_SIZE", "chunk_size"]
+        # Should have chunk size defined
+        assert (
+            "chunk_size" in source.lower() or "64" in source or "8192" in source
+        ), "Should define chunk size for streaming"
 
-        has_chunking = any(pattern in source for pattern in chunk_patterns)
-        assert has_chunking, "File streaming should use explicit chunk size (e.g., 8KB)"
+        # Should use while loop or iteration for chunk reading
+        assert (
+            "while" in source or "for chunk" in source
+        ), "Should iterate over chunks"
 
 
 class TestStatusController:

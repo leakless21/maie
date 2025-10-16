@@ -1,10 +1,11 @@
 """Pydantic request/response models for the MAIE API."""
 
 from datetime import datetime
-from typing import List, Optional, Literal, Dict, Any
-from uuid import UUID
 from enum import Enum
-from pydantic import BaseModel, Field, model_validator, ConfigDict
+from typing import Any, Dict, List, Literal, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 # =============================================================================
 # Enums

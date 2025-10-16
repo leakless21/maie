@@ -10,12 +10,11 @@ integration helper that calls the ASR factory.
 from __future__ import annotations
 
 import json
-import logging
 import subprocess
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
-logger = logging.getLogger(__name__)
+from loguru import logger
 
 # Public constants aligned with docs
 TARGET_SAMPLE_RATE = 16000
@@ -51,11 +50,11 @@ class AudioPreprocessor:
             "json",
             str(path),
         ]
-        logger.debug("ffprobe cmd: %s", cmd)
+        logger.debug("ffprobe cmd: {}", cmd)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if getattr(result, "returncode", 0) != 0:
             stderr = getattr(result, "stderr", "")
-            logger.error("ffprobe failed: %s", stderr)
+            logger.error("ffprobe failed: {}", stderr)
             raise ValueError(f"FFprobe failed to get audio info: {stderr}")
 
         data = json.loads(getattr(result, "stdout", "{}"))
@@ -101,11 +100,11 @@ class AudioPreprocessor:
             "s16",
             str(output_path),
         ]
-        logger.debug("ffmpeg normalize cmd: %s", cmd)
+        logger.debug("ffmpeg normalize cmd: {}", cmd)
         result = subprocess.run(cmd, capture_output=True, text=True)
         if getattr(result, "returncode", 0) != 0:
             stderr = getattr(result, "stderr", "")
-            logger.error("ffmpeg normalization failed: %s", stderr)
+            logger.error("ffmpeg normalization failed: {}", stderr)
             raise ValueError(f"FFmpeg failed to normalize audio: {stderr}")
         return output_path
 

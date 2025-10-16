@@ -8,13 +8,10 @@ Tests cover:
 """
 
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, patch
-from jinja2 import TemplateNotFound, TemplateSyntaxError, Environment
+from jinja2 import Environment, TemplateNotFound
 
-from src.processors.prompt.template_loader import TemplateLoader
 from src.processors.prompt.renderer import PromptRenderer
-
+from src.processors.prompt.template_loader import TemplateLoader
 
 # ============================================================================
 # TEMPLATE LOADER TESTS

@@ -20,12 +20,9 @@ API Notes:
 - Check backend.model is None to verify unloaded state
 """
 
-import os
 import pytest
-from unittest import mock
 
-from src.processors.base import ASRResult, ASRBackend
-
+from src.processors.base import ASRBackend, ASRResult
 
 # ============================================================================
 # Test Section 1: Interface Compliance & Basic Functionality

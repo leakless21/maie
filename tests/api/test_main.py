@@ -1,4 +1,3 @@
-import pytest
 from litestar import Litestar
 
 from src.api import main as api_main

@@ -5,7 +5,6 @@ Tests cover sampling parameter management, override handling, and model versioni
 """
 
 import json
-import tempfile
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -13,9 +12,9 @@ import pytest
 
 from src.tooling.vllm_utils import (
     apply_overrides_to_sampling,
-    normalize_overrides,
     calculate_checkpoint_hash,
     get_model_info,
+    normalize_overrides,
 )
 
 

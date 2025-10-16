@@ -76,18 +76,22 @@ def check_queue_depth() -> bool:
     return True
 
 
-async def save_audio_file(file: UploadFile, task_id: uuid.UUID, content: bytes) -> Path:
+async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Path:
     """
-    Save uploaded audio file to disk with security controls.
+    Save uploaded audio file to disk using streaming to avoid loading entire file into memory.
 
     Args:
         file: Uploaded audio file
         task_id: Task identifier for naming (UUID for security)
-        content: File content bytes
 
     Returns:
         Path to saved file
+
+    Raises:
+        HTTPException: If file size exceeds limit during streaming
     """
+    import aiofiles
+
     # SECURITY: Use UUID for filename, not user input (prevents path traversal)
     # Extract extension from user filename for convenience
     if file.filename:
@@ -107,9 +111,34 @@ async def save_audio_file(file: UploadFile, task_id: uuid.UUID, content: bytes) 
     # Ensure directory exists
     settings.audio_dir.mkdir(parents=True, exist_ok=True)
 
-    # Save file (synchronous write - will be optimized with aiofiles later)
-    with open(file_path, "wb") as f:
-        f.write(content)
+    # Stream file content to disk using aiofiles with size validation
+    total_size = 0
+    max_size_bytes = settings.max_file_size_mb * 1024 * 1024
+    chunk_size = 64 * 1024  # 64KB chunks
+
+    async with aiofiles.open(file_path, "wb") as f:
+        while True:
+            chunk = await file.read(chunk_size)
+            if not chunk:
+                break
+
+            # Validate size during streaming
+            total_size += len(chunk)
+            if total_size > max_size_bytes:
+                # Clean up partial file
+                await f.close()
+                try:
+                    file_path.unlink()
+                except OSError:
+                    pass  # Ignore cleanup errors
+
+                file_size_mb = total_size / (1024 * 1024)
+                raise HTTPException(
+                    status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)",
+                )
+
+            await f.write(chunk)
 
     return file_path
 
@@ -219,19 +248,7 @@ class ProcessController(Controller):
                 detail=f"File MIME type must be audio/*, got: {content_type}",
             )
 
-        # Read file content (synchronous - will be optimized with streaming later)
-        file_content = await file.read()
-
-        # SECURITY: Validate file size (prevents DoS memory exhaustion)
-        file_size_mb = len(file_content) / (1024 * 1024)
-
-        if file_size_mb > settings.max_file_size_mb:
-            raise HTTPException(
-                status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                detail=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)",
-            )
-
-        # Parse other form fields
+        # Parse other form fields FIRST (before streaming file)
         features_raw = form_data.get("features", '["clean_transcript", "summary"]')
         if isinstance(features_raw, str):
             features = json.loads(features_raw)
@@ -258,8 +275,8 @@ class ProcessController(Controller):
         # Generate task ID
         task_id = uuid.uuid4()
 
-        # Save audio file
-        file_path = await save_audio_file(file, task_id, file_content)
+        # Save audio file using streaming (validates size during streaming)
+        file_path = await save_audio_file_streaming(file, task_id)
 
         # Create task record in Redis
         request_params = {

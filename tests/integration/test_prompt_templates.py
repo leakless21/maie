@@ -9,12 +9,12 @@ Tests cover:
 - Template validation and output format
 """
 
-import pytest
 from pathlib import Path
-import json
 
-from src.processors.prompt.template_loader import TemplateLoader
+import pytest
+
 from src.processors.prompt.renderer import PromptRenderer
+from src.processors.prompt.template_loader import TemplateLoader
 
 
 class TestTextEnhancementTemplate:

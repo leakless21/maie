@@ -10,18 +10,18 @@ Run with: pytest tests/integration/test_whisper_real.py -v
 Skip integration tests: pytest -m "not integration"
 """
 
-import pytest
-import sys
 from pathlib import Path
 
+import pytest
+
 from src.processors.asr.whisper import WhisperBackend
-from src.config import settings
 
 
 @pytest.fixture(scope="module")
 def shared_whisper_backend():
     """Shared WhisperBackend instance for all tests in this module."""
     import os
+
     from tests.conftest import has_faster_whisper
 
     # Check if faster-whisper is available
@@ -158,7 +158,6 @@ def test_real_vad_filtering(shared_whisper_backend, temp_audio_file):
 def test_real_condition_on_previous_text(shared_whisper_backend, temp_audio_file):
     """Test that condition_on_previous_text parameter is passed correctly."""
     import os
-    from unittest.mock import patch
 
     original_condition = os.environ.get("WHISPER_CONDITION_ON_PREVIOUS_TEXT")
 

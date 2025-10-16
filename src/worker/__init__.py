@@ -6,14 +6,14 @@ for easy import and use throughout the application.
 """
 
 # Export main worker functions
-from .main import start_worker, setup_redis_connection, verify_models
+from .main import setup_redis_connection, start_worker, verify_models
 
 # Export pipeline processing functions
 from .pipeline import (
-    process_audio_task,
-    TaskStatus,
     ProcessingResult,
+    TaskStatus,
     handle_processing_error,
+    process_audio_task,
 )
 
 __all__ = [

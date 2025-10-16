@@ -97,10 +97,10 @@ curl -v -F "file=@tests/assets/audio/sample.wav" \
 
 - `scripts/dev.sh` — development script that invokes `pixi` and starts API and worker processes
 - `src/api/routes.py` — API controllers and route handlers. Notable functions:
-  - `ProcessController.process_audio` — accepts multipart uploads and saves audio
-  - `save_audio_file` — helper that writes uploaded bytes to `data/audio/`
+  - `ProcessController.process_audio` — accepts multipart uploads and saves audio using streaming
+  - `save_audio_file_streaming` — helper that streams uploaded files to `data/audio/` (memory-efficient, prevents DoS)
   - `create_task_in_redis`, `enqueue_job`, `get_task_from_redis` — Redis/RQ integration for task management
-- `src/config.py` — application settings and defaults (e.g., `max_file_size_mb`, `templates_dir`, `audio_dir`)
+- `src/config/settings.py` — application settings and defaults (e.g., `max_file_size_mb`, `templates_dir`, `audio_dir`)
 - `templates/` — sample JSON templates used by summarization features
 
 ## Project Status

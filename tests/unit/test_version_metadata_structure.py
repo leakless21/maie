@@ -9,7 +9,6 @@ Verifies per TDD NFR-1:
 4. All config parameters used in processing
 """
 import pytest
-from typing import Dict, Any
 
 from src.worker.pipeline import get_version_metadata
 

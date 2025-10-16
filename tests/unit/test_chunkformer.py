@@ -1,9 +1,10 @@
-import pytest
 from types import SimpleNamespace
 
-from src.processors.base import ASRResult, ASRBackend
-from src.processors.asr.chunkformer import ChunkFormerBackend
+import pytest
+
 from src import config as cfg
+from src.processors.asr.chunkformer import ChunkFormerBackend
+from src.processors.base import ASRBackend, ASRResult
 
 
 # -------------------------

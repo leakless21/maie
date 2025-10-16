@@ -3,10 +3,10 @@ ChunkFormer ASR backend implementation for MAIE.
 Supports chunkformer-large-vie model.
 """
 
-from typing import Any, Dict, Optional
 import os
 import tempfile
 from pathlib import Path
+from typing import Optional
 
 from src import config as cfg
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
@@ -365,7 +365,7 @@ class ChunkFormerBackend(ASRBackend):
             import chunkformer
 
             info["version"] = getattr(chunkformer, "__version__", "unknown")
-        except:
+        except Exception:
             info["version"] = "unknown"
 
         # Add architecture parameters for reproducibility (NFR-1 requirement)
@@ -380,13 +380,13 @@ class ChunkFormerBackend(ASRBackend):
             device = getattr(self.model, "device", None)
             # Convert torch.device to string if needed
             info["device"] = str(device) if device is not None else None
-        except:
+        except Exception:
             pass
 
         # Checkpoint hash (if available from model)
         try:
             info["checkpoint_hash"] = getattr(self.model, "checkpoint_hash", None)
-        except:
+        except Exception:
             pass
 
         return info

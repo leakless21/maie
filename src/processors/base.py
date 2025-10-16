@@ -2,20 +2,20 @@
 Base module for MAIE processors containing abstract interfaces and common data structures.
 """
 
+import asyncio
 from abc import ABC, abstractmethod
+from dataclasses import asdict, dataclass
 from typing import (
     Any,
+    Callable,
     Dict,
     List,
     Optional,
     Protocol,
-    Callable,
     Tuple,
     TypedDict,
     runtime_checkable,
 )
-from dataclasses import dataclass, asdict
-import asyncio
 
 
 @dataclass
@@ -86,9 +86,11 @@ class VersionInfo(TypedDict, total=False):
     model_path: str  # Path to model directory or identifier
     device: str  # Device used (cuda, cpu, auto)
     compute_type: str  # Compute/precision type (float16, int8, etc.)
-    beam_size: int  # Beam size for decoding
+    cpu_threads: Optional[int]  # Number of CPU threads for inference
+    beam_size: Optional[int]  # Beam size for decoding
     vad_filter: bool  # Whether VAD filtering is enabled
     condition_on_previous_text: bool  # Whether context conditioning is used
+    language: Optional[str]  # Language code for transcription
     library: str  # Underlying library name (e.g., "faster-whisper")
 
 

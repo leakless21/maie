@@ -1,12 +1,12 @@
 import json
-import os
-from pathlib import Path
+import math
+import struct
 import subprocess
 import wave
-import struct
-import math
-import pytest
+from pathlib import Path
 from unittest.mock import MagicMock
+
+import pytest
 
 # Import module under test
 from src.processors.audio import preprocessor as preprocessor_module

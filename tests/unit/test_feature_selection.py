@@ -8,8 +8,6 @@ Verifies:
 3. Feature selection in pipeline correctly uses needs_enhancement()
 4. Both transcript-only and summary features work with skip logic
 """
-import pytest
-from typing import Dict, Any
 
 from src.processors.llm.processor import LLMProcessor
 
@@ -116,8 +114,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "whisper"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Should NOT need enhancement
@@ -133,8 +130,7 @@ class TestFeatureSelectionIntegration:
         # Even for transcript-only, enhancement is NOT applied
         # because "clean_transcript" is not in features
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         assert needs_enhancement is False
@@ -147,8 +143,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "whisper"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Should skip enhancement even though clean_transcript is requested
@@ -162,8 +157,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "chunkformer"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Should apply enhancement
@@ -177,8 +171,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "whisper"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Summary doesn't require clean_transcript, so no enhancement
@@ -192,8 +185,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "whisper"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Even with both features, Whisper skips enhancement
@@ -207,8 +199,7 @@ class TestFeatureSelectionIntegration:
         asr_backend = "chunkformer"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # ChunkFormer needs enhancement when clean_transcript is requested
@@ -226,8 +217,7 @@ class TestFeatureSelectionEdgeCases:
         asr_backend = "chunkformer"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # No features means no enhancement
@@ -243,7 +233,7 @@ class TestFeatureSelectionEdgeCases:
         # Should handle None gracefully
         try:
             needs_enhancement = (
-                "clean_transcript" in features 
+                "clean_transcript" in features
                 and processor.needs_enhancement(asr_backend)
             )
             assert needs_enhancement is False
@@ -259,8 +249,7 @@ class TestFeatureSelectionEdgeCases:
         asr_backend = "chunkformer"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Unknown features don't trigger enhancement
@@ -274,8 +263,7 @@ class TestFeatureSelectionEdgeCases:
         asr_backend = "chunkformer"
 
         needs_enhancement = (
-            "clean_transcript" in features 
-            and processor.needs_enhancement(asr_backend)
+            "clean_transcript" in features and processor.needs_enhancement(asr_backend)
         )
 
         # Duplicates don't affect logic
@@ -328,7 +316,7 @@ class TestRealWorldScenarios:
         # Test with both backends
         for backend in ["whisper", "chunkformer"]:
             features = ["transcript"]  # Only raw transcript
-            
+
             needs_clean = "clean_transcript" in features
             apply_enhancement = needs_clean and processor.needs_enhancement(backend)
 

@@ -6,10 +6,12 @@ model verification on startup, and proper worker configuration.
 """
 
 import sys
+
 from redis import Redis
 from rq import Worker
 
-from src.config import settings
+# Opt-in: import logging configuration helpers defensively.
+from src.config import configure_logging, get_logger, settings
 
 
 def setup_redis_connection() -> Redis:
@@ -20,9 +22,9 @@ def setup_redis_connection() -> Redis:
     # Verify Redis connection
     try:
         redis_conn.ping()
-        print("Successfully connected to Redis")
-    except Exception as e:
-        print(f"Failed to connect to Redis: {e}")
+        get_logger().info("Successfully connected to Redis")
+    except Exception:
+        get_logger().exception("Failed to connect to Redis")
         sys.exit(1)
 
     return redis_conn
@@ -32,7 +34,7 @@ def verify_models() -> bool:
     """Verify that required models are available before starting worker."""
     # This function will check if the required models are accessible
     # Implementation will depend on the specific model loading mechanism
-    print("Verifying models are available...")
+    get_logger().info("Verifying models are available...")
 
     # Check if required model directories exist (per TDD section 3.7)
     # Use the new config with Path objects
@@ -44,21 +46,31 @@ def verify_models() -> bool:
 
     missing = [str(p) for p in required_paths if not p.exists()]
     if missing:
-        print(f"Missing models: {missing}. Run scripts/download_models.sh")
+        get_logger().error(
+            "Missing models: {}. Run scripts/download_models.sh", missing
+        )
         return False
 
-    # Verify processor modules are available
+    # Verify processor modules are available without importing
     try:
-        from src.processors.asr.factory import ASRFactory
-        from src.processors.llm import LLMProcessor
+        import importlib.util
 
-        print("All required models and modules are available")
-        return True
-    except ImportError as e:
-        print(f"Missing required modules: {e}")
+        has_asr_factory = (
+            importlib.util.find_spec("src.processors.asr.factory") is not None
+        )
+        has_llm = importlib.util.find_spec("src.processors.llm") is not None
+
+        if has_asr_factory and has_llm:
+            get_logger().info("All required models and modules are available")
+            return True
+        get_logger().error(
+            "Missing required modules: ASRFactory=%s, LLM=%s",
+            has_asr_factory,
+            has_llm,
+        )
         return False
-    except Exception as e:
-        print(f"Model verification failed: {e}")
+    except Exception:
+        get_logger().exception("Model verification failed")
         return False
 
 
@@ -66,7 +78,7 @@ def start_worker() -> None:
     """Start the RQ worker with proper configuration."""
     # Verify models are available before connecting to Redis
     if not verify_models():
-        print("Model verification failed. Exiting.")
+        get_logger().error("Model verification failed. Exiting.")
         sys.exit(1)
 
     # Set up Redis connection
@@ -80,9 +92,15 @@ def start_worker() -> None:
         listen, connection=redis_conn, name=settings.worker_name, exception_handlers=[]
     )
 
-    print(f"Starting worker {worker.name}...")
+    get_logger().info("Starting worker {}", worker.name)
     worker.work()
 
 
 if __name__ == "__main__":
+    # Apply opt-in Loguru configuration at worker startup.
+    # Always configure Loguru at startup.
+    logger = configure_logging()
+    logger = logger if logger is not None else get_logger()
+    logger.info("Loguru configuration active (phase1) - worker")
+
     start_worker()

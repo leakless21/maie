@@ -13,25 +13,28 @@ The implementation avoids performing network I/O at import time to keep unit tes
 
 from __future__ import annotations
 
-from typing import Dict, Any
+from typing import Any, Dict
 
 from litestar import Litestar, Response, get
 from litestar.openapi import OpenAPIConfig
 
-# Optional import for CORS configuration
-try:
-    from litestar.middleware.cors import CORSConfig  # type: ignore
-except Exception:  # pragma: no cover - defensive
-    CORSConfig = None  # type: ignore
+from src.config import configure_logging, get_logger
 
+try:
+    from litestar.middleware.cors import CORSConfig
+except Exception:
+    CORSConfig = None
 from litestar.exceptions import NotAuthorizedException
 
+from src.api.dependencies import validate_request_data
 from src.api.routes import route_handlers
-from src.api.dependencies import api_key_guard, validate_request_data
 from src.api.schemas import HealthResponse
 from src.config import settings
 
-# OpenAPI configuration
+# Always configure Loguru at API startup.
+_logger = configure_logging()
+logger = _logger if _logger is not None else get_logger()
+logger.info("Loguru configuration active (phase1) - api")
 openapi_config = OpenAPIConfig(
     title="Modular Audio Intelligence Engine (MAIE) API",
     version="1.0.0",
@@ -39,17 +42,14 @@ openapi_config = OpenAPIConfig(
 )
 
 
-# Simple exception handlers
 def _handle_not_authorized(_: Any, exc: Exception) -> Response:
     return Response({"detail": str(exc)}, status_code=401)
 
 
 def _handle_generic(_: Any, exc: Exception) -> Response:
-    # Avoid leaking internal state; provide a generic message
     return Response({"detail": "Internal Server Error"}, status_code=500)
 
 
-# Lightweight health endpoint
 @get("/health", summary="API health", tags=["Health"])
 async def health() -> HealthResponse:
     """Return a conservative health response suitable for orchestration checks."""
@@ -57,45 +57,34 @@ async def health() -> HealthResponse:
     return HealthResponse(
         status="healthy",
         version=getattr(settings, "pipeline_version", "unknown"),
-        # Report whether Redis is configured; avoid I/O during health checks.
         redis_connected=redis_configured,
         queue_depth=0,
         worker_active=False,
     )
 
 
-# Build Litestar constructor args
 litestar_kwargs: Dict[str, Any] = {
     "route_handlers": [*route_handlers, health],
     "openapi_config": openapi_config,
-    "dependencies": {
-        "validate_request_data": validate_request_data,
-    },
+    "dependencies": {"validate_request_data": validate_request_data},
     "exception_handlers": {
         NotAuthorizedException: _handle_not_authorized,
         Exception: _handle_generic,
     },
 }
-
-# Attach a conservative CORS config if available
 if CORSConfig is not None:
     litestar_kwargs["cors_config"] = CORSConfig(
         allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"]
     )
-
-# Instantiate the app
 app = Litestar(**litestar_kwargs)
-
-# Ensure a cors_config attribute is present for tests that expect it (some Litestar versions)
 if not getattr(app, "cors_config", None):
-    # If CORSConfig was unavailable or the attribute is falsy, set a minimal attribute to satisfy consumers/tests.
+
     class _MinimalCors:
         allow_origins = ["*"]
         allow_methods = ["GET", "POST", "OPTIONS"]
 
-    app.cors_config = _MinimalCors()  # type: ignore
-
-if __name__ == "__main__":  # pragma: no cover - executed only when run directly
+    app.cors_config = _MinimalCors()
+if __name__ == "__main__":
     import uvicorn
 
     uvicorn.run(app, host=settings.api_host, port=settings.api_port)

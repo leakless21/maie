@@ -8,7 +8,7 @@ sampling parameter management, override handling, and model versioning.
 import hashlib
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Dict
 
 from loguru import logger
 

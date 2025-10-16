@@ -4,7 +4,8 @@ This module provides audio quality metrics collection including
 VAD coverage, confidence scoring, and audio property validation.
 """
 
-from typing import Dict, Any
+from typing import Any, Dict
+
 import numpy as np
 from scipy.io import wavfile
 

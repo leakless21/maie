@@ -9,15 +9,10 @@ Provides mocks for:
 - Task data structures
 """
 
-import json
-from pathlib import Path
-from unittest.mock import MagicMock, Mock, AsyncMock
-from typing import Dict, Any
+from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
+
 import pytest
-
-from src.api.schemas import TaskStatus
-
 
 # =============================================================================
 # Redis Mocks

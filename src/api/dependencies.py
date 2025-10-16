@@ -10,13 +10,12 @@ from typing import Any
 from litestar.connection import ASGIConnection
 from litestar.exceptions import NotAuthorizedException
 from litestar.handlers.base import BaseRouteHandler
-from redis.asyncio import Redis as AsyncRedis
 from redis import Redis as SyncRedis
+from redis.asyncio import Redis as AsyncRedis
 from rq import Queue
 
+from src.api.schemas import Feature, ProcessRequestSchema
 from src.config import settings
-from src.api.schemas import ProcessRequestSchema, Feature
-
 
 # ============================================================================
 # Redis Dependencies (Official redis-py 5.x patterns)

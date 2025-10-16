@@ -1,6 +1,5 @@
 # tests/unit/test_asr_factory.py
 import pytest
-from typing import Any, Dict
 
 from src.processors.asr import factory as asr_factory
 
@@ -73,15 +72,17 @@ def test_create_with_audio_processing_success(monkeypatch):
     class MockPreprocessor:
         def preprocess(self, audio_path):
             return {"duration": 5.0, "sample_rate": 16000}
-    
-    monkeypatch.setattr("src.processors.asr.factory.AudioPreprocessor", MockPreprocessor)
+
+    monkeypatch.setattr(
+        "src.processors.asr.factory.AudioPreprocessor", MockPreprocessor
+    )
 
     asr_factory.ASRFactory.register_backend("dummy", DummyBackend)
 
     result = asr_factory.ASRFactory.create_with_audio_processing(
         backend_type="dummy", foo="bar"
     )
-    
+
     assert "asr_processor" in result
     assert "audio_preprocessor" in result
     assert "audio_metrics_collector" in result

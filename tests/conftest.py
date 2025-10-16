@@ -18,12 +18,13 @@ Use scripts/run_integration_tests.sh to run tests with proper environment setup.
 See docs/whisper-cuda-fix.md for details.
 """
 
+import builtins
 import os
 import sys
-import pytest
 from pathlib import Path
 from types import ModuleType
-import builtins
+
+import pytest
 
 # Ensure project root is on sys.path so tests can import src.*
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,35 @@ try:  # pragma: no cover - test scaffolding convenience
     import src as _src_module
 
     builtins.mock_src = _src_module  # type: ignore[attr-defined]
+except Exception:
+    pass
+
+import sys as _sys
+
+# Configure Loguru for tests: keep output minimal and captureable by pytest.
+# This configuration runs when conftest is imported so it applies early during test collection.
+from loguru import logger as _loguru_logger
+
+try:
+    # Remove any pre-existing handlers added by application code
+    _loguru_logger.remove()
+except Exception:
+    pass
+
+# Add a single stderr sink so pytest captures logs; avoid enqueue for determinism in tests.
+_loguru_logger.add(
+    _sys.stderr,
+    level="DEBUG",
+    format="{time:YYYY-MM-DD HH:mm:ss} | {level: <8} | {message}",
+    colorize=False,
+    enqueue=False,
+)
+
+# Clear any correlation id set by application code to avoid test leakage.
+try:
+    from src.config import clear_correlation_id
+
+    clear_correlation_id()
 except Exception:
     pass
 
@@ -58,11 +88,48 @@ def pytest_configure(config):
     )
 
 
+@pytest.fixture(scope="session", autouse=True)
+def sanitize_test_environment():
+    """
+    Sanitize environment variables before tests to ensure consistent defaults.
+    
+    Aligned with best-practices.md: tests should validate code defaults,
+    not inherit unpredictable developer machine environment.
+    """
+    # Store original values
+    env_to_clear = [
+        "SECRET_API_KEY",
+        "LLM_ENHANCE_MODEL",
+        "LLM_ENHANCE_TOP_P",
+        "LLM_ENHANCE_TOP_K",
+        "LLM_ENHANCE_MAX_TOKENS",
+        "LLM_ENHANCE_TEMPERATURE",
+        "LLM_SUM_MODEL",
+        "LLM_SUM_TOP_P",
+        "LLM_SUM_TOP_K", 
+        "LLM_SUM_MAX_TOKENS",
+        "LLM_SUM_TEMPERATURE",
+        "WHISPER_LANGUAGE",
+        "TOP_P",
+        "GPU_MEMORY_UTILIZATION",
+    ]
+    
+    original_values = {}
+    for key in env_to_clear:
+        if key in os.environ:
+            original_values[key] = os.environ[key]
+            del os.environ[key]
+    
+    yield
+    
+    # Restore original environment
+    for key, value in original_values.items():
+        os.environ[key] = value
+
+
 @pytest.fixture(autouse=True)
 def setup_huggingface_cache(tmp_path):
     """Set up a writable Hugging Face cache directory for tests."""
-    import tempfile
-    import shutil
 
     # Create a temporary directory for HF cache
     hf_cache_dir = tmp_path / "huggingface_cache"
@@ -318,7 +385,7 @@ def has_faster_whisper():
 
         _HAS_FASTER_WHISPER = True
         return True
-    except (ImportError, RuntimeError) as e:
+    except (ImportError, RuntimeError):
         # ImportError: library not installed
         # RuntimeError: can occur with torch/ctranslate2 compatibility issues
         _HAS_FASTER_WHISPER = False
@@ -341,7 +408,7 @@ def has_gpu():
 
         _HAS_GPU = torch.cuda.is_available()
         return _HAS_GPU
-    except (ImportError, RuntimeError) as e:
+    except (ImportError, RuntimeError):
         _HAS_GPU = False
         return False
 
@@ -433,9 +500,9 @@ def skip_if_no_local_llm(local_llm_model_path):
 @pytest.fixture
 def temp_audio_file(tmp_path):
     """Create a temporary audio file (sine wave)."""
-    import wave
-    import struct
     import math
+    import struct
+    import wave
 
     audio_path = tmp_path / "test_audio.wav"
 

@@ -1,8 +1,10 @@
 """Concise tests for src.api.schemas using RED-style one-line expectations."""
 
 from uuid import uuid4
+
 import pytest
 from pydantic import ValidationError
+
 from src.api import schemas
 
 

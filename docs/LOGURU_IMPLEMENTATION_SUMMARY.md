@@ -217,7 +217,7 @@ services:
 ### **Complete Implementation Scripts
 
 #### Complete Production Configuration
-See `src/logging_config.py` for complete production configuration patterns.
+See `src/config/logging.py` for complete production configuration patterns.
 
 #### Docker-Ready Scripts
 - `scripts/docker_logging.py` - Docker deployment configuration

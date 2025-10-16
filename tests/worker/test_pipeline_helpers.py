@@ -6,15 +6,10 @@ Tests the following functions in isolation:
 - _calculate_edit_rate: Calculate Levenshtein distance ratio
 """
 
-import pytest
-import json
-from datetime import datetime
-from unittest.mock import Mock, MagicMock
-
 from src.api.schemas import TaskStatus
 
 # Import pipeline helpers at module level to avoid torch reload issues
-from src.worker.pipeline import _update_status, _calculate_edit_rate
+from src.worker.pipeline import _calculate_edit_rate, _update_status
 
 
 class TestUpdateStatus:

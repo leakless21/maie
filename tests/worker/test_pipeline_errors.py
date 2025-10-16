@@ -11,15 +11,14 @@ Tests error scenarios to ensure robust failure handling:
 Follows TDD.md section 3.2 error handling requirements.
 """
 
+from unittest.mock import MagicMock, Mock
+
 import pytest
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
 from redis.exceptions import ConnectionError as RedisConnectionError
 
 from src.api.schemas import TaskStatus
 from src.worker.pipeline import (
     handle_processing_error,
-    TaskStatus as PipelineTaskStatus,
     unload_asr_model,
     unload_llm_model,
 )

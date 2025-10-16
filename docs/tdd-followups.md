@@ -170,7 +170,7 @@ Per V1.0 scope clarification (see `docs/V1.0_SCOPE_CLARIFICATION.md`), ASR imple
 
 ### **Config Module Best Practices** ✅
 
-- **Location:** `src/config.py`
+- **Location:** `src/config/settings.py`
 - **Completed:**
   - ✅ Added `validate_default=True` to SettingsConfigDict for early error detection
   - ✅ Added `env_nested_delimiter="__"` for hierarchical configuration support

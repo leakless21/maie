@@ -55,6 +55,11 @@ services:
       - SECRET_API_KEY=${SECRET_API_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Loguru opt-in and configuration flags (Phase 1 - opt-in safe defaults)
+      - ENABLE_LOGURU=${ENABLE_LOGURU:-false}
+      - LOG_CONSOLE_SERIALIZE=${LOG_CONSOLE_SERIALIZE:-true}
+      - LOGURU_DIAGNOSE=${LOGURU_DIAGNOSE:-false}
+      - LOGURU_BACKTRACE=${LOGURU_BACKTRACE:-true}
       - API_HOST=0.0.0.0
       - API_PORT=8000
       - MAX_FILE_SIZE_MB=500
@@ -121,6 +126,11 @@ services:
       - TOP_P=${TOP_P:-0.9}
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
       - DEBUG=${DEBUG:-false}
+      # Loguru opt-in and configuration flags (Phase 1 - opt-in safe defaults)
+      - ENABLE_LOGURU=${ENABLE_LOGURU:-false}
+      - LOG_CONSOLE_SERIALIZE=${LOG_CONSOLE_SERIALIZE:-true}
+      - LOGURU_DIAGNOSE=${LOGURU_DIAGNOSE:-false}
+      - LOGURU_BACKTRACE=${LOGURU_BACKTRACE:-true}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - API_HOST=0.0.0.0
       - API_PORT=8000

@@ -24,14 +24,13 @@ inject a fake module into sys.modules before the backend is imported.
 
 from __future__ import annotations
 
-import logging
 import os
 from typing import Any, Dict, Optional
 
+from loguru import logger
+
 from src import config as cfg
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
-
-LOGGER = logging.getLogger(__name__)
 
 # Cache for faster_whisper module to avoid PyTorch 2.8 re-import bug
 # See: https://github.com/pytorch/pytorch/issues/XXX
@@ -146,7 +145,7 @@ class WhisperBackend(ASRBackend):
             except (
                 Exception
             ) as exc:  # pragma: no cover - defensive for missing dependency
-                LOGGER.debug("faster_whisper not available: %s", exc)
+                logger.debug("faster_whisper not available: {}", exc)
                 _FASTER_WHISPER_IMPORT_FAILED = True
                 # If model_path was explicitly provided we should surface an error,
                 # otherwise leave model as None (constructor may have skipped load).
@@ -160,7 +159,7 @@ class WhisperBackend(ASRBackend):
 
         if self.model_path is None:
             # nothing to load
-            LOGGER.debug("No model path provided; skipping model load")
+            logger.debug("No model path provided; skipping model load")
             return
 
         # Verify path exists only when it looks like a filesystem path.
@@ -168,7 +167,7 @@ class WhisperBackend(ASRBackend):
         if self._looks_like_path(self.model_path) and not os.path.exists(
             self.model_path
         ):
-            LOGGER.error("Whisper model path does not exist: %s", self.model_path)
+            logger.error("Whisper model path does not exist: {}", self.model_path)
             raise FileNotFoundError(f"Model path not found: {self.model_path}")
 
         # Use device and compute type from configured settings when available
@@ -241,8 +240,8 @@ class WhisperBackend(ASRBackend):
         )
 
         try:
-            LOGGER.debug(
-                "Loading whisper model from %s with kwargs=%s",
+            logger.debug(
+                "Loading whisper model from {} with kwargs={}",
                 self.model_path,
                 load_kwargs,
             )
@@ -271,13 +270,13 @@ class WhisperBackend(ASRBackend):
                         f"Failed to load model on GPU: {cuda_exc}. GPU is required for offline deployment."
                     ) from cuda_exc
 
-            LOGGER.info(
-                "Loaded whisper model from %s on device=%s",
+            logger.info(
+                "Loaded whisper model from {} on device={}",
                 self.model_path,
                 load_kwargs["device"],
             )
         except Exception as exc:
-            LOGGER.exception("Failed to load whisper model from %s", self.model_path)
+            logger.exception("Failed to load whisper model from {}", self.model_path)
             raise RuntimeError("Failed to load whisper model") from exc
 
     def _prepare_transcribe_kwargs(self, user_kwargs: Dict[str, Any]) -> Dict[str, Any]:
@@ -373,7 +372,7 @@ class WhisperBackend(ASRBackend):
 
             if vad_params:
                 transcribe_kwargs["vad_parameters"] = vad_params
-                LOGGER.debug("Applying VAD filter with parameters: %s", vad_params)
+                logger.debug("Applying VAD filter with parameters: {}", vad_params)
 
         # User kwargs override config defaults
         transcribe_kwargs.update(user_kwargs)
@@ -394,16 +393,15 @@ class WhisperBackend(ASRBackend):
             RuntimeError: if no model is loaded.
         """
         if self.model is None:
-            LOGGER.error("Attempted to execute without a loaded model")
+            logger.error("Attempted to execute without a loaded model")
             raise RuntimeError("Model not loaded")
 
         # Apply default transcription parameters from config if not overridden
         transcribe_kwargs = self._prepare_transcribe_kwargs(kwargs)
 
         # Determine if audio_data is bytes or a file path
-        import tempfile
         import os
-        from pathlib import Path
+        import tempfile
 
         # Convert audio_data to file path if needed
         audio_path = audio_data
@@ -421,8 +419,8 @@ class WhisperBackend(ASRBackend):
                 audio_path = tmp_file_path
                 cleanup_needed = True
 
-            LOGGER.debug(
-                "Transcribing audio file: %s with kwargs: %s",
+            logger.debug(
+                "Transcribing audio file: {} with kwargs: {}",
                 audio_path,
                 transcribe_kwargs,
             )
@@ -464,7 +462,7 @@ class WhisperBackend(ASRBackend):
             )
 
         except Exception as exc:
-            LOGGER.exception("Model transcription failed")
+            logger.exception("Model transcription failed")
             return ASRResult(
                 text="",
                 segments=[],
@@ -479,10 +477,10 @@ class WhisperBackend(ASRBackend):
             if cleanup_needed and tmp_file_path and os.path.exists(tmp_file_path):
                 try:
                     os.unlink(tmp_file_path)
-                    LOGGER.debug("Cleaned up temp file: %s", tmp_file_path)
+                    logger.debug("Cleaned up temp file: {}", tmp_file_path)
                 except Exception as cleanup_exc:
-                    LOGGER.warning(
-                        "Failed to cleanup temp file %s: %s", tmp_file_path, cleanup_exc
+                    logger.warning(
+                        "Failed to cleanup temp file {}: {}", tmp_file_path, cleanup_exc
                     )
 
     def unload(self) -> None:
@@ -497,18 +495,18 @@ class WhisperBackend(ASRBackend):
         try:
             close_fn = getattr(self.model, "close", None)
             if callable(close_fn):
-                LOGGER.debug("Closing whisper model")
+                logger.debug("Closing whisper model")
                 close_fn()
             else:
                 # some model wrappers expose other cleanup methods
                 for name in ("shutdown", "dispose", "destroy"):
                     fn = getattr(self.model, name, None)
                     if callable(fn):
-                        LOGGER.debug("Calling model cleanup '%s'", name)
+                        logger.debug("Calling model cleanup '{}'", name)
                         fn()
                         break
         except Exception:
-            LOGGER.exception("Error while unloading model")
+            logger.exception("Error while unloading model")
         finally:
             self.model = None
 
@@ -547,21 +545,32 @@ class WhisperBackend(ASRBackend):
                         checkpoint_hash = f"{filename}:{file_hash[:16]}"
                     break
 
-        return {
+        info: VersionInfo = {
             "backend": "whisper",
             "model_variant": getattr(cfg.settings, "whisper_model_variant", "unknown"),
             "model_path": str(self.model_path) if self.model_path else "unknown",
             "checkpoint_hash": checkpoint_hash,
             "device": getattr(cfg.settings, "whisper_device", "unknown"),
             "compute_type": getattr(cfg.settings, "whisper_compute_type", "unknown"),
-            "cpu_threads": getattr(cfg.settings, "whisper_cpu_threads", None),
-            "beam_size": getattr(cfg.settings, "whisper_beam_size", None),
             "vad_filter": getattr(cfg.settings, "whisper_vad_filter", False),
             "condition_on_previous_text": getattr(
                 cfg.settings, "whisper_condition_on_previous_text", True
             ),
-            "language": getattr(cfg.settings, "whisper_language", None),
             "version": "1.0.0",
             "library": "faster-whisper",
             "name": "faster-whisper",
         }
+
+        # Only include optional fields if they are not None
+        cpu_threads = getattr(cfg.settings, "whisper_cpu_threads", None)
+        if cpu_threads is not None:
+            info["cpu_threads"] = cpu_threads
+
+        beam_size = getattr(cfg.settings, "whisper_beam_size", None)
+        if beam_size is not None:
+            info["beam_size"] = beam_size
+
+        language = getattr(cfg.settings, "whisper_language", None)
+        info["language"] = language if language is not None else "auto"
+
+        return info

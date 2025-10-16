@@ -10,30 +10,28 @@ Tests the full pipeline orchestration with all mocked dependencies:
 Follows TDD.md section 3.2 (GPU Worker) requirements.
 """
 
-import pytest
 from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import MagicMock, patch
 
-from src.api.schemas import TaskStatus, Feature
+from src.api.schemas import TaskStatus
 from src.worker.pipeline import process_audio_task
 
 
 class TestProcessAudioTaskHappyPath:
     """Test the complete happy path for process_audio_task."""
 
-    @patch('src.worker.pipeline.Redis')
-    @patch('src.processors.audio.AudioPreprocessor')
-    @patch('src.worker.pipeline.load_asr_model')
-    @patch('src.worker.pipeline.execute_asr_transcription')
-    @patch('src.worker.pipeline.unload_asr_model')
-    @patch('src.worker.pipeline.load_llm_model')
-    @patch('src.worker.pipeline.execute_llm_processing')
-    @patch('src.worker.pipeline.unload_llm_model')
-    @patch('src.worker.pipeline.get_version_metadata')
-    @patch('src.worker.pipeline.calculate_metrics')
-    @patch('src.worker.pipeline._update_status')
-    @patch('src.worker.pipeline.get_current_job')
+    @patch("src.worker.pipeline.Redis")
+    @patch("src.processors.audio.AudioPreprocessor")
+    @patch("src.worker.pipeline.load_asr_model")
+    @patch("src.worker.pipeline.execute_asr_transcription")
+    @patch("src.worker.pipeline.unload_asr_model")
+    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.worker.pipeline.execute_llm_processing")
+    @patch("src.worker.pipeline.unload_llm_model")
+    @patch("src.worker.pipeline.get_version_metadata")
+    @patch("src.worker.pipeline.calculate_metrics")
+    @patch("src.worker.pipeline._update_status")
+    @patch("src.worker.pipeline.get_current_job")
     def test_full_pipeline_with_all_features(
         self,
         mock_get_job,
@@ -49,7 +47,7 @@ class TestProcessAudioTaskHappyPath:
         mock_audio_preprocessor_class,
         mock_redis_class,
         mock_rq_job,
-        tmp_path
+        tmp_path,
     ):
         """
         Test complete pipeline execution with all features requested.
@@ -65,7 +63,7 @@ class TestProcessAudioTaskHappyPath:
         """
         # Setup mock job to be truthy (MagicMock is truthy by default)
         mock_get_job.return_value = mock_rq_job
-        
+
         # Create a mock Redis instance
         mock_redis_instance = MagicMock()
         mock_redis_instance.hset = MagicMock()
@@ -156,23 +154,23 @@ class TestProcessAudioTaskHappyPath:
         mock_calc_metrics.return_value = metrics
 
         # Mock Redis connection - need to ensure Redis() is called and returns our mock
-        with patch('src.worker.pipeline.Redis') as mock_redis_class:
+        with patch("src.worker.pipeline.Redis") as mock_redis_class:
             # Configure the Redis mock to return our mock_redis_sync
             mock_redis_instance = MagicMock()
             mock_redis_instance.hset = MagicMock()
             mock_redis_instance.close = MagicMock()
             mock_redis_class.return_value = mock_redis_instance
-            
+
             # Execute pipeline
             result = process_audio_task(task_params)
-            
+
             # Verify status transitions (_update_status should be called at least 3 times:
         # PREPROCESSING, PROCESSING_ASR, PROCESSING_LLM, COMPLETE)
         assert mock_update_status.call_count >= 3, (
             f"Expected at least 3 status updates, got {mock_update_status.call_count}. "
             f"Calls: {mock_update_status.call_args_list}"
         )
-        
+
         # Check status progression: PROCESSING_ASR → PROCESSING_LLM → COMPLETE
         # Extract status from call args: _update_status(redis_conn, task_key, status, metadata)
         # call[0] is the positional args tuple, and status is at index 2

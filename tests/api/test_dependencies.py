@@ -14,20 +14,17 @@ Following TDD principles:
 - Proper async/sync separation for Redis/RQ
 """
 
-import pytest
-from typing import Any, Dict
+from typing import cast
 from unittest.mock import Mock, patch
 
+import pytest
 from litestar.connection import ASGIConnection
-from litestar.handlers.base import BaseRouteHandler
 from litestar.exceptions import NotAuthorizedException
+from litestar.handlers.base import BaseRouteHandler
 from litestar.types.asgi_types import Scope
-from typing import cast
 
-from src.config import Settings
 from src.api.dependencies import validate_request_data
 from src.api.schemas import ProcessRequestSchema
-
 
 # ============================================================================
 # Test Fixtures and Helpers
@@ -95,8 +92,9 @@ class TestGuardSignature:
     @pytest.mark.asyncio
     async def test_api_key_guard_signature_accepts_connection_and_handler(self):
         """api_key_guard must accept (ASGIConnection, BaseRouteHandler) parameters."""
-        from src.api.dependencies import api_key_guard
         import inspect
+
+        from src.api.dependencies import api_key_guard
 
         # Verify function signature
         sig = inspect.signature(api_key_guard)
@@ -114,8 +112,9 @@ class TestGuardSignature:
     @pytest.mark.asyncio
     async def test_api_key_guard_parameter_types(self):
         """Verify guard parameters are correctly typed."""
-        from src.api.dependencies import api_key_guard
         import inspect
+
+        from src.api.dependencies import api_key_guard
 
         sig = inspect.signature(api_key_guard)
         params = list(sig.parameters.values())
@@ -129,8 +128,9 @@ class TestGuardSignature:
     @pytest.mark.asyncio
     async def test_api_key_guard_return_type_is_none(self):
         """Guard should return None (raises exception on failure)."""
-        from src.api.dependencies import api_key_guard
         import inspect
+
+        from src.api.dependencies import api_key_guard
 
         sig = inspect.signature(api_key_guard)
         return_annotation = sig.return_annotation
@@ -353,8 +353,9 @@ class TestTimingSafeAPIKeyComparison:
     @pytest.mark.asyncio
     async def test_guard_uses_hmac_compare_digest(self):
         """API key guard must use hmac.compare_digest for timing-safe comparison."""
-        from src.api.dependencies import api_key_guard
         import inspect
+
+        from src.api.dependencies import api_key_guard
 
         # Get source code
         source = inspect.getsource(api_key_guard)
@@ -382,8 +383,9 @@ class TestTimingSafeAPIKeyComparison:
     @pytest.mark.asyncio
     async def test_timing_attack_resistance(self):
         """Verify guard is resistant to timing attacks by using constant-time comparison."""
-        from src.api.dependencies import api_key_guard
         import time
+
+        from src.api.dependencies import api_key_guard
 
         correct_key = "s" * 64
 
@@ -519,8 +521,9 @@ class TestRedisDependencies:
     @pytest.mark.asyncio
     async def test_get_redis_client_returns_async_redis(self):
         """get_redis_client() should return an AsyncRedis instance configured properly."""
-        from src.api.dependencies import get_redis_client
         from redis.asyncio import Redis as AsyncRedis
+
+        from src.api.dependencies import get_redis_client
 
         client = await get_redis_client()
 
@@ -538,8 +541,9 @@ class TestRedisDependencies:
     @pytest.mark.asyncio
     async def test_get_results_redis_returns_async_redis(self):
         """get_results_redis() should return an AsyncRedis instance with custom timeout settings."""
-        from src.api.dependencies import get_results_redis
         from redis.asyncio import Redis as AsyncRedis
+
+        from src.api.dependencies import get_results_redis
 
         client = await get_results_redis()
 
@@ -556,8 +560,9 @@ class TestRedisDependencies:
 
     def test_get_sync_redis_returns_sync_redis(self):
         """get_sync_redis() should return a synchronous Redis client for RQ."""
-        from src.api.dependencies import get_sync_redis
         from redis import Redis as SyncRedis
+
+        from src.api.dependencies import get_sync_redis
 
         client = get_sync_redis()
 
@@ -572,9 +577,10 @@ class TestRedisDependencies:
 
     def test_get_rq_queue_returns_queue_with_sync_redis(self):
         """get_rq_queue() should return an RQ Queue instance using sync Redis connection."""
-        from src.api.dependencies import get_rq_queue
-        from rq import Queue
         from redis import Redis as SyncRedis
+        from rq import Queue
+
+        from src.api.dependencies import get_rq_queue
 
         queue = get_rq_queue(name="test-queue")
 
@@ -612,8 +618,9 @@ class TestRedisConnectionPooling:
     @pytest.mark.asyncio
     async def test_redis_client_has_encoding_utf8(self):
         """Async Redis clients must have encoding='utf-8' configured."""
-        from src.api.dependencies import get_redis_client
         import inspect
+
+        from src.api.dependencies import get_redis_client
 
         # Check function source for encoding parameter
         source = inspect.getsource(get_redis_client)
@@ -650,8 +657,9 @@ class TestRedisConnectionPooling:
     @pytest.mark.asyncio
     async def test_results_redis_has_custom_timeout(self):
         """Results Redis client should have custom timeout configuration."""
-        from src.api.dependencies import get_results_redis
         import inspect
+
+        from src.api.dependencies import get_results_redis
 
         source = inspect.getsource(get_results_redis)
 
@@ -686,8 +694,9 @@ class TestRedisConnectionPooling:
     @pytest.mark.asyncio
     async def test_sync_redis_has_encoding_utf8(self):
         """Sync Redis client for RQ must also have encoding='utf-8'."""
-        from src.api.dependencies import get_sync_redis
         import inspect
+
+        from src.api.dependencies import get_sync_redis
 
         source = inspect.getsource(get_sync_redis)
         assert (
@@ -704,12 +713,13 @@ class TestRedisConnectionPooling:
     @pytest.mark.asyncio
     async def test_redis_pool_uses_from_url(self):
         """Redis clients should use Redis.from_url() for proper pooling."""
+        import inspect
+
         from src.api.dependencies import (
             get_redis_client,
             get_results_redis,
             get_sync_redis,
         )
-        import inspect
 
         # All functions should use from_url() method
         for func in [get_redis_client, get_results_redis, get_sync_redis]:

@@ -101,7 +101,7 @@ maie/
 
 ## Core Configuration Layer
 
-### File: `src/config.py`
+### File: `src/config/settings.py`
 
 **Purpose**: Single source of truth for all configuration using Pydantic Settings v2
 
@@ -1166,7 +1166,7 @@ segments = list(segments)  # force completion; segments is a generator
 The configuration fields map to faster-whisper API parameters as follows:
 
 ```python
-# Config fields (in src/config.py):
+# Config fields (in src/config/settings.py):
 whisper_vad_filter: bool = True
 whisper_vad_min_silence_ms: int = 500
 whisper_vad_speech_pad_ms: int = 400

@@ -7,14 +7,13 @@ and worker startup sequence.
 Follows TDD principles from docs/TDD.md section 3.2 (GPU Worker).
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-import sys
-from pathlib import Path
-from unittest.mock import Mock, MagicMock, patch, call
 from redis import Redis
 from rq import Worker
 
-from src.worker.main import setup_redis_connection, verify_models, start_worker
+from src.worker.main import setup_redis_connection, start_worker, verify_models
 
 
 class TestSetupRedisConnection:

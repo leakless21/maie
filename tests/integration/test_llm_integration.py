@@ -6,14 +6,11 @@ and comprehensive mocking for CI environments.
 """
 
 import json
-import tempfile
-from pathlib import Path
 from unittest.mock import Mock, patch
 
 import pytest
 
 from src.processors.llm.processor import LLMProcessor
-from src.processors.base import LLMResult
 
 
 class TestLLMIntegration:

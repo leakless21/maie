@@ -8,11 +8,9 @@ Verifies:
 3. Edit rate calculation uses actual Levenshtein distance
 4. Metrics include all required fields per TDD FR-5
 """
-import pytest
 import time
-from typing import Dict, Any
 
-from src.worker.pipeline import calculate_metrics, _calculate_edit_rate
+from src.worker.pipeline import _calculate_edit_rate, calculate_metrics
 
 
 class TestEditRateCalculation:
@@ -67,7 +65,7 @@ class TestCalculateMetrics:
     def test_basic_metrics_structure(self):
         """Test that all required metrics fields are present."""
         start_time = time.time() - 5.0  # Simulate 5 seconds of processing
-        
+
         metrics = calculate_metrics(
             transcription="Hello world",
             clean_transcript=None,
@@ -87,7 +85,7 @@ class TestCalculateMetrics:
         """Test that total_processing_time reflects actual elapsed time."""
         start_time = time.time()
         time.sleep(0.1)  # Simulate some processing
-        
+
         metrics = calculate_metrics(
             transcription="Test",
             clean_transcript=None,
@@ -102,7 +100,7 @@ class TestCalculateMetrics:
     def test_rtf_calculation_with_10_second_audio(self):
         """Test RTF calculation: processing_time / audio_duration."""
         start_time = time.time() - 2.0  # 2 seconds processing time
-        
+
         metrics = calculate_metrics(
             transcription="Sample transcription",
             clean_transcript=None,
@@ -118,7 +116,7 @@ class TestCalculateMetrics:
     def test_rtf_calculation_with_60_second_audio(self):
         """Test RTF with longer audio file."""
         start_time = time.time() - 5.0  # 5 seconds processing
-        
+
         metrics = calculate_metrics(
             transcription="Longer transcription",
             clean_transcript=None,
@@ -134,7 +132,7 @@ class TestCalculateMetrics:
     def test_rtf_handles_zero_audio_duration(self):
         """Test that zero audio duration doesn't cause division by zero."""
         start_time = time.time() - 1.0
-        
+
         metrics = calculate_metrics(
             transcription="Test",
             clean_transcript=None,
@@ -155,12 +153,14 @@ class TestCalculateMetrics:
             asr_rtf=0.2,
         )
 
-        assert metrics["transcription_length"] == len("Hello world, this is a test transcription.")
+        assert metrics["transcription_length"] == len(
+            "Hello world, this is a test transcription."
+        )
 
     def test_audio_duration_preserved(self):
         """Test that audio_duration is preserved in metrics."""
         audio_duration = 42.5
-        
+
         metrics = calculate_metrics(
             transcription="Test",
             clean_transcript=None,
@@ -174,7 +174,7 @@ class TestCalculateMetrics:
     def test_asr_rtf_preserved(self):
         """Test that ASR RTF is preserved in metrics."""
         asr_rtf = 0.234
-        
+
         metrics = calculate_metrics(
             transcription="Test",
             clean_transcript=None,
@@ -217,7 +217,7 @@ class TestMetricsWithEnhancement:
     def test_edit_rate_not_included_when_unchanged(self):
         """Test that edit_rate_cleaning is NOT included when transcript unchanged."""
         transcription = "Hello world"
-        
+
         metrics = calculate_metrics(
             transcription=transcription,
             clean_transcript=transcription,  # Same as original
@@ -233,7 +233,7 @@ class TestMetricsWithEnhancement:
         # These have same length but different content
         original = "hello world"
         enhanced = "world hello"  # Reordered
-        
+
         metrics = calculate_metrics(
             transcription=original,
             clean_transcript=enhanced,
@@ -244,7 +244,7 @@ class TestMetricsWithEnhancement:
 
         # Calculate expected edit rate using the actual function
         expected_edit_rate = _calculate_edit_rate(original, enhanced)
-        
+
         assert "edit_rate_cleaning" in metrics
         assert abs(metrics["edit_rate_cleaning"] - expected_edit_rate) < 0.01
 
@@ -252,7 +252,7 @@ class TestMetricsWithEnhancement:
         """Test with realistic transcription cleaning scenario."""
         original = "um... so like, the meeting, you know, it was really, uh, productive and stuff"
         cleaned = "The meeting was really productive."
-        
+
         metrics = calculate_metrics(
             transcription=original,
             clean_transcript=cleaned,
@@ -265,10 +265,10 @@ class TestMetricsWithEnhancement:
         assert "edit_rate_cleaning" in metrics
         assert "total_processing_time" in metrics
         assert "total_rtf" in metrics
-        
+
         # Edit rate should show significant change
         assert 0.3 < metrics["edit_rate_cleaning"] < 0.8
-        
+
         # RTF should be calculated correctly
         assert abs(metrics["total_rtf"] - (3.5 / 12.0)) < 0.05
 
@@ -280,7 +280,7 @@ class TestAudioDurationFlow:
         """
         Test that audio_duration from AudioPreprocessor metadata
         flows correctly into calculate_metrics.
-        
+
         This simulates the flow:
         1. AudioPreprocessor.preprocess() returns {"duration": X}
         2. extract_audio_duration() gets X
@@ -293,10 +293,10 @@ class TestAudioDurationFlow:
             "sample_rate": 16000,
             "channels": 1,
         }
-        
+
         # Extract duration (as done in pipeline)
         audio_duration = preprocessing_metadata.get("duration", 10.0)
-        
+
         # Calculate metrics with that duration
         metrics = calculate_metrics(
             transcription="Test transcription",
@@ -308,7 +308,7 @@ class TestAudioDurationFlow:
 
         # Verify audio_duration flowed through correctly
         assert metrics["audio_duration"] == 42.5
-        
+
         # Verify RTF calculation used the correct duration
         expected_rtf = 5.0 / 42.5
         assert abs(metrics["total_rtf"] - expected_rtf) < 0.01
@@ -319,10 +319,10 @@ class TestAudioDurationFlow:
             "sample_rate": 16000,
             # duration key missing
         }
-        
+
         # Fallback to default (as done in pipeline)
         audio_duration = preprocessing_metadata.get("duration", 10.0)
-        
+
         metrics = calculate_metrics(
             transcription="Test",
             clean_transcript=None,

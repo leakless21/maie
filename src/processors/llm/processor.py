@@ -5,28 +5,22 @@ Supports Qwen3-4B-Instruct AWQ-4bit model via direct vLLM integration.
 
 import json
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 from Levenshtein import distance as levenshtein_distance
 from loguru import logger
 
 from src.config import settings
 from src.processors.base import LLMBackend, LLMResult
+from src.processors.llm.config import GenerationConfig, build_generation_config
 from src.processors.prompt.renderer import PromptRenderer
 from src.processors.prompt.template_loader import TemplateLoader
-from src.processors.llm.config import build_generation_config, GenerationConfig
-from src.tooling.vllm_utils import (
-    apply_overrides_to_sampling,
-    normalize_overrides,
-    calculate_checkpoint_hash,
-    get_model_info,
-)
+from src.tooling.vllm_utils import apply_overrides_to_sampling, calculate_checkpoint_hash, get_model_info
+
 from .schema_validator import (
     load_template_schema,
-    validate_llm_output,
-    validate_tags_field,
     retry_with_lower_temperature,
-    create_validation_summary,
+    validate_llm_output,
 )
 
 
@@ -441,7 +435,11 @@ class LLMProcessor(LLMBackend):
             try:
                 # Prepare prompt (add feedback on retry)
                 if retry_count > 0 and "last_error" in locals():
-                    error_hint = f"\n\nIMPORTANT: Previous attempt failed validation with error: {last_error}\nPlease ensure the output is valid JSON that strictly matches the provided schema."
+                    last_error_str = str(locals().get("last_error"))
+                    error_hint = (
+                        "\n\nIMPORTANT: Previous attempt failed validation with error: "
+                        f"{last_error_str}\nPlease ensure the output is valid JSON that strictly matches the provided schema."
+                    )
                     prompt_for_attempt = prompt + error_hint
                 else:
                     prompt_for_attempt = prompt
