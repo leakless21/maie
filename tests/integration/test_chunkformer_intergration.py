@@ -8,7 +8,8 @@ from pathlib import Path
 import pytest
 from loguru import logger
 
-from src.config import Settings, settings
+from src.config.loader import settings
+from src.config.model import AppSettings
 from src.processors.asr.chunkformer import ChunkFormerBackend
 from src.processors.base import ASRResult
 
@@ -24,32 +25,32 @@ class TestChunkFormerConfiguration:
 
     def test_config_values_are_correct(self):
         """Verify that ChunkFormer configuration values match TDD specification after V1.0 fixes."""
-        assert (
-            settings.chunkformer_chunk_size == 64
-        ), f"chunk_size should be 64 frames, got {settings.chunkformer_chunk_size}"
-        assert (
-            settings.chunkformer_left_context_size == 128
-        ), f"left_context_size should be 128 frames, got {settings.chunkformer_left_context_size}"
-        assert (
-            settings.chunkformer_right_context_size == 128
-        ), f"right_context_size should be 128 frames, got {settings.chunkformer_right_context_size}"
-        assert (
-            settings.chunkformer_total_batch_duration == 14400
-        ), f"total_batch_duration should be 14400 seconds, got {settings.chunkformer_total_batch_duration}"
-        assert (
-            settings.chunkformer_return_timestamps == True
-        ), f"return_timestamps should be True, got {settings.chunkformer_return_timestamps}"
+        assert settings.chunkformer_chunk_size == 64, (
+            f"chunk_size should be 64 frames, got {settings.chunkformer_chunk_size}"
+        )
+        assert settings.chunkformer_left_context_size == 128, (
+            f"left_context_size should be 128 frames, got {settings.chunkformer_left_context_size}"
+        )
+        assert settings.chunkformer_right_context_size == 128, (
+            f"right_context_size should be 128 frames, got {settings.chunkformer_right_context_size}"
+        )
+        assert settings.chunkformer_total_batch_duration == 14400, (
+            f"total_batch_duration should be 14400 seconds, got {settings.chunkformer_total_batch_duration}"
+        )
+        assert settings.chunkformer_return_timestamps == True, (
+            f"return_timestamps should be True, got {settings.chunkformer_return_timestamps}"
+        )
 
     def test_config_description_units(self):
         """Verify that configuration field descriptions use correct units."""
-        chunk_size_field = Settings.model_fields["chunkformer_chunk_size"]
-        assert (
-            "frames" in chunk_size_field.description.lower()
-        ), f"chunk_size description should mention 'frames', got: {chunk_size_field.description}"
-        duration_field = Settings.model_fields["chunkformer_total_batch_duration"]
-        assert (
-            "seconds" in duration_field.description.lower()
-        ), f"total_batch_duration description should mention 'seconds', got: {duration_field.description}"
+        chunk_size_field = AppSettings.model_fields["chunkformer_chunk_size"]
+        assert "frames" in chunk_size_field.description.lower(), (
+            f"chunk_size description should mention 'frames', got: {chunk_size_field.description}"
+        )
+        duration_field = AppSettings.model_fields["chunkformer_total_batch_duration"]
+        assert "seconds" in duration_field.description.lower(), (
+            f"total_batch_duration description should mention 'seconds', got: {duration_field.description}"
+        )
 
 
 @pytest.mark.integration
@@ -72,13 +73,13 @@ class TestChunkFormerModelLoading:
         info = backend.get_version_info()
         assert "device" in info, "Version info should include device"
         device = info.get("device")
-        assert isinstance(
-            device, (str, type(None))
-        ), f"Device should be string or None, got {type(device)}"
+        assert isinstance(device, (str, type(None))), (
+            f"Device should be string or None, got {type(device)}"
+        )
         if device:
-            assert (
-                "cuda" in device or "cpu" in device
-            ), f"Device should be 'cuda' or 'cpu', got {device}"
+            assert "cuda" in device or "cpu" in device, (
+                f"Device should be 'cuda' or 'cpu', got {device}"
+            )
         backend.unload()
 
 
@@ -92,9 +93,9 @@ class TestChunkFormerVersionInfo:
         info = backend.get_version_info()
         assert isinstance(info, dict), "Version info should be a dict"
         assert "backend" in info, "Version info should include backend"
-        assert (
-            info.get("backend") == "chunkformer"
-        ), f"Backend should be 'chunkformer', got {info.get('backend')}"
+        assert info.get("backend") == "chunkformer", (
+            f"Backend should be 'chunkformer', got {info.get('backend')}"
+        )
         assert "model_variant" in info, "Version info should include model_variant"
         assert "model_path" in info, "Version info should include model_path"
         assert "library" in info, "Version info should include library"
@@ -113,21 +114,21 @@ class TestChunkFormerVersionInfo:
         ]
         for param in required_params:
             assert param in info, f"Version info missing required parameter: {param}"
-        assert (
-            info["chunk_size"] == 64
-        ), f"Version info chunk_size should be 64, got {info['chunk_size']}"
-        assert (
-            info["left_context_size"] == 128
-        ), f"Version info left_context_size should be 128, got {info['left_context_size']}"
-        assert (
-            info["right_context_size"] == 128
-        ), f"Version info right_context_size should be 128, got {info['right_context_size']}"
-        assert (
-            info["total_batch_duration"] == 14400
-        ), f"Version info total_batch_duration should be 14400, got {info['total_batch_duration']}"
-        assert (
-            info["return_timestamps"] == True
-        ), f"Version info return_timestamps should be True, got {info['return_timestamps']}"
+        assert info["chunk_size"] == 64, (
+            f"Version info chunk_size should be 64, got {info['chunk_size']}"
+        )
+        assert info["left_context_size"] == 128, (
+            f"Version info left_context_size should be 128, got {info['left_context_size']}"
+        )
+        assert info["right_context_size"] == 128, (
+            f"Version info right_context_size should be 128, got {info['right_context_size']}"
+        )
+        assert info["total_batch_duration"] == 14400, (
+            f"Version info total_batch_duration should be 14400, got {info['total_batch_duration']}"
+        )
+        assert info["return_timestamps"] == True, (
+            f"Version info return_timestamps should be True, got {info['return_timestamps']}"
+        )
         backend.unload()
 
 
@@ -142,9 +143,9 @@ class TestChunkFormerTranscription:
         audio_bytes = TEST_AUDIO.read_bytes()
         result = backend.execute(audio_bytes)
         assert result is not None, "Result should not be None"
-        assert isinstance(
-            result, ASRResult
-        ), f"Result should be ASRResult, got {type(result)}"
+        assert isinstance(result, ASRResult), (
+            f"Result should be ASRResult, got {type(result)}"
+        )
         assert hasattr(result, "text"), "Result should have text attribute"
         assert result.text, "Transcribed text should not be empty"
         assert len(result.text) > 0, "Transcribed text should have content"
@@ -162,9 +163,9 @@ class TestChunkFormerTranscription:
             assert isinstance(result.language, str), "Language should be a string"
             assert len(result.language) >= 2, "Language code should be at least 2 chars"
         if result.confidence is not None:
-            assert isinstance(
-                result.confidence, (int, float)
-            ), "Confidence should be numeric"
+            assert isinstance(result.confidence, (int, float)), (
+                "Confidence should be numeric"
+            )
             assert 0 <= result.confidence <= 1, "Confidence should be between 0 and 1"
         backend.unload()
         logger.info("\n✅ ChunkFormer Transcription Test Results:")
@@ -185,10 +186,8 @@ class TestChunkFormerTranscription:
         assert hasattr(result, "segments"), "Should have segments attribute"
         assert hasattr(result, "language"), "Should have language attribute"
         assert hasattr(result, "confidence"), "Should have confidence attribute"
-        assert "text" in result, "Should support 'in' operator"
-        assert (
-            result["text"] == result.text
-        ), "Dict access should match attribute access"
+        # Pure dataclass interface - no dict-like access
+        assert result.text is not None, "Should have text content"
         backend.unload()
 
     def test_transcription_with_custom_parameters(self):
@@ -223,9 +222,9 @@ class TestChunkFormerPerformance:
             results.append(result)
         texts = [r.text for r in results]
         assert all(texts), "All results should have text"
-        assert (
-            texts[0] == texts[1] == texts[2]
-        ), "Multiple runs on same audio should produce same text"
+        assert texts[0] == texts[1] == texts[2], (
+            "Multiple runs on same audio should produce same text"
+        )
         backend.unload()
 
     def test_resource_cleanup(self):

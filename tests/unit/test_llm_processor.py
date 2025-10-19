@@ -84,6 +84,41 @@ class TestLoadModel:
                     assert processor._model_loaded is True
                     mock_llm_class.assert_called_once()
 
+    def test_load_model_advanced_scheduler_args(self):
+        """Advanced scheduler overrides should be forwarded to vLLM."""
+
+        with patch("src.processors.llm.processor.settings") as mock_settings:
+            mock_settings.llm_enhance_model = "test-model"
+            mock_settings.templates_dir = Path("templates")
+            mock_settings.llm_enhance_temperature = 0.0
+            mock_settings.llm_enhance_top_p = None
+            mock_settings.llm_enhance_top_k = None
+            mock_settings.llm_enhance_max_tokens = None
+            mock_settings.llm_enhance_quantization = None
+            mock_settings.llm_enhance_gpu_memory_utilization = 0.8
+            mock_settings.llm_enhance_max_model_len = 8192
+            mock_settings.llm_enhance_max_num_seqs = 4
+            mock_settings.llm_enhance_max_num_batched_tokens = 2048
+            mock_settings.llm_enhance_max_num_partial_prefills = 2
+            mock_settings.verbose_components = False
+
+            with patch(
+                "src.processors.llm.processor.TemplateLoader"
+            ), patch("src.processors.llm.processor.PromptRenderer"):
+                processor = LLMProcessor()
+
+            mock_model = Mock()
+            mock_model.get_default_sampling_params.return_value = Mock()
+
+            with patch("vllm.LLM") as mock_llm_class:
+                mock_llm_class.return_value = mock_model
+                processor._load_model()
+
+            kwargs = mock_llm_class.call_args.kwargs
+        assert kwargs["max_num_seqs"] == 4
+        assert kwargs["max_num_batched_tokens"] == 2048
+        assert kwargs["max_num_partial_prefills"] == 2
+
     def test_load_model_vllm_not_installed(self):
         """Test graceful handling when vLLM is not installed."""
         processor = LLMProcessor()

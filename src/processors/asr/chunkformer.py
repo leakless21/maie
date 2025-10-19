@@ -120,8 +120,8 @@ class ChunkFormerBackend(ASRBackend):
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for offline deployment."
                 )
-            except Exception as e:
-                raise RuntimeError(f"Failed to check CUDA availability: {e}")
+            except (AttributeError, RuntimeError, OSError) as e:
+                raise RuntimeError(f"Failed to check CUDA availability: {e}") from e
 
         try:
             # Prefer Class.from_pretrained if present

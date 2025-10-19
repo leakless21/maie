@@ -11,6 +11,15 @@ from pathlib import Path
 
 from loguru import logger
 
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 
 def validate_result_structure(result: dict) -> bool:
     """Validate basic result structure"""

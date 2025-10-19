@@ -2,6 +2,8 @@
 Configuration package exposing application settings and logging helpers.
 """
 
+from .model import AppSettings
+from .loader import get_settings, reset_settings_cache, settings
 from .logging import (
     bind_correlation_id,
     clear_correlation_id,
@@ -11,12 +13,13 @@ from .logging import (
     generate_correlation_id,
     get_logger,
     logger_with_context,
-)
-from .settings import Settings, settings
+)  # noqa: E402
 
 __all__ = [
-    "Settings",
+    "AppSettings",
     "settings",
+    "get_settings",
+    "reset_settings_cache",
     "configure_logging",
     "get_logger",
     "bind_correlation_id",

@@ -66,7 +66,7 @@ docker exec maie-redis redis-cli ping  # Should return "PONG"
 
 # 7. Run E2E tests (Terminal 3)
 export API_BASE_URL=http://localhost:8000
-export SECRET_API_KEY=your-secret-key
+export SECRET_API_KEY=test-key-123456789012345678901234567890
 pixi run pytest tests/e2e/ -v
 ```
 
@@ -101,7 +101,7 @@ timeout 300 bash -c 'until curl -f http://localhost:8000/health; do sleep 5; don
 
 # 5. Run E2E tests
 export API_BASE_URL=http://localhost:8000
-export SECRET_API_KEY=your-secret-key
+export SECRET_API_KEY=test-key-123456789012345678901234567890
 pytest tests/e2e/ -v
 
 # Or use test script
@@ -128,7 +128,7 @@ sudo systemctl start redis-server
 
 # 6. Run E2E tests (Terminal 3)
 export API_BASE_URL=http://localhost:8000
-export SECRET_API_KEY=your-secret-key
+export SECRET_API_KEY=test-key-123456789012345678901234567890
 pixi run pytest tests/e2e/ -v
 ```
 
@@ -261,14 +261,14 @@ For manual E2E validation:
 ```bash
 # Submit audio for processing
 curl -X POST \
-  -H "X-API-Key: your-secret-key" \
+  -H "X-API-Key: test-key-123456789012345678901234567890" \
   -F "file=@tests/e2e/assets/sample.wav" \
   -F 'features=["clean_transcript","summary"]' \
   -F "template_id=meeting_notes_v1" \
   http://localhost:8000/v1/process
 
 # Monitor progress
-curl -H "X-API-Key: your-secret-key" \
+curl -H "X-API-Key: test-key-123456789012345678901234567890" \
   http://localhost:8000/v1/status/{task_id}
 ```
 
@@ -280,7 +280,78 @@ Use the validation script to check results:
 python scripts/validate-e2e-results.py result.json
 ```
 
-## Troubleshooting
+## Authentication and Configuration
+
+### Test Environment Configuration
+
+E2E tests use a dedicated test configuration that ensures reliable testing:
+
+```python
+# tests/e2e/conftest.py - Test Configuration
+@pytest.fixture(scope="session")
+def api_key():
+    return os.getenv("SECRET_API_KEY", "test-key-123456789012345678901234567890")
+```
+
+**Configuration Verification**:
+
+```bash
+# Verify test configuration is loaded
+export SECRET_API_KEY=test-key-123456789012345678901234567890
+export API_BASE_URL=http://localhost:8000
+
+# Test API connectivity
+curl -H "X-API-Key: $SECRET_API_KEY" \
+     -H "Content-Type: application/json" \
+     http://localhost:8000/health
+
+# Expected response: {"status": "healthy", "version": "...", ...}
+```
+
+**Development Profile for Tests**:
+
+Tests now rely on the development profile from `AppSettings` with a secure API key for consistent authentication:
+
+- **CPU-only processing** for reliable testing
+- **Secure test API key** (32+ characters)
+- **Smaller timeouts** for faster test execution
+- **Conservative resource usage** for stability
+- **Debug logging** enabled for better visibility
+
+### Troubleshooting Authentication Issues
+
+**401 Unauthorized Errors**:
+
+```bash
+# Verify API key matches test configuration
+echo "Expected: test-key-123456789012345678901234567890"
+echo "Actual: $SECRET_API_KEY"
+
+# Test API key directly
+curl -H "X-API-Key: test-key-123456789012345678901234567890" \
+     http://localhost:8000/health
+```
+
+**Configuration Mismatch**:
+
+```bash
+# Check if test configuration is loaded
+python -c "from src.config.loader import get_settings; import os; os.environ['ENVIRONMENT']='development'; settings = get_settings(); print('Development config loaded successfully')"
+
+# Verify environment variables
+env | grep -E "(SECRET_API_KEY|API_BASE_URL)" || echo "No test env vars found"
+```
+
+**Common Authentication Issues**:
+
+| Issue                | Symptom            | Solution                               |
+| -------------------- | ------------------ | -------------------------------------- |
+| Wrong API Key        | 401 Unauthorized   | Use exact key from AppSettings (development profile) |
+| Missing Header       | 401 Unauthorized   | Include `X-API-Key` header             |
+| Environment Mismatch | 500 Server Error   | Ensure test config is loaded           |
+| Port Conflict        | Connection Refused | Verify API runs on port 8000           |
+
+### Troubleshooting
 
 ### Common Issues
 

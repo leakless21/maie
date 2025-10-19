@@ -1,11 +1,14 @@
 """Pydantic request/response models for the MAIE API."""
 
+import mimetypes
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional
+from pathlib import Path
+from typing import Any, Dict, List, Literal, Mapping, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from litestar.datastructures import UploadFile
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 # =============================================================================
 # Enums
@@ -38,25 +41,103 @@ class Feature(str, Enum):
 
 
 class ProcessRequestSchema(BaseModel):
-    """Request schema for the /v1/process endpoint."""
+    """
+    Request schema for the /v1/process endpoint.
+    
+    This schema defines the multipart form data structure for audio processing requests.
+    All parameters except 'file' are optional and have sensible defaults.
+    """
 
     file: Any = Field(
-        ..., description="The audio file to process (multipart file upload)"
+        ..., 
+        description="The audio file to process (multipart file upload). Supported formats: WAV, MP3, M4A, FLAC. Maximum size: 100MB.",
+        json_schema_extra={
+            "format": "binary",
+            "type": "string"
+        }
     )
     features: List[Feature] = Field(
         default=[Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY],
-        description="Desired outputs. Default: ['clean_transcript', 'summary']. Tags are embedded in summary output via the template schema.",
+        description="Desired outputs. Available options: 'raw_transcript', 'clean_transcript', 'summary', 'enhancement_metrics'. Default: ['clean_transcript', 'summary']. Tags are embedded in summary output via the template schema.",
+        json_schema_extra={
+            "examples": [
+                ["clean_transcript", "summary"],
+                ["raw_transcript"],
+                ["raw_transcript", "clean_transcript", "summary", "enhancement_metrics"]
+            ]
+        }
     )
     template_id: Optional[str] = Field(
-        None, description="The summary format. Required if 'summary' is in features"
+        None, 
+        description="The summary format template ID. Required if 'summary' is in features. Use /v1/templates to get available templates.",
+        json_schema_extra={
+            "examples": ["meeting_notes_v1", "interview_summary_v1"]
+        }
+    )
+    asr_backend: Optional[str] = Field(
+        default="whisper",
+        description="ASR backend selection. Available options: 'whisper' (default), 'chunkformer'. Use /v1/models to get available backends.",
+        json_schema_extra={
+            "examples": ["whisper", "chunkformer"],
+            "enum": ["whisper", "chunkformer"]
+        }
     )
 
+    @field_validator("file", mode="before")
+    @classmethod
+    def _coerce_file(cls, value: Any) -> UploadFile:
+        if isinstance(value, UploadFile):
+            return value
+        if isinstance(value, (str, Path)):
+            filename = Path(value).name if isinstance(value, Path) else value
+            content_type = mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
+            return UploadFile(content_type=content_type, filename=str(filename))
+        if isinstance(value, Mapping):
+            payload = dict(value)
+            filename = payload.get("filename") or "upload"
+            content_type = payload.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            file_data = payload.get("file_data") or payload.get("data")
+            if isinstance(file_data, str):
+                file_data = file_data.encode()
+            headers = dict(payload.get("headers") or {})
+            if "size" in payload and "content-length" not in headers:
+                headers["content-length"] = str(payload["size"])
+            return UploadFile(
+                content_type=content_type,
+                filename=filename,
+                file_data=file_data,
+                headers=headers,
+            )
+        raise TypeError("file must be an UploadFile or mapping")
+
     model_config = ConfigDict(
+        arbitrary_types_allowed=True,
         json_schema_extra={
-            "example": {
-                "features": ["clean_transcript", "summary"],
-                "template_id": "meeting_notes_v1",
-            }
+            "examples": [
+                {
+                    "description": "Basic processing with default settings",
+                    "value": {
+                        "features": ["clean_transcript", "summary"],
+                        "template_id": "meeting_notes_v1",
+                        "asr_backend": "whisper"
+                    }
+                },
+                {
+                    "description": "Raw transcript only",
+                    "value": {
+                        "features": ["raw_transcript"],
+                        "asr_backend": "whisper"
+                    }
+                },
+                {
+                    "description": "All features with ChunkFormer backend",
+                    "value": {
+                        "features": ["raw_transcript", "clean_transcript", "summary", "enhancement_metrics"],
+                        "template_id": "meeting_notes_v1",
+                        "asr_backend": "chunkformer"
+                    }
+                }
+            ]
         }
     )
 
@@ -87,10 +168,11 @@ class ProcessResponse(BaseModel):
     """Response for POST /v1/process endpoint."""
 
     task_id: UUID = Field(description="Unique task identifier")
+    status: Literal["PENDING"] = Field(description="Initial task status")
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example": {"task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b"}
+            "example": {"task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b", "status": "PENDING"}
         }
     )
 
@@ -112,7 +194,6 @@ class LLMSchema(BaseModel):
     name: str = Field(..., description="Name of the LLM")
     checkpoint_hash: str = Field(..., description="Hash of the model checkpoint")
     quantization: str = Field(..., description="Quantization type")
-    chat_template: str = Field(..., description="Chat template used")
     thinking: bool = Field(..., description="Whether thinking is enabled")
     reasoning_parser: Optional[str] = Field(
         None, description="Reasoning parser used, if any"
@@ -194,7 +275,6 @@ class StatusResponseSchema(BaseModel):
                         "name": "qwen3",
                         "checkpoint_hash": "z9y8x7w6...",
                         "quantization": "awq-4bit",
-                        "chat_template": "qwen3_nonthinking",
                         "thinking": False,
                         "reasoning_parser": None,
                         "structured_output": {

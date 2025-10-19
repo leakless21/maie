@@ -8,6 +8,7 @@ Verifies:
 3. Edit rate calculation uses actual Levenshtein distance
 4. Metrics include all required fields per TDD FR-5
 """
+
 import time
 
 from src.worker.pipeline import _calculate_edit_rate, calculate_metrics

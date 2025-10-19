@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 from litestar.connection import ASGIConnection
+from litestar.datastructures import UploadFile
 from litestar.exceptions import NotAuthorizedException
 from litestar.handlers.base import BaseRouteHandler
 from redis import Redis as SyncRedis
@@ -47,8 +48,10 @@ async def get_results_redis() -> AsyncRedis:
     Returns:
         AsyncRedis: Async Redis client for results
     """
+    # Use results DB by replacing /0 with /{redis_results_db} in URL
+    results_url = settings.redis_url.replace("/0", f"/{settings.redis_results_db}")
     client = AsyncRedis.from_url(
-        settings.redis_url,
+        results_url,
         encoding="utf-8",
         decode_responses=True,
         socket_timeout=10.0,  # Longer timeout for large results
@@ -129,10 +132,14 @@ async def api_key_guard(
     # Use timing-safe comparison
     try:
         expected = getattr(settings, "secret_api_key", None)
-        if expected is None:
+        fallback_keys = tuple(getattr(settings, "fallback_api_keys", ()))
+        if expected is None and not fallback_keys:
             raise NotAuthorizedException("API key validation not configured")
 
-        if not hmac.compare_digest(str(api_key), str(expected)):
+        candidate_keys = [str(expected)] if expected is not None else []
+        candidate_keys.extend(str(key) for key in fallback_keys if key)
+
+        if not any(hmac.compare_digest(str(api_key), key) for key in candidate_keys):
             raise NotAuthorizedException(detail="Invalid API key")
     except NotAuthorizedException:
         raise
@@ -156,8 +163,8 @@ async def validate_request_data(data: Any) -> bool:
     Validation checks:
     - payload is a dict-like structure
     - file content_type or extension is an allowed audio format
-    - file size does not exceed Settings.max_file_size_mb
-    - template_id (if provided) exists in Settings.available_templates
+    - file size does not exceed AppSettings.max_file_size_mb
+    - template_id (if provided) exists in AppSettings.available_templates
     - features contains only allowed values
 
     Raises:
@@ -175,13 +182,30 @@ async def validate_request_data(data: Any) -> bool:
 
     # Basic required field: file
     file_obj = data.get("file")
-    if not file_obj or not isinstance(file_obj, dict):
+    if not file_obj:
         raise ValueError("Missing or invalid 'file' field")
-    assert isinstance(file_obj, dict)
 
-    filename = file_obj.get("filename") or file_obj.get("name") or ""
-    content_type = file_obj.get("content_type") or ""
-    size = file_obj.get("size")
+    file_metadata: dict[str, Any]
+    if isinstance(file_obj, UploadFile):
+        headers = file_obj.headers or {}
+        size_value = (
+            data.get("size")
+            or data.get("file_size")
+            or headers.get("content-length")
+        )
+        file_metadata = {
+            "filename": file_obj.filename or "",
+            "content_type": file_obj.content_type or "",
+            "size": size_value,
+        }
+    elif isinstance(file_obj, dict):
+        file_metadata = file_obj
+    else:
+        raise ValueError("Missing or invalid 'file' field")
+
+    filename = file_metadata.get("filename") or file_metadata.get("name") or ""
+    content_type = file_metadata.get("content_type") or ""
+    size = file_metadata.get("size")
 
     # Validate content type / extension
     allowed_extensions = {".wav", ".mp3", ".m4a", ".flac"}

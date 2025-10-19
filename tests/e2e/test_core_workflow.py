@@ -6,7 +6,7 @@ class TestCoreWorkflow:
 
     def test_happy_path_whisper(self, api_client, test_assets_dir):
         """Test complete workflow with Whisper backend"""
-        audio_file = test_assets_dir / "sample_30s.wav"
+        audio_file = test_assets_dir / "sample_30s.mp3"
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 
@@ -27,7 +27,7 @@ class TestCoreWorkflow:
 
     def test_happy_path_chunkformer(self, api_client, test_assets_dir):
         """Test complete workflow with ChunkFormer backend"""
-        audio_file = test_assets_dir / "sample_30s.wav"
+        audio_file = test_assets_dir / "sample_30s.mp3"
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 
@@ -45,7 +45,7 @@ class TestCoreWorkflow:
 
     def test_feature_combinations(self, api_client, test_assets_dir):
         """Test different feature combinations"""
-        audio_file = test_assets_dir / "sample_30s.wav"
+        audio_file = test_assets_dir / "sample_30s.mp3"
         if not audio_file.exists():
             pytest.skip(f"Test audio file not found: {audio_file}")
 

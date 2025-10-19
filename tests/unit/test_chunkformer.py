@@ -306,18 +306,18 @@ def test_execute_endless_decode_with_custom_params(monkeypatch):
 
     # TDD: These assertions will FAIL until we fix the implementation
     assert observed.get("chunk_size") == 32, "Custom chunk_size should override config"
-    assert (
-        observed.get("left_context_size") == 64
-    ), "Custom left_context should be passed as left_context_size"
-    assert (
-        observed.get("right_context_size") == 64
-    ), "Custom right_context should be passed as right_context_size"
-    assert (
-        observed.get("total_batch_duration") == 7200
-    ), "Custom total_batch_duration should override config"
-    assert (
-        observed.get("return_timestamps") == False
-    ), "Custom return_timestamps should override config"
+    assert observed.get("left_context_size") == 64, (
+        "Custom left_context should be passed as left_context_size"
+    )
+    assert observed.get("right_context_size") == 64, (
+        "Custom right_context should be passed as right_context_size"
+    )
+    assert observed.get("total_batch_duration") == 7200, (
+        "Custom total_batch_duration should override config"
+    )
+    assert observed.get("return_timestamps") == False, (
+        "Custom return_timestamps should override config"
+    )
 
 
 def test_version_info_includes_architecture_params(monkeypatch):
@@ -332,12 +332,12 @@ def test_version_info_includes_architecture_params(monkeypatch):
     info = backend.get_version_info()
 
     # TDD: These assertions will FAIL until we enhance get_version_info()
-    assert (
-        "chunk_size" in info
-    ), "chunk_size should be in version info for reproducibility"
+    assert "chunk_size" in info, (
+        "chunk_size should be in version info for reproducibility"
+    )
     assert "left_context_size" in info, "left_context_size should be in version info"
     assert "right_context_size" in info, "right_context_size should be in version info"
-    assert (
-        "total_batch_duration" in info
-    ), "total_batch_duration should be in version info"
+    assert "total_batch_duration" in info, (
+        "total_batch_duration should be in version info"
+    )
     assert "return_timestamps" in info, "return_timestamps should be in version info"

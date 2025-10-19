@@ -34,7 +34,7 @@ from src.api.schemas import ProcessRequestSchema
 @pytest.fixture(autouse=True)
 def fixed_settings(monkeypatch):
     """
-    Fixture to set predictable Settings values for tests.
+    Fixture to set predictable AppSettings values for tests.
 
     - Sets max_file_size_mb to a small value so size-limit tests are easy to trigger.
     """
@@ -101,9 +101,9 @@ class TestGuardSignature:
         params = list(sig.parameters.keys())
 
         # Guard must have exactly 2 parameters
-        assert (
-            len(params) == 2
-        ), f"Guard should have 2 parameters, got {len(params)}: {params}"
+        assert len(params) == 2, (
+            f"Guard should have 2 parameters, got {len(params)}: {params}"
+        )
 
         # Verify parameter names (convention)
         assert "connection" in params[0].lower() or "conn" in params[0].lower()
@@ -361,14 +361,14 @@ class TestTimingSafeAPIKeyComparison:
         source = inspect.getsource(api_key_guard)
 
         # Verify hmac.compare_digest is used
-        assert (
-            "hmac.compare_digest" in source
-        ), "Guard must use hmac.compare_digest for timing-safe comparison"
+        assert "hmac.compare_digest" in source, (
+            "Guard must use hmac.compare_digest for timing-safe comparison"
+        )
 
         # Verify NOT using simple equality
-        assert (
-            "api_key ==" not in source or "hmac.compare_digest" in source
-        ), "Guard should not use simple == for secret comparison"
+        assert "api_key ==" not in source or "hmac.compare_digest" in source, (
+            "Guard should not use simple == for secret comparison"
+        )
 
     @pytest.mark.asyncio
     async def test_guard_import_hmac_module(self):
@@ -376,9 +376,9 @@ class TestTimingSafeAPIKeyComparison:
         import src.api.dependencies as deps
 
         # Verify hmac is imported
-        assert hasattr(deps, "hmac") or "hmac" in dir(
-            deps
-        ), "hmac module must be imported for timing-safe comparison"
+        assert hasattr(deps, "hmac") or "hmac" in dir(deps), (
+            "hmac module must be imported for timing-safe comparison"
+        )
 
     @pytest.mark.asyncio
     async def test_timing_attack_resistance(self):
@@ -419,9 +419,9 @@ class TestTimingSafeAPIKeyComparison:
             )
 
             # Allow 10x variance (constant-time should be much closer, but allow for system noise)
-            assert (
-                ratio < 10
-            ), f"Timing difference too large: {ratio}x (suggests non-constant-time comparison)"
+            assert ratio < 10, (
+                f"Timing difference too large: {ratio}x (suggests non-constant-time comparison)"
+            )
 
     @pytest.mark.asyncio
     async def test_guard_validates_key_length_before_comparison(self):
@@ -468,7 +468,7 @@ class TestRequestValidation:
 
     @pytest.mark.asyncio
     async def test_validate_request_data_enforces_file_size_limit(self):
-        """Files larger than Settings.max_file_size_mb (in MB) must be rejected."""
+        """Files larger than AppSettings.max_file_size_mb (in MB) must be rejected."""
         from src.config import settings
 
         data = base_valid_request()
@@ -481,7 +481,7 @@ class TestRequestValidation:
 
     @pytest.mark.asyncio
     @pytest.mark.skip(
-        reason="Template validation not implemented - available_templates field doesn't exist in Settings yet"
+        reason="Template validation not implemented - available_templates field doesn't exist in AppSettings yet"
     )
     async def test_validate_request_data_template_id_validation(self):
         """template_id must exist in available templates when provided."""
@@ -528,9 +528,9 @@ class TestRedisDependencies:
         client = await get_redis_client()
 
         # Verify type
-        assert isinstance(
-            client, AsyncRedis
-        ), f"Expected AsyncRedis, got {type(client)}"
+        assert isinstance(client, AsyncRedis), (
+            f"Expected AsyncRedis, got {type(client)}"
+        )
 
         # Verify configuration (client should have connection pool)
         assert client.connection_pool is not None
@@ -548,9 +548,9 @@ class TestRedisDependencies:
         client = await get_results_redis()
 
         # Verify type
-        assert isinstance(
-            client, AsyncRedis
-        ), f"Expected AsyncRedis, got {type(client)}"
+        assert isinstance(client, AsyncRedis), (
+            f"Expected AsyncRedis, got {type(client)}"
+        )
 
         # Verify configuration
         assert client.connection_pool is not None
@@ -591,9 +591,9 @@ class TestRedisDependencies:
         assert queue.name == "test-queue"
 
         # Verify connection is sync Redis (RQ requirement)
-        assert isinstance(
-            queue.connection, SyncRedis
-        ), "Queue must use synchronous Redis client"
+        assert isinstance(queue.connection, SyncRedis), (
+            "Queue must use synchronous Redis client"
+        )
 
         # Test default queue name
         default_queue = get_rq_queue()
@@ -607,9 +607,9 @@ class TestRedisDependencies:
 
         for name in custom_names:
             queue = get_rq_queue(name=name)
-            assert (
-                queue.name == name
-            ), f"Expected queue name '{name}', got '{queue.name}'"
+            assert queue.name == name, (
+                f"Expected queue name '{name}', got '{queue.name}'"
+            )
 
 
 class TestRedisConnectionPooling:
@@ -624,18 +624,18 @@ class TestRedisConnectionPooling:
 
         # Check function source for encoding parameter
         source = inspect.getsource(get_redis_client)
-        assert (
-            'encoding="utf-8"' in source or "encoding='utf-8'" in source
-        ), "get_redis_client must specify encoding='utf-8'"
+        assert 'encoding="utf-8"' in source or "encoding='utf-8'" in source, (
+            "get_redis_client must specify encoding='utf-8'"
+        )
 
         # Verify actual client
         client = await get_redis_client()
         # Connection pool should have encoding set
         pool = client.connection_pool
         conn_kwargs = pool.connection_kwargs
-        assert (
-            conn_kwargs.get("encoding") == "utf-8"
-        ), f"Expected encoding='utf-8', got {conn_kwargs.get('encoding')}"
+        assert conn_kwargs.get("encoding") == "utf-8", (
+            f"Expected encoding='utf-8', got {conn_kwargs.get('encoding')}"
+        )
 
         await client.aclose()
 
@@ -648,9 +648,9 @@ class TestRedisConnectionPooling:
         pool = client.connection_pool
         conn_kwargs = pool.connection_kwargs
 
-        assert (
-            conn_kwargs.get("decode_responses") is True
-        ), "decode_responses should be True for automatic string decoding"
+        assert conn_kwargs.get("decode_responses") is True, (
+            "decode_responses should be True for automatic string decoding"
+        )
 
         await client.aclose()
 
@@ -664,14 +664,14 @@ class TestRedisConnectionPooling:
         source = inspect.getsource(get_results_redis)
 
         # Should configure socket_timeout
-        assert (
-            "socket_timeout" in source
-        ), "get_results_redis should configure socket_timeout for large results"
+        assert "socket_timeout" in source, (
+            "get_results_redis should configure socket_timeout for large results"
+        )
 
         # Should configure socket_connect_timeout
-        assert (
-            "socket_connect_timeout" in source
-        ), "get_results_redis should configure socket_connect_timeout"
+        assert "socket_connect_timeout" in source, (
+            "get_results_redis should configure socket_connect_timeout"
+        )
 
         # Verify actual configuration
         client = await get_results_redis()
@@ -680,14 +680,14 @@ class TestRedisConnectionPooling:
 
         # Should have timeout configured
         assert "socket_timeout" in conn_kwargs, "socket_timeout must be configured"
-        assert (
-            "socket_connect_timeout" in conn_kwargs
-        ), "socket_connect_timeout must be configured"
+        assert "socket_connect_timeout" in conn_kwargs, (
+            "socket_connect_timeout must be configured"
+        )
 
         # Results client should have longer timeout than default
-        assert (
-            conn_kwargs["socket_timeout"] >= 5.0
-        ), f"socket_timeout should be >= 5s for large results, got {conn_kwargs['socket_timeout']}"
+        assert conn_kwargs["socket_timeout"] >= 5.0, (
+            f"socket_timeout should be >= 5s for large results, got {conn_kwargs['socket_timeout']}"
+        )
 
         await client.aclose()
 
@@ -699,9 +699,9 @@ class TestRedisConnectionPooling:
         from src.api.dependencies import get_sync_redis
 
         source = inspect.getsource(get_sync_redis)
-        assert (
-            'encoding="utf-8"' in source or "encoding='utf-8'" in source
-        ), "get_sync_redis must specify encoding='utf-8'"
+        assert 'encoding="utf-8"' in source or "encoding='utf-8'" in source, (
+            "get_sync_redis must specify encoding='utf-8'"
+        )
 
         client = get_sync_redis()
         pool = client.connection_pool
@@ -724,9 +724,9 @@ class TestRedisConnectionPooling:
         # All functions should use from_url() method
         for func in [get_redis_client, get_results_redis, get_sync_redis]:
             source = inspect.getsource(func)
-            assert (
-                ".from_url(" in source
-            ), f"{func.__name__} should use Redis.from_url() for connection pooling"
+            assert ".from_url(" in source, (
+                f"{func.__name__} should use Redis.from_url() for connection pooling"
+            )
 
     @pytest.mark.asyncio
     async def test_connection_pool_reuse(self):

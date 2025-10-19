@@ -1,6 +1,5 @@
 """Tests for API route handlers."""
 
-import json
 import uuid
 from io import BytesIO
 from pathlib import Path
@@ -61,37 +60,31 @@ class TestProcessController:
     def test_process_audio_success(self, app, valid_audio_file):
         """Test successful audio processing request."""
         with TestClient(app=app) as client:
-            with patch(
-                "src.api.routes.ProcessController.process_audio"
-            ) as mock_process:
-                task_id = uuid.uuid4()
-                mock_process.return_value = {"task_id": str(task_id)}
+            with patch("src.api.routes.create_task_in_redis"):
+                with patch("src.api.routes.enqueue_job"):
+                    response = client.post(
+                        "/v1/process",
+                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                        data={"features": ["clean_transcript", "summary"], "template_id": "meeting_notes_v1"},
+                        headers={"X-API-Key": "dev_api_key_change_in_production"},
+                    )
 
-                response = client.post(
-                    "/v1/process",
-                    files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                    data={
-                        "features": json.dumps(["clean_transcript", "summary"]),
-                        "template_id": "meeting_notes_v1",
-                    },
-                )
-
-                assert response.status_code == HTTP_202_ACCEPTED
-                assert "task_id" in response.json()
-                # Validate UUID format
-                uuid.UUID(response.json()["task_id"])
+                    assert response.status_code == HTTP_202_ACCEPTED
+                    assert "task_id" in response.json()
+                    # Validate UUID format
+                    uuid.UUID(response.json()["task_id"])
 
     def test_process_audio_missing_file(self, app):
         """Test request without file upload."""
         with TestClient(app=app) as client:
             response = client.post(
                 "/v1/process",
-                data={
-                    "features": json.dumps(["clean_transcript"]),
-                },
+                data={"features": ["clean_transcript"]},
+                headers={"X-API-Key": "dev_api_key_change_in_production"},
             )
 
-            assert response.status_code == HTTP_422_UNPROCESSABLE_ENTITY
+            # Litestar raises 400 during multipart extraction when file is missing
+            assert response.status_code == 400
 
     def test_process_audio_invalid_format(self, app):
         """Test request with unsupported file format."""
@@ -101,7 +94,8 @@ class TestProcessController:
             response = client.post(
                 "/v1/process",
                 files={"file": ("test.txt", invalid_file, "text/plain")},
-                data={"features": json.dumps(["clean_transcript"])},
+                data={"features": ["clean_transcript"]},
+                headers={"X-API-Key": "dev_api_key_change_in_production"},
             )
 
             assert response.status_code == HTTP_415_UNSUPPORTED_MEDIA_TYPE
@@ -109,11 +103,14 @@ class TestProcessController:
     def test_process_audio_file_too_large(self, app, valid_audio_file):
         """Test request with file exceeding size limit."""
         with TestClient(app=app) as client:
-            with patch("src.config.settings.settings.max_file_size_mb", 0.0001):  # Tiny limit
+            with patch(
+                "src.config.loader.settings.max_file_size_mb", 0.0001
+            ):  # Tiny limit
                 response = client.post(
                     "/v1/process",
                     files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                    data={"features": json.dumps(["clean_transcript"])},
+                    data={"features": ["clean_transcript"]},
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
                 )
 
                 assert response.status_code == HTTP_413_REQUEST_ENTITY_TOO_LARGE
@@ -124,7 +121,8 @@ class TestProcessController:
             response = client.post(
                 "/v1/process",
                 files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                data={"features": json.dumps(["summary"])},
+                data={"features": ["summary"]},
+                headers={"X-API-Key": "dev_api_key_change_in_production"},
                 # template_id intentionally missing
             )
 
@@ -140,9 +138,8 @@ class TestProcessController:
                 response = client.post(
                     "/v1/process",
                     files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                    data={
-                        "features": json.dumps(["clean_transcript"]),
-                    },
+                    data={"features": ["clean_transcript"]},
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
                 )
 
                 assert response.status_code == HTTP_429_TOO_MANY_REQUESTS
@@ -150,20 +147,82 @@ class TestProcessController:
     def test_process_audio_default_features(self, app, valid_audio_file):
         """Test that default features are applied when not specified."""
         with TestClient(app=app) as client:
-            with patch(
-                "src.api.routes.ProcessController.process_audio"
-            ) as mock_process:
-                task_id = uuid.uuid4()
-                mock_process.return_value = {"task_id": str(task_id)}
+            with patch("src.api.routes.create_task_in_redis"):
+                with patch("src.api.routes.enqueue_job"):
+                    response = client.post(
+                        "/v1/process",
+                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                        data={"template_id": "meeting_notes_v1"},
+                        headers={"X-API-Key": "dev_api_key_change_in_production"},
+                        # features not specified - should use defaults
+                    )
 
-                response = client.post(
-                    "/v1/process",
-                    files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                    data={"template_id": "meeting_notes_v1"},
-                    # features not specified - should use defaults
-                )
+                    assert response.status_code == HTTP_202_ACCEPTED
 
-                assert response.status_code == HTTP_202_ACCEPTED
+    def test_process_audio_features_as_repeated_fields(self, app, valid_audio_file):
+        """Features provided as repeated fields should be accepted."""
+        with TestClient(app=app) as client:
+            with patch("src.api.routes.create_task_in_redis"):
+                with patch("src.api.routes.enqueue_job"):
+                    response = client.post(
+                        "/v1/process",
+                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                        data={"features": ["clean_transcript", "summary"], "template_id": "meeting_notes_v1"},
+                        headers={"X-API-Key": "dev_api_key_change_in_production"},
+                    )
+
+                    assert response.status_code == HTTP_202_ACCEPTED
+
+    def test_process_audio_defaults_asr_backend_when_omitted(self, app, valid_audio_file):
+        """Should default asr_backend to 'whisper' when not provided."""
+        with TestClient(app=app) as client:
+            with patch("src.api.routes.create_task_in_redis") as mock_create:
+                with patch("src.api.routes.enqueue_job") as mock_enqueue:
+                    response = client.post(
+                        "/v1/process",
+                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                        data={"features": ["clean_transcript"]},
+                        headers={"X-API-Key": "dev_api_key_change_in_production"},
+                    )
+
+                    assert response.status_code == HTTP_202_ACCEPTED
+                    
+                    # Verify enqueue_job was called with default asr_backend
+                    call_args = mock_enqueue.call_args
+                    task_params = call_args[0][2]  # request_params
+                    assert task_params["asr_backend"] == "whisper"
+
+    def test_process_audio_validates_asr_backend(self, app, valid_audio_file):
+        """Should return 422 for invalid asr_backend values."""
+        with TestClient(app=app) as client:
+            response = client.post(
+                "/v1/process",
+                files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                data={"features": ["clean_transcript"], "asr_backend": "invalid_backend"},
+                headers={"X-API-Key": "dev_api_key_change_in_production"},
+            )
+
+            assert response.status_code == HTTP_422_UNPROCESSABLE_ENTITY
+            assert "Invalid 'asr_backend'" in response.json()["detail"]
+
+    def test_process_audio_accepts_valid_asr_backend(self, app, valid_audio_file):
+        """Should accept valid asr_backend values."""
+        with TestClient(app=app) as client:
+            with patch("src.api.routes.create_task_in_redis"):
+                with patch("src.api.routes.enqueue_job") as mock_enqueue:
+                    response = client.post(
+                        "/v1/process",
+                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                        data={"features": ["clean_transcript"], "asr_backend": "chunkformer"},
+                        headers={"X-API-Key": "dev_api_key_change_in_production"},
+                    )
+
+                    assert response.status_code == HTTP_202_ACCEPTED
+                    
+                    # Verify enqueue_job was called with provided asr_backend
+                    call_args = mock_enqueue.call_args
+                    task_params = call_args[0][2]  # request_params
+                    assert task_params["asr_backend"] == "chunkformer"
 
 
 class TestFileUploadSecurity:
@@ -230,14 +289,14 @@ class TestFileUploadSecurity:
         # If file is read entirely, size check must come first
         if file_read_pos > 0:
             assert size_check_pos > 0, "File size must be checked"
-            assert (
-                size_check_pos < file_read_pos
-            ), "File size must be validated BEFORE reading entire file content to prevent DoS"
+            assert size_check_pos < file_read_pos, (
+                "File size must be validated BEFORE reading entire file content to prevent DoS"
+            )
         # Otherwise, should use streaming approach
         else:
-            assert (
-                "aiofiles" in method_source or size_check_pos > 0
-            ), "Should either use aiofiles streaming or check size before reading"
+            assert "aiofiles" in method_source or size_check_pos > 0, (
+                "Should either use aiofiles streaming or check size before reading"
+            )
 
     def test_filename_sanitization_for_path_traversal(self, app, valid_audio_file):
         """Filenames must be sanitized to prevent path traversal attacks."""
@@ -258,7 +317,7 @@ class TestFileUploadSecurity:
                     response = client.post(
                         "/v1/process",
                         files={"file": (filename, valid_audio_file, "audio/wav")},
-                        data={"features": json.dumps(["clean_transcript"])},
+                        data={"features": ["clean_transcript"]},
                     )
 
                     # Should not fail, but should sanitize filename
@@ -271,9 +330,9 @@ class TestFileUploadSecurity:
                             if len(call_args[0]) > 1
                             else str(call_args[1].get("file_path", ""))
                         )
-                        assert (
-                            ".." not in saved_path
-                        ), f"Path traversal not prevented: {saved_path}"
+                        assert ".." not in saved_path, (
+                            f"Path traversal not prevented: {saved_path}"
+                        )
 
     def test_mime_type_validation(self, app):
         """Both MIME type and file extension must be validated."""
@@ -284,7 +343,8 @@ class TestFileUploadSecurity:
             response = client.post(
                 "/v1/process",
                 files={"file": ("malware.exe", fake_audio, "application/x-executable")},
-                data={"features": json.dumps(["clean_transcript"])},
+                data={"features": ["clean_transcript"]},
+                headers={"X-API-Key": "dev_api_key_change_in_production"},
             )
 
             # Should be rejected
@@ -310,7 +370,8 @@ class TestFileUploadSecurity:
                 response = client.post(
                     "/v1/process",
                     files={"file": (filename, fake_file, "application/octet-stream")},
-                    data={"features": json.dumps(["clean_transcript"])},
+                    data={"features": ["clean_transcript"]},
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
                 )
 
                 # Should be rejected
@@ -338,7 +399,8 @@ class TestFileUploadSecurity:
                                     "audio/wav",
                                 )
                             },
-                            data={"features": json.dumps(["clean_transcript"])},
+                            data={"features": ["clean_transcript"]},
+                            headers={"X-API-Key": "dev_api_key_change_in_production"},
                         )
 
                         if response.status_code == HTTP_202_ACCEPTED:
@@ -348,9 +410,9 @@ class TestFileUploadSecurity:
                             # Check arguments - should include task_id
                             call_args = mock_save.call_args
                             # task_id should be in arguments
-                            assert (
-                                len(call_args[0]) >= 2
-                            ), "save_audio_file_streaming should receive task_id"
+                            assert len(call_args[0]) >= 2, (
+                                "save_audio_file_streaming should receive task_id"
+                            )
 
     def test_file_streaming_with_aiofiles(self, app):
         """Files should be streamed to disk using aiofiles, not loaded entirely in memory."""
@@ -360,9 +422,9 @@ class TestFileUploadSecurity:
         source = inspect.getsource(save_audio_file_streaming)
 
         # Should use aiofiles for streaming
-        assert (
-            "aiofiles" in source or "async with" in source
-        ), "save_audio_file_streaming should use aiofiles for streaming to prevent memory exhaustion"
+        assert "aiofiles" in source or "async with" in source, (
+            "save_audio_file_streaming should use aiofiles for streaming to prevent memory exhaustion"
+        )
 
         # Should NOT load entire file in memory
         assert (
@@ -377,14 +439,12 @@ class TestFileUploadSecurity:
         source = inspect.getsource(save_audio_file_streaming)
 
         # Should have chunk size defined
-        assert (
-            "chunk_size" in source.lower() or "64" in source or "8192" in source
-        ), "Should define chunk size for streaming"
+        assert "chunk_size" in source.lower() or "64" in source or "8192" in source, (
+            "Should define chunk size for streaming"
+        )
 
         # Should use while loop or iteration for chunk reading
-        assert (
-            "while" in source or "for chunk" in source
-        ), "Should iterate over chunks"
+        assert "while" in source or "for chunk" in source, "Should iterate over chunks"
 
 
 class TestStatusController:
@@ -402,7 +462,10 @@ class TestStatusController:
             with patch("src.api.routes.get_task_from_redis") as mock_get:
                 mock_get.return_value = None
 
-                response = client.get(f"/v1/status/{task_id}")
+                response = client.get(
+                    f"/v1/status/{task_id}",
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
                 assert response.status_code == HTTP_404_NOT_FOUND
 
@@ -417,7 +480,10 @@ class TestStatusController:
                     "submitted_at": "2025-10-08T10:00:00",
                 }
 
-                response = client.get(f"/v1/status/{task_id}")
+                response = client.get(
+                    f"/v1/status/{task_id}",
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
                 assert response.status_code == HTTP_200_OK
                 data = response.json()
@@ -435,7 +501,10 @@ class TestStatusController:
                     "submitted_at": "2025-10-08T10:00:00",
                 }
 
-                response = client.get(f"/v1/status/{task_id}")
+                response = client.get(
+                    f"/v1/status/{task_id}",
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
                 assert response.status_code == HTTP_200_OK
                 data = response.json()
@@ -465,7 +534,6 @@ class TestStatusController:
                             "name": "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit",
                             "checkpoint_hash": "f6g7h8i9j0k1",
                             "quantization": "awq-4bit",
-                            "chat_template": "qwen3_nonthinking",
                             "thinking": False,
                             "reasoning_parser": None,
                             "structured_output": {
@@ -497,7 +565,10 @@ class TestStatusController:
                     },
                 }
 
-                response = client.get(f"/v1/status/{task_id}")
+                response = client.get(
+                    f"/v1/status/{task_id}",
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
                 assert response.status_code == HTTP_200_OK
                 data = response.json()
@@ -519,12 +590,143 @@ class TestStatusController:
                     "error": "Model loading failed",
                 }
 
-                response = client.get(f"/v1/status/{task_id}")
+                response = client.get(
+                    f"/v1/status/{task_id}",
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
                 assert response.status_code == HTTP_200_OK
                 data = response.json()
                 assert data["status"] == TaskStatus.FAILED
                 assert "error" in data
+
+
+class TestAuthenticationGuards:
+    """Test authentication guards on endpoints."""
+
+    @pytest.mark.asyncio
+    async def test_process_endpoint_requires_auth(self):
+        """POST /v1/process should return 401 without API key."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+
+        async with AsyncTestClient(app=app) as client:
+            # No X-API-Key header
+            response = await client.post("/v1/process")
+            assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_process_endpoint_accepts_valid_api_key(self):
+        """POST /v1/process should accept valid API key."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+        from src.config import settings
+
+        async with AsyncTestClient(app=app) as client:
+            headers = {"X-API-Key": settings.secret_api_key}
+            # Will fail validation but shouldn't be 401
+            response = await client.post("/v1/process", headers=headers)
+            assert response.status_code != 401
+
+    @pytest.mark.asyncio
+    async def test_status_endpoint_requires_auth(self):
+        """GET /v1/status/{task_id} should return 401 without API key."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+
+        async with AsyncTestClient(app=app) as client:
+            task_id = uuid.uuid4()
+            response = await client.get(f"/v1/status/{task_id}")
+            assert response.status_code == 401
+
+    @pytest.mark.asyncio
+    async def test_models_endpoint_no_auth_required(self):
+        """GET /v1/models should work without authentication."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+
+        async with AsyncTestClient(app=app) as client:
+            response = await client.get("/v1/models")
+            # Should NOT return 401
+            assert response.status_code != 401
+
+    @pytest.mark.asyncio
+    async def test_templates_endpoint_no_auth_required(self):
+        """GET /v1/templates should work without authentication."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+
+        async with AsyncTestClient(app=app) as client:
+            response = await client.get("/v1/templates")
+            assert response.status_code != 401
+
+    @pytest.mark.asyncio
+    async def test_health_endpoint_no_auth_required(self):
+        """GET /health should work without authentication."""
+        from litestar.testing import AsyncTestClient
+        from src.api.main import app
+
+        async with AsyncTestClient(app=app) as client:
+            response = await client.get("/health")
+            assert response.status_code == 200
+
+
+class TestASRFactoryIntegration:
+    """Test ASRFactory integration in get_available_models."""
+
+    def test_returns_registered_backends_from_factory(self):
+        """Should return models from ASRFactory.BACKENDS."""
+        from src.api.routes import get_available_models
+        from src.processors.asr.factory import ASRFactory
+
+        result = get_available_models()
+
+        # Should return a model for each registered backend
+        assert len(result.models) == len(ASRFactory.BACKENDS)
+
+        # Should include whisper and chunkformer
+        model_ids = [m.id for m in result.models]
+        assert "whisper" in model_ids
+        assert "chunkformer" in model_ids
+
+    def test_model_entries_have_required_fields(self):
+        """Each model should have id, name, description, type, version."""
+        from src.api.routes import get_available_models
+
+        result = get_available_models()
+
+        for model in result.models:
+            assert model.id
+            assert model.name
+            assert model.description
+            assert model.type == "ASR"
+            assert model.version
+
+    def test_returns_dynamic_list_not_hardcoded(self):
+        """Should return dynamic list from factory, not hardcoded."""
+        from src.api.routes import get_available_models
+        from src.processors.asr.factory import ASRFactory
+
+        # Get current result
+        result = get_available_models()
+        original_count = len(result.models)
+
+        # Register a new backend temporarily
+        class DummyBackend:
+            pass
+
+        ASRFactory.register_backend("test_backend", DummyBackend)
+
+        try:
+            # Should now return one more model
+            result = get_available_models()
+            assert len(result.models) == original_count + 1
+
+            model_ids = [m.id for m in result.models]
+            assert "test_backend" in model_ids
+        finally:
+            # Cleanup
+            ASRFactory.BACKENDS.pop("test_backend", None)
 
 
 class TestModelsController:

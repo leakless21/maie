@@ -11,11 +11,19 @@ from Levenshtein import distance as levenshtein_distance
 from loguru import logger
 
 from src.config import settings
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 from src.processors.base import LLMBackend, LLMResult
-from src.processors.llm.config import GenerationConfig, build_generation_config
+from src.processors.llm.config import GenerationConfig, build_generation_config, calculate_dynamic_max_tokens
 from src.processors.prompt.renderer import PromptRenderer
 from src.processors.prompt.template_loader import TemplateLoader
-from src.tooling.vllm_utils import apply_overrides_to_sampling, calculate_checkpoint_hash, get_model_info
+from src.tooling.vllm_utils import (
+    apply_overrides_to_sampling,
+    calculate_checkpoint_hash,
+    get_model_info,
+)
 
 from .schema_validator import (
     load_template_schema,
@@ -111,7 +119,7 @@ class LLMProcessor(LLMBackend):
             logger.info("No quantization method detected, using default")
             return None
 
-        except Exception as e:
+        except (AttributeError, KeyError, TypeError, ValueError) as e:
             logger.warning(f"Failed to detect quantization method: {e}")
             return None
 
@@ -126,6 +134,25 @@ class LLMProcessor(LLMBackend):
             return
         try:
             from vllm import LLM
+            import logging
+
+            # Configure vLLM logging based on verbose setting
+            vllm_logger = logging.getLogger("vLLM")
+            if settings.verbose_components:
+                vllm_logger.setLevel(logging.INFO)
+                # Ensure logs are visible on console when verbose
+                has_stream = any(
+                    isinstance(h, logging.StreamHandler) for h in vllm_logger.handlers
+                )
+                if not has_stream:
+                    stream_handler = logging.StreamHandler()
+                    stream_handler.setLevel(logging.INFO)
+                    vllm_logger.addHandler(stream_handler)
+                    vllm_logger.propagate = False
+                logger.info("Verbose mode enabled for vLLM")
+            else:
+                # Keep vLLM quiet (WARNING level)
+                vllm_logger.setLevel(logging.WARNING)
 
             # Determine model name based on task or use default
             model_name = kwargs.get("model_name", self.model_path)
@@ -151,6 +178,17 @@ class LLMProcessor(LLMBackend):
             if quantization_method:
                 llm_args["quantization"] = quantization_method
 
+            if settings.llm_enhance_max_num_seqs is not None:
+                llm_args["max_num_seqs"] = settings.llm_enhance_max_num_seqs
+            if settings.llm_enhance_max_num_batched_tokens is not None:
+                llm_args[
+                    "max_num_batched_tokens"
+                ] = settings.llm_enhance_max_num_batched_tokens
+            if settings.llm_enhance_max_num_partial_prefills is not None:
+                llm_args[
+                    "max_num_partial_prefills"
+                ] = settings.llm_enhance_max_num_partial_prefills
+
             self.model = LLM(**llm_args)
 
             # Calculate checkpoint hash for versioning (NFR-1)
@@ -166,7 +204,7 @@ class LLMProcessor(LLMBackend):
                         "model_name": model_name,
                         "checkpoint_hash": self.checkpoint_hash,
                     }
-            except Exception as e:
+            except (OSError, FileNotFoundError, RuntimeError) as e:
                 logger.warning(f"Failed to calculate model hash: {e}")
                 self.checkpoint_hash = f"unknown:{model_name}"
                 self.model_info = {
@@ -185,6 +223,15 @@ class LLMProcessor(LLMBackend):
                 "model_name": "unavailable",
                 "reason": "vLLM not installed",
             }
+        except (RuntimeError, OSError, MemoryError) as e:
+            logger.error(f"Failed to load LLM model: {e}")
+            self.model = None
+            self.checkpoint_hash = f"load_error:{str(e)[:50]}"
+            self.model_info = {
+                "model_name": "unavailable",
+                "reason": f"Load error: {e}",
+            }
+            raise
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
@@ -221,8 +268,60 @@ class LLMProcessor(LLMBackend):
                 metadata={"task": task, "fallback": True},
             )
 
-        # Use text as prompt directly for basic execution
-        prompt_text = text
+        # Handle summary task with template rendering and guided decoding
+        if task == "summary":
+            template_id = kwargs.get("template_id")
+            if not template_id:
+                logger.error("Summary task requires template_id parameter")
+                return LLMResult(
+                    text=text,
+                    tokens_used=None,
+                    model_info=self.model_info or {"model_name": "unknown"},
+                    metadata={"task": task, "error": "Missing template_id"},
+                )
+            
+            # Load schema for guided decoding
+            try:
+                schema = load_template_schema(template_id, settings.templates_dir)
+                logger.debug(f"Loaded schema for template {template_id}")
+            except Exception as e:
+                logger.error(f"Failed to load schema for template {template_id}: {e}")
+                return LLMResult(
+                    text=text,
+                    tokens_used=None,
+                    model_info=self.model_info or {"model_name": "unknown"},
+                    metadata={"task": task, "error": f"Schema load failed: {e}"},
+                )
+            
+            # Render prompt with template
+            try:
+                prompt_text = self.prompt_renderer.render(
+                    template_id,
+                    transcript=text,
+                    schema=json.dumps(schema, ensure_ascii=False, indent=2),
+                    add_generation_prompt=True
+                )
+                logger.debug(f"Rendered prompt for template {template_id}")
+            except Exception as e:
+                logger.error(f"Failed to render template {template_id}: {e}")
+                return LLMResult(
+                    text=text,
+                    tokens_used=None,
+                    model_info=self.model_info or {"model_name": "unknown"},
+                    metadata={"task": task, "error": f"Template render failed: {e}"},
+                )
+            
+            # Set up guided decoding if not already provided
+            if "guided_decoding" not in kwargs:
+                try:
+                    from vllm.sampling_params import GuidedDecodingParams
+                    kwargs["guided_decoding"] = GuidedDecodingParams(json=schema)
+                    logger.debug("Set up guided JSON decoding")
+                except Exception as e:
+                    logger.warning(f"Failed to set up guided decoding: {e}")
+        else:
+            # Use text as prompt directly for other tasks
+            prompt_text = text
 
         # Select environment config based on task
         env_config = (
@@ -249,6 +348,35 @@ class LLMProcessor(LLMBackend):
             "prompt_logprobs",
         }
         runtime_overrides_dict = {k: kwargs[k] for k in candidate_keys if k in kwargs}
+        
+        # Calculate dynamic max_tokens if not explicitly provided and tokenizer is available
+        if "max_tokens" not in runtime_overrides_dict and "max_new_tokens" not in runtime_overrides_dict:
+            if self.tokenizer is not None:
+                try:
+                    # Get model's max_model_len from settings
+                    max_model_len = getattr(settings, f"llm_{task}_max_model_len", 32768)
+                    if hasattr(settings, f"llm_{task}_max_model_len"):
+                        max_model_len = getattr(settings, f"llm_{task}_max_model_len")
+                    elif hasattr(settings, "llm_enhance_max_model_len"):
+                        max_model_len = getattr(settings, "llm_enhance_max_model_len")
+                    else:
+                        max_model_len = 32768  # fallback
+                    
+                    # Calculate dynamic max_tokens
+                    dynamic_max_tokens = calculate_dynamic_max_tokens(
+                        input_text=prompt_text,  # Use prompt_text (after template rendering for summary)
+                        tokenizer=self.tokenizer,
+                        task=task,
+                        max_model_len=max_model_len,
+                        user_override=runtime_overrides_dict.get("max_tokens")
+                    )
+                    runtime_overrides_dict["max_tokens"] = dynamic_max_tokens
+                    logger.debug(f"Calculated dynamic max_tokens for {task}: {dynamic_max_tokens}")
+                except Exception as e:
+                    logger.warning(f"Failed to calculate dynamic max_tokens, using defaults: {e}")
+            else:
+                logger.debug("Tokenizer not available yet, skipping dynamic max_tokens calculation")
+        
         runtime_config = GenerationConfig(**runtime_overrides_dict)
 
         # Extract guided_decoding if present
@@ -262,17 +390,29 @@ class LLMProcessor(LLMBackend):
             runtime_overrides=runtime_config,
         )
 
+
         # Convert to SamplingParams
         sampling_params_dict = final_config.to_sampling_params()
 
+        overrides = dict(sampling_params_dict)
+        if guided_decoding is not None:
+            overrides["guided_decoding"] = guided_decoding
+
         try:
-            from vllm import SamplingParams
+            base_sampling = None
+            if hasattr(self.model, "get_default_sampling_params"):
+                try:
+                    base_sampling = self.model.get_default_sampling_params()
+                except Exception:
+                    base_sampling = None
 
-            sampling = SamplingParams(
-                **sampling_params_dict, guided_decoding=guided_decoding
-            )
+            if base_sampling is None:
+                from vllm import SamplingParams
 
-            # Generate text
+                sampling = SamplingParams(**overrides)
+            else:
+                sampling = apply_overrides_to_sampling(base_sampling, overrides)
+
             outputs = self.model.generate([prompt_text], sampling)
             generated_text = outputs[0].outputs[0].text if outputs else ""
 
@@ -280,11 +420,49 @@ class LLMProcessor(LLMBackend):
             logger.error(f"LLM generation failed: {e}")
             generated_text = text
 
+        # For summary tasks, validate and parse JSON output
+        result_metadata = {"task": task, "config": sampling_params_dict}
+        if task == "summary":
+            template_id = kwargs.get("template_id")
+            try:
+                # Parse JSON output
+                structured_output = json.loads(generated_text)
+                
+                # Validate against schema
+                if template_id:
+                    schema = load_template_schema(template_id, settings.templates_dir)
+                    # validate_llm_output returns (validated_output, error_message)
+                    validated_output, error_message = validate_llm_output(
+                        json.dumps(structured_output),
+                        schema
+                    )
+                    
+                    if validated_output is not None:
+                        result_metadata["structured_summary"] = validated_output
+                        result_metadata["validation"] = "passed"
+                        logger.info(f"Summary validation passed for {template_id}")
+                    else:
+                        result_metadata["validation"] = "failed"
+                        result_metadata["validation_error"] = error_message
+                        logger.warning(f"Summary validation failed: {error_message}")
+                else:
+                    result_metadata["structured_summary"] = structured_output
+                    result_metadata["validation"] = "skipped"
+                    
+            except json.JSONDecodeError as e:
+                logger.error(f"Failed to parse JSON output: {e}")
+                result_metadata["validation"] = "json_parse_error"
+                result_metadata["parse_error"] = str(e)
+            except Exception as e:
+                logger.error(f"Summary validation error: {e}")
+                result_metadata["validation"] = "error"
+                result_metadata["error"] = str(e)
+
         return LLMResult(
             text=generated_text or text,
             tokens_used=None,
             model_info=self.model_info or {"model_name": "unknown"},
-            metadata={"task": task, "config": sampling_params_dict},
+            metadata=result_metadata,
         )
 
     def enhance_text(self, text: str, **kwargs) -> Dict[str, Any]:
@@ -500,7 +678,7 @@ class LLMProcessor(LLMBackend):
                             "model_info": result.model_info,
                         }
 
-            except Exception as e:
+            except (RuntimeError, ValueError, TypeError, json.JSONDecodeError) as e:
                 logger.error(
                     f"Summary generation failed (attempt {retry_count + 1}): {e}"
                 )
@@ -566,7 +744,6 @@ class LLMProcessor(LLMBackend):
             ),
             "checkpoint_hash": self.checkpoint_hash or "unknown",
             "quantization": "awq-4bit",
-            "chat_template": "qwen3_nonthinking",
             "thinking": False,
             "reasoning_parser": None,
             "structured_output": {

@@ -40,9 +40,9 @@ def test_basic_dependencies_registered():
     """Application should register validation dependencies (auth uses guards now)."""
     deps = getattr(api_main.app, "dependencies", None)
     assert isinstance(deps, dict), "Expected app.dependencies to be a dict"
-    assert (
-        "validate_request_data" in deps
-    ), "Missing 'validate_request_data' dependency registration"
+    assert "validate_request_data" in deps, (
+        "Missing 'validate_request_data' dependency registration"
+    )
     # Note: api_key_guard is now applied via decorator, not registered as dependency
 
 

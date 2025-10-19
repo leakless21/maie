@@ -6,12 +6,14 @@ model verification on startup, and proper worker configuration.
 """
 
 import sys
+from pathlib import Path
 
 from redis import Redis
 from rq import Worker
 
 # Opt-in: import logging configuration helpers defensively.
 from src.config import configure_logging, get_logger, settings
+from src.config.logging import get_module_logger
 
 
 def setup_redis_connection() -> Redis:
@@ -36,12 +38,11 @@ def verify_models() -> bool:
     # Implementation will depend on the specific model loading mechanism
     get_logger().info("Verifying models are available...")
 
-    # Check if required model directories exist (per TDD section 3.7)
-    # Use the new config with Path objects
+    # Check if required model directories exist using configured paths from settings
     required_paths = [
-        settings.get_model_path("whisper/erax-wow-turbo"),
-        settings.get_model_path("chunkformer/large-vie"),
-        settings.get_model_path("llm/qwen3-4b-awq"),
+        Path(settings.whisper_model_path),
+        Path(settings.chunkformer_model_path),
+        Path(settings.llm_enhance_model),
     ]
 
     missing = [str(p) for p in required_paths if not p.exists()]
@@ -64,9 +65,7 @@ def verify_models() -> bool:
             get_logger().info("All required models and modules are available")
             return True
         get_logger().error(
-            "Missing required modules: ASRFactory=%s, LLM=%s",
-            has_asr_factory,
-            has_llm,
+            f"Missing required modules: ASRFactory={has_asr_factory}, LLM={has_llm}"
         )
         return False
     except Exception:
@@ -97,10 +96,29 @@ def start_worker() -> None:
 
 
 if __name__ == "__main__":
+    # Enforce spawn start method for CUDA compatibility with vLLM
+    import multiprocessing as mp
+    try:
+        if mp.get_start_method(allow_none=True) != "spawn":
+            mp.set_start_method("spawn", force=True)
+    except RuntimeError:
+        # Start method already set, ignore
+        pass
+    
     # Apply opt-in Loguru configuration at worker startup.
     # Always configure Loguru at startup.
     logger = configure_logging()
     logger = logger if logger is not None else get_logger()
+    logger = get_module_logger(__name__)
     logger.info("Loguru configuration active (phase1) - worker")
+    try:
+        from src.config import settings as _settings_for_log
+        logger.info(
+            "verbose_components={} debug={}",
+            _settings_for_log.verbose_components,
+            _settings_for_log.debug,
+        )
+    except Exception:
+        pass
 
     start_worker()

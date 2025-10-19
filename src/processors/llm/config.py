@@ -14,6 +14,11 @@ from typing import Any, Dict, List, Optional
 
 from loguru import logger
 
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 
 @dataclass
 class GenerationConfig:
@@ -106,7 +111,7 @@ def get_library_defaults() -> GenerationConfig:
         temperature=1.0,
         top_p=1.0,
         top_k=-1,
-        max_tokens=16,
+        max_tokens=4096,  # High limit allows natural EOS termination; vLLM doesn't support None
         repetition_penalty=1.0,
         presence_penalty=0.0,
         frequency_penalty=0.0,
@@ -182,6 +187,10 @@ def build_generation_config(
     2. Environment overrides
     3. Model generation_config.json
     4. Library defaults (vLLM)
+    
+    Note: max_tokens defaults to 2048 at the library level as a conservative fallback.
+    The LLMProcessor now uses dynamic calculation to optimize max_tokens based on
+    input length and task type, which can be overridden at any level if needed.
 
     Args:
         model_path: Path to the model directory
@@ -205,5 +214,66 @@ def build_generation_config(
     if runtime_overrides is not None:
         config = runtime_overrides.merge_with(config)
 
+
     logger.debug(f"Final generation config: {config}")
     return config
+
+
+def calculate_dynamic_max_tokens(
+    input_text: str,
+    tokenizer,
+    task: str,
+    max_model_len: int,
+    user_override: Optional[int] = None
+) -> int:
+    """
+    Calculate dynamic max_tokens based on input length and task.
+    
+    This function is now actively used by LLMProcessor to optimize token allocation
+    for different task types based on input length and model capacity.
+    
+    Industry standard ratios:
+    - Enhancement: 1:1 + 10% buffer (whole text rewrite)
+    - Summarization: 30% compression (concise output)
+    
+    Args:
+        input_text: Input text to process
+        tokenizer: vLLM tokenizer instance
+        task: 'enhancement' or 'summary'
+        max_model_len: Model's maximum context length
+        user_override: If provided, use this instead
+        
+    Returns:
+        Calculated max_tokens value
+    """
+    if user_override is not None:
+        return user_override
+    
+    # Count input tokens using vLLM tokenizer
+    input_tokens = len(tokenizer.encode(input_text))
+    available_tokens = max_model_len - input_tokens - 128
+    # Task-specific ratios (industry standard)
+    if task == "enhancement":
+        # Enhancement: 1:1 ratio + 10% buffer
+        output_tokens = int(input_tokens * 1.1) + 64
+        min_tokens = 256
+        # Enhancement can use almost full context: max_model_len - input - safety buffer
+        max_tokens = available_tokens
+    else:  # summarization
+        # Summarization: 30% compression ratio
+        output_tokens = int(input_tokens * 0.3)
+        min_tokens = 128
+        # Summarization: more conservative limit since output << input
+        max_tokens = int(available_tokens * 0.5)
+    
+    # Apply task-specific bounds
+    output_tokens = max(min_tokens, min(output_tokens, max_tokens))
+    
+    # Ensure total doesn't exceed model context (leave 128 token safety margin)
+    # Note: This is especially important for enhancement tasks where input ≈ output,
+    # meaning total context ≈ 2× input size
+   
+    output_tokens = min(output_tokens, available_tokens)
+    
+    # Final safety check: never go below minimum
+    return max(output_tokens, min_tokens)

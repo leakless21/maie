@@ -59,9 +59,9 @@ def test_modules_expose_logger_objects():
         assert hasattr(mod, "logger"), f"{mod.__name__} missing logger"
         log = getattr(mod, "logger")
         for method in ("debug", "info", "warning", "error"):
-            assert callable(
-                getattr(log, method, None)
-            ), f"{mod.__name__}.logger missing {method}"
+            assert callable(getattr(log, method, None)), (
+                f"{mod.__name__}.logger missing {method}"
+            )
 
 
 def test_load_model_generation_config_logs_and_parses(tmp_path, monkeypatch):

@@ -4,7 +4,7 @@ Base module for MAIE processors containing abstract interfaces and common data s
 
 import asyncio
 from abc import ABC, abstractmethod
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
@@ -21,12 +21,10 @@ from typing import (
 @dataclass
 class ASRResult:
     """
-    Data structure for ASR (Automatic Speech Recognition) results.
+    Pure dataclass for ASR (Automatic Speech Recognition) results.
 
-    Exposes a dict-like interface so callers can use both attribute and
-    mapping-style access (e.g., result.text and result["text"]). This keeps
-    backward compatibility with tests that expect a plain dict while
-    maintaining type safety for newer code.
+    Provides attribute-based access with basic validation for data integrity.
+    Use dataclasses.asdict() for serialization when needed.
     """
 
     text: str
@@ -37,21 +35,54 @@ class ASRResult:
     # Structured error information (if execution failed)
     error: Optional[Dict[str, Any]] = None
 
-    # --- dict-like helpers ---
+    def __post_init__(self) -> None:
+        """Validate data integrity after initialization."""
+        # Basic validation rules
+        if not isinstance(self.text, str):
+            raise TypeError(f"text must be str, got {type(self.text).__name__}")
+
+        if self.confidence is not None:
+            if not isinstance(self.confidence, (int, float)):
+                raise TypeError(
+                    f"confidence must be numeric, got {type(self.confidence).__name__}"
+                )
+            if not (0.0 <= self.confidence <= 1.0):
+                raise ValueError(
+                    f"confidence must be between 0.0 and 1.0, got {self.confidence}"
+                )
+
+        if self.duration is not None:
+            if not isinstance(self.duration, (int, float)):
+                raise TypeError(
+                    f"duration must be numeric, got {type(self.duration).__name__}"
+                )
+            if self.duration < 0:
+                raise ValueError(f"duration must be non-negative, got {self.duration}")
+
+        if self.language is not None and not isinstance(self.language, str):
+            raise TypeError(f"language must be str, got {type(self.language).__name__}")
+
+        if self.segments is not None and not isinstance(self.segments, list):
+            raise TypeError(
+                f"segments must be list, got {type(self.segments).__name__}"
+            )
+
+        if self.error is not None and not isinstance(self.error, dict):
+            raise TypeError(f"error must be dict, got {type(self.error).__name__}")
+
     def to_dict(self) -> Dict[str, Any]:
+        """Return a dictionary representation of the result."""
+        from dataclasses import asdict
+
         return asdict(self)
 
     def __getitem__(self, key: str) -> Any:
         return self.to_dict()[key]
 
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key: object) -> bool:
+        if not isinstance(key, str):
+            return False
         return key in self.to_dict()
-
-    def keys(self):
-        return self.to_dict().keys()
-
-    def items(self):
-        return self.to_dict().items()
 
     def get(self, key: str, default: Any = None) -> Any:
         return self.to_dict().get(key, default)
@@ -131,12 +162,31 @@ class Processor(ABC):
 
     async def async_execute(self, *args, **kwargs) -> Any:
         """
-        Async-compatible execution helper. By default runs the sync `execute`
-        in the default thread pool executor. Backends may override with a true
-        async implementation.
+        Async-compatible execution helper.
+
+        Preferred behavior:
+        - Call the current running loop's run_in_executor and pass through
+          positional and keyword arguments (this allows tests that mock
+          loop.run_in_executor to observe the same call signature).
+        - If the loop's run_in_executor doesn't accept keyword arguments,
+          fall back to using functools.partial to bind kwargs.
+        - If no running loop is available, fall back to asyncio.to_thread.
         """
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.execute, *args, **kwargs)
+        try:
+            loop = asyncio.get_running_loop()
+            try:
+                # Try to call run_in_executor with kwargs (works with mocked loops)
+                return await loop.run_in_executor(None, self.execute, *args, **kwargs)
+            except TypeError:
+                # Real event loop's run_in_executor may not accept kwargs; wrap call.
+                from functools import partial
+
+                return await loop.run_in_executor(
+                    None, partial(self.execute, *args, **kwargs)
+                )
+        except RuntimeError:
+            # No running loop — run in thread
+            return await asyncio.to_thread(self.execute, *args, **kwargs)
 
     # Context manager support (useful for deterministic resource cleanup)
     def __enter__(self):

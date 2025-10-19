@@ -13,6 +13,10 @@ from pathlib import Path
 from loguru import logger
 
 from src.config import settings
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 
 
 def check_pixi_availability():

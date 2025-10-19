@@ -12,6 +12,11 @@ from typing import Any, Dict
 
 from loguru import logger
 
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 
 def apply_overrides_to_sampling(base_params: Any, overrides: Dict[str, Any]) -> Any:
     """

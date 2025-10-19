@@ -18,7 +18,7 @@ from typing import Any, Dict, Optional
 
 from loguru import logger as _loguru_logger  # type: ignore
 
-from .settings import settings
+from .loader import settings
 
 correlation_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "correlation_id", default=None
@@ -61,7 +61,8 @@ _SENSITIVE_FIELD_NAMES = {
 _SENSITIVE_VALUE_PATTERNS = [
     re.compile(r"(?i)(bearer\s+[A-Za-z0-9\-\._~+/]+=*)"),
     re.compile(r"(?i)(api[_-]?key[:=]\s*[A-Za-z0-9\-\._~+/]+=*)"),
-    re.compile(r"[A-Za-z0-9-_]{32,}"),
+    # Removed overly broad pattern: re.compile(r"[A-Za-z0-9-_]{32,}"),
+    # This was catching UUIDs, task IDs, and other legitimate identifiers
     re.compile(r"(?i)password[:=]\s*\S+"),
     re.compile(r"(?i)secret[:=]\s*\S+"),
 ]
@@ -73,7 +74,7 @@ def _mask_value(value: Any) -> Any:
         return None
     try:
         string_value = str(value)
-    except Exception:
+    except (TypeError, ValueError):
         return "REDACTED"
     if len(string_value) <= 4:
         return "REDACTED"
@@ -100,15 +101,9 @@ def _redact_extra(extra: Dict[str, Any]) -> Dict[str, Any]:
             output[key] = "REDACTED"
         elif isinstance(value, dict):
             output[key] = _redact_extra(value)
-        elif isinstance(value, (str, int, float, bool)) or value is None:
-            string_value = str(value) if value is not None else ""
-            output[key] = (
-                _mask_value(value)
-                if len(string_value) < 200
-                else _redact_text(string_value)
-            )
         else:
-            output[key] = f"<{type(value).__name__}>"
+            # Don't mask values by default, only pass them through
+            output[key] = value
     return output
 
 
@@ -124,7 +119,7 @@ def _secure_opener(path: str, flags: int):
 def _ensure_dir(path: Path) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-    except Exception:
+    except (OSError, PermissionError):
         pass
 
 
@@ -152,7 +147,7 @@ def configure_logging(
 
     Configuration source precedence:
     1) Explicit function arguments
-    2) Centralized settings from `src.config.settings`
+    2) Centralized settings from `src.config.loader`
     """
     logger = get_logger()
 
@@ -177,13 +172,14 @@ def configure_logging(
 
     try:
         _loguru_logger.remove()
-    except Exception:
+    except (ValueError, RuntimeError):
         pass
 
     def _filter_and_redact(record: Dict[str, Any]) -> bool:
         """
         Mutate the record in place:
         - Inject `request_id` from context if not present in extra.
+        - Ensure `module` key is present for consistent formatting.
         - Redact sensitive keys and value patterns.
         Returns True to allow the record to be logged.
         """
@@ -192,15 +188,20 @@ def configure_logging(
             extra = record.get("extra", {})
             if request_id_value and "request_id" not in extra:
                 extra["request_id"] = request_id_value
+
+            # Ensure module key is present for consistent formatting
+            if "module" not in extra:
+                extra["module"] = "unknown"
+
             record["extra"] = _redact_extra(extra)
 
             message = record.get("message")
             if isinstance(message, str) and message:
                 record["message"] = _redact_text(message)
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             try:
-                record["extra"] = {}
-            except Exception:
+                record["extra"] = {"module": "unknown"}
+            except (ValueError, TypeError):
                 pass
         return True
 
@@ -219,7 +220,7 @@ def configure_logging(
         else:
             console_format = (
                 settings.loguru_format
-                or "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | {message} | <cyan>{extra}</cyan>"
+                or "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <blue>{extra[module]}</blue> | {message} | <cyan>{extra}</cyan>"
             )
             _loguru_logger.add(
                 console_sink,
@@ -231,7 +232,7 @@ def configure_logging(
                 filter=_filter_and_redact,
                 enqueue=True,
             )
-    except Exception:
+    except (ValueError, OSError, PermissionError):
         pass
 
     if dirpath is not None:
@@ -266,7 +267,7 @@ def configure_logging(
                 opener=_secure_opener,
                 enqueue=True,
             )
-        except Exception:
+        except (ValueError, OSError, PermissionError):
             pass
 
     return _loguru_logger
@@ -305,7 +306,45 @@ def logger_with_context(**extra) -> Any:
         if request_id_value:
             extra.setdefault("request_id", request_id_value)
         return logger.bind(**extra)
-    except Exception:
+    except (ValueError, TypeError, AttributeError):
+        return logger
+
+
+def get_module_logger(module_name: Optional[str] = None) -> Any:
+    """
+    Return a logger bound with the current module name for better debugging.
+
+    Usage:
+        logger = get_module_logger(__name__)
+        logger.info("Processing started")
+
+    Args:
+        module_name: The module name (typically __name__). If None, attempts to detect from caller.
+
+    Returns:
+        Logger bound with module information
+    """
+    logger = get_logger()
+    try:
+        if module_name is None:
+            # Try to get module name from caller's frame
+            import inspect
+
+            frame = inspect.currentframe()
+            if frame and frame.f_back:
+                module_name = frame.f_back.f_globals.get("__name__", "unknown")
+
+        if module_name:
+            # Clean up module name for readability
+            if module_name.startswith("src."):
+                module_name = module_name[4:]  # Remove 'src.' prefix
+            elif module_name.startswith("tests."):
+                module_name = module_name[6:]  # Remove 'tests.' prefix
+
+            return logger.bind(module=module_name)
+        else:
+            return logger
+    except (ValueError, TypeError, AttributeError):
         return logger
 
 
@@ -318,4 +357,5 @@ __all__ = [
     "generate_correlation_id",
     "correlation_scope",
     "logger_with_context",
+    "get_module_logger",
 ]

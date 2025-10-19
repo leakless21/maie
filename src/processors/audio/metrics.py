@@ -59,8 +59,8 @@ class AudioMetricsCollector:
             vad_coverage = active_frames / num_frames if num_frames > 0 else 0.0
             return vad_coverage
 
-        except Exception as e:
-            raise ValueError(f"Failed to calculate VAD coverage: {str(e)}")
+        except (OSError, ValueError, IndexError) as e:
+            raise ValueError(f"Failed to calculate VAD coverage: {str(e)}") from e
 
     def calculate_confidence(self, audio_path: str) -> float:
         """Calculate overall audio confidence score.

@@ -28,7 +28,6 @@ def sample_llm():
         "name": "qwen",
         "checkpoint_hash": "def456",
         "quantization": "int8",
-        "chat_template": "generic_summary_v1",
         "thinking": True,
         "reasoning_parser": None,
         "structured_output": {"type": "json"},
@@ -68,7 +67,7 @@ def test_process_request_defaults_and_template_validation():
 def test_process_response_and_status_response_roundtrip():
     """RED: ProcessResponse retains task_id; StatusResponseSchema.status serializes to 'PENDING'."""
     tid = uuid4()
-    resp = schemas.ProcessResponse(task_id=tid)
+    resp = schemas.ProcessResponse(task_id=tid, status="PENDING")
     j = resp.model_dump()
     assert j["task_id"] == tid
 

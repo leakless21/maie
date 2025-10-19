@@ -92,7 +92,7 @@ def pytest_configure(config):
 def sanitize_test_environment():
     """
     Sanitize environment variables before tests to ensure consistent defaults.
-    
+
     Aligned with best-practices.md: tests should validate code defaults,
     not inherit unpredictable developer machine environment.
     """
@@ -106,54 +106,25 @@ def sanitize_test_environment():
         "LLM_ENHANCE_TEMPERATURE",
         "LLM_SUM_MODEL",
         "LLM_SUM_TOP_P",
-        "LLM_SUM_TOP_K", 
+        "LLM_SUM_TOP_K",
         "LLM_SUM_MAX_TOKENS",
         "LLM_SUM_TEMPERATURE",
         "WHISPER_LANGUAGE",
         "TOP_P",
         "GPU_MEMORY_UTILIZATION",
     ]
-    
+
     original_values = {}
     for key in env_to_clear:
         if key in os.environ:
             original_values[key] = os.environ[key]
             del os.environ[key]
-    
+
     yield
-    
+
     # Restore original environment
     for key, value in original_values.items():
         os.environ[key] = value
-
-
-@pytest.fixture(autouse=True)
-def setup_huggingface_cache(tmp_path):
-    """Set up a writable Hugging Face cache directory for tests."""
-
-    # Create a temporary directory for HF cache
-    hf_cache_dir = tmp_path / "huggingface_cache"
-    hf_cache_dir.mkdir()
-
-    # Set environment variables
-    original_hf_home = os.environ.get("HF_HOME")
-    original_hf_cache = os.environ.get("HUGGINGFACE_HUB_CACHE")
-
-    os.environ["HF_HOME"] = str(hf_cache_dir)
-    os.environ["HUGGINGFACE_HUB_CACHE"] = str(hf_cache_dir)
-
-    yield hf_cache_dir
-
-    # Cleanup
-    if original_hf_home is not None:
-        os.environ["HF_HOME"] = original_hf_home
-    else:
-        os.environ.pop("HF_HOME", None)
-
-    if original_hf_cache is not None:
-        os.environ["HUGGINGFACE_HUB_CACHE"] = original_hf_cache
-    else:
-        os.environ.pop("HUGGINGFACE_HUB_CACHE", None)
 
 
 # ============================================================================

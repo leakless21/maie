@@ -13,6 +13,11 @@ import jsonschema
 from jsonschema import ValidationError
 from loguru import logger
 
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 
 def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any]:
     """
@@ -43,8 +48,8 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
             schema = json.load(f)
     except json.JSONDecodeError as e:
         raise ValueError(f"Invalid JSON in template file {template_file}: {e}")
-    except Exception as e:
-        raise ValueError(f"Failed to load template {template_file}: {e}")
+    except (OSError, IOError) as e:
+        raise ValueError(f"Failed to load template {template_file}: {e}") from e
 
     # Validate schema structure
     if not isinstance(schema, dict):
@@ -70,7 +75,7 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
 
 def validate_llm_output(
     output: str, schema: Dict[str, Any]
-) -> Tuple[Dict[str, Any], Optional[str]]:
+) -> Tuple[Optional[Dict[str, Any]], Optional[str]]:
     """
     Validate LLM output against JSON schema.
 

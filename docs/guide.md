@@ -14,6 +14,50 @@ You're building a **production-grade audio intelligence system** that:
 
 ---
 
+## Configuration Quick Reference (AppSettings)
+
+> The configuration system now revolves around `AppSettings` in
+> `src/config/model.py`. Load the shared instance with `from src.config
+> import settings` or construct an isolated copy with
+> `src.config.loader.get_settings()`.
+
+- **Override values** by exporting environment variables with the `APP_` prefix
+  and `__` to traverse nested sections:
+
+  ```bash
+  export APP_LOGGING__LOG_LEVEL=debug
+  export APP_PATHS__MODELS_DIR=/srv/maie/models
+  export APP_LLM_ENHANCE__MAX_NUM_SEQS=6
+  ```
+
+  These overrides also work in `.env` because the loader reads that file by
+  default. Set `ENVIRONMENT` to `development` or `production` to pick a
+  profile overlay.
+
+- **Advanced vLLM controls**: new optional fields map directly to scheduler
+  arguments documented in the vLLM project (`max_num_seqs`,
+  `max_num_batched_tokens`, `max_num_partial_prefills`). [^vllm-scheduler]
+  Use them to constrain concurrent sequence scheduling, the total prompt+decode
+  tokens processed per step, or to turn on chunked prefill for very long
+  prompts.
+
+  ```bash
+  export APP_LLM_ENHANCE__MAX_NUM_SEQS=4
+  export APP_LLM_SUM__MAX_NUM_SEQS=2
+  export APP_LLM_ENHANCE__MAX_NUM_BATCHED_TOKENS=2048
+  export APP_LLM_ENHANCE__MAX_NUM_PARTIAL_PREFILLS=2
+  ```
+
+  Leave the variables unset (or blank) to fall back to vLLM defaults.
+
+The remainder of this guide retains the deeper architectural notes from the
+original implementation plan. Names that mention `Settings` refer to the new
+`AppSettings` model unless stated otherwise.
+
+[^vllm-scheduler]: vLLM scheduler arguments such as `max_num_seqs`,
+`max_num_batched_tokens`, and `max_num_partial_prefills` are described in the
+vLLM engine configuration source (`vllm/config/scheduler.py`).
+
 ## Directory Structure
 
 ```
@@ -70,9 +114,6 @@ maie/
 │   └── prompts/                             # Jinja2 prompt templates
 │       ├── text_enhancement_v1.jinja
 │       └── meeting_notes_v1.jinja
-├── assets/
-│   └── chat-templates/                      # Optional Jinja templates
-│       └── qwen3_nonthinking.jinja
 ├── data/                                    # Runtime data (gitignored)
 │   ├── audio/
 │   ├── models/
@@ -184,7 +225,6 @@ maie/
    - `audio_dir: Path` - Upload directory (default: Path("data/audio"))
    - `models_dir: Path` - Model weights (default: Path("data/models"))
    - `templates_dir: Path` - JSON schemas (default: Path("templates"))
-   - `chat_templates_dir: Path` - Jinja templates (default: Path("assets/chat-templates"))
 
 9. **Worker Settings**:
    - `worker_name: str` - Worker identifier (default: "maie-worker")
@@ -270,7 +310,7 @@ model_config = SettingsConfigDict(
 
 3. **`EnhancementLLMVersionInfo(BaseModel)`**:
 
-   - **Fields**: name, checkpoint_hash, quantization, task (literal "text_enhancement"), chat_template, thinking, reasoning_parser, decoding_params
+   - **Fields**: name, checkpoint_hash, quantization, task (literal "text_enhancement"), thinking, reasoning_parser, decoding_params
    - Specific to enhancement task
 
 4. **`SummarizationLLMVersionInfo(BaseModel)`**:
@@ -2219,7 +2259,7 @@ class TestConfigurationBasics:
 
 3. **Application Stage**:
 
-   - COPY: `src/`, `templates/`, `assets/`
+   - COPY: `src/`, `templates/`
    - Create directories: `data/audio`, `data/models`, `data/redis`
    - EXPOSE: 8000
 
@@ -2250,7 +2290,6 @@ class TestConfigurationBasics:
    - Volumes:
      - `./data/audio:/app/data/audio` (read-write for uploads)
      - `./templates:/app/templates:ro` (read-only)
-     - `./assets:/app/assets:ro` (read-only)
      - `./.env:/app/.env:ro` (read-only)
    - Environment: `REDIS_URL=redis://redis:6379/0`
    - Depends_on: `redis` (with health condition)
@@ -2264,7 +2303,6 @@ class TestConfigurationBasics:
      - `./data/audio:/app/data/audio:ro` (read-only for processing)
      - `./data/models:/app/data/models:ro` (read-only)
      - `./templates:/app/templates:ro`
-     - `./assets:/app/assets:ro`
      - `./.env:/app/.env:ro`
    - Environment: `REDIS_URL=redis://redis:6379/0`
    - Depends_on: `redis` (with health condition)
@@ -3076,6 +3114,123 @@ docker-compose restart worker
 ---
 
 ## Critical Implementation Best Practices
+
+### Authentication Best Practices
+
+#### Development Environment Authentication
+
+**Problem Solved**: E2E tests were failing with 401 authentication errors due to inconsistent API key configuration.
+
+**Solution Implementation**: Use development profile with secure API key configuration.
+
+**Development Authentication Patterns**:
+
+```python
+# Development environment uses AppSettings with development profile
+from src.config.loader import get_settings
+
+def start_dev_environment():
+    settings = get_settings(environment="development")
+    assert settings.environment == "development"
+    assert len(settings.secret_api_key) >= 32
+    # Start services with development configuration
+```
+
+**Environment Variable Pattern**:
+
+```bash
+# Development environment setup
+export ENVIRONMENT=development
+export SECRET_API_KEY=dev_api_key_change_in_production
+export API_BASE_URL=http://localhost:8000
+
+# Verify configuration
+echo "API Key: $SECRET_API_KEY"
+echo "Length: $(echo -n $SECRET_API_KEY | wc -c) characters"
+```
+
+**Authentication Testing Guidelines**:
+
+1. **Use Development Profile for Testing**:
+   ```python
+   # Development script pattern
+   from src.config.loader import get_settings
+
+   def start_dev_environment():
+       settings = get_settings(environment="development")
+       assert settings.environment == "development"
+       assert len(settings.secret_api_key) >= 32
+       # Start services with development configuration
+   ```
+
+2. **Environment Validation**:
+   ```bash
+   # scripts/validate-dev-env.sh
+   #!/usr/bin/env bash
+   set -euo pipefail
+
+   # Validate development environment
+   if [[ "${SECRET_API_KEY:-}" != "dev_api_key_change_in_production" ]]; then
+       echo "❌ Invalid API key for development environment"
+       exit 1
+   fi
+
+   if [[ "${ENVIRONMENT:-}" != "development" ]]; then
+       echo "❌ ENVIRONMENT must be 'development' for development"
+       exit 1
+   fi
+
+   echo "✓ Development environment validated"
+   ```
+
+3. **Configuration Best Practices**:
+
+   | Practice | Implementation | Benefit |
+   |----------|---------------|---------|
+   | Dedicated dev key | Secure development key | Prevents production usage |
+   | Environment identification | `environment: "development"` | Clear environment separation |
+   | Validation scripts | Pre-flight checks | Early error detection |
+   | Type-safe configuration | Pydantic validators | Compile-time safety |
+
+**Common Authentication Issues**:
+
+```bash
+# Issue: Wrong API key length
+$ curl -H "X-API-Key: short-key" http://localhost:8000/health
+# Error: 401 Unauthorized
+
+# Solution: Use correct test key
+$ curl -H "X-API-Key: test-key-123456789012345678901234567890" \
+       http://localhost:8000/health
+# Success: 200 OK
+```
+
+**Development Workflow**:
+
+```bash
+# 1. Start development environment
+export ENVIRONMENT=development
+export SECRET_API_KEY=dev_api_key_change_in_production
+
+# 2. Validate configuration
+python scripts/validate-dev-env.py
+
+# 3. Start services
+./scripts/dev.sh --api-only &
+./scripts/dev.sh --worker-only &
+
+# 4. Test authentication
+curl -H "X-API-Key: $SECRET_API_KEY" \
+     -H "Content-Type: application/json" \
+     http://localhost:8000/health
+```
+
+**Security Considerations**:
+
+- ✅ **Secure test key**: 32+ characters prevents accidental production usage
+- ✅ **Environment isolation**: Test configuration cannot affect production
+- ✅ **Validation scripts**: Prevent configuration drift
+- ✅ **Type safety**: Pydantic validation ensures correct types
 
 ### Security Best Practices
 

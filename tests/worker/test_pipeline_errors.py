@@ -11,7 +11,7 @@ Tests error scenarios to ensure robust failure handling:
 Follows TDD.md section 3.2 error handling requirements.
 """
 
-from unittest.mock import MagicMock, Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from redis.exceptions import ConnectionError as RedisConnectionError
@@ -353,3 +353,137 @@ class TestErrorMetadata:
 
         stored_data = mock_redis_sync._data.get(task_key, {})
         assert original_message in stored_data["error"]
+
+
+class TestRQJobFailureHandling:
+    """Test that LLM load errors properly fail RQ jobs."""
+
+    @patch("src.worker.pipeline.load_llm_model")
+    def test_llm_load_error_raises_exception(self, mock_load_llm):
+        """Test that LLM load errors cause process_audio_task to raise instead of returning success."""
+        from src.worker.pipeline import process_audio_task
+        from src.api.errors import ModelLoadError
+        
+        # Setup - mock LLM load to raise error
+        mock_load_llm.side_effect = ModelLoadError(
+            message="Failed to load LLM model: CUDA driver initialization failed",
+            details={"error_type": "RuntimeError"}
+        )
+        
+        # Mock other dependencies
+        with patch("src.worker.pipeline.load_asr_model") as mock_load_asr:
+            with patch("src.worker.pipeline.execute_asr_transcription") as mock_execute_asr:
+                with patch("src.worker.pipeline.unload_asr_model") as mock_unload_asr:
+                    with patch("src.worker.pipeline.unload_llm_model") as mock_unload_llm:
+                        with patch("src.worker.pipeline.calculate_metrics") as mock_metrics:
+                            with patch("src.worker.pipeline.get_current_job") as mock_job:
+                                with patch("src.worker.pipeline.Redis") as mock_redis_class:
+                                    with patch("src.processors.audio.AudioPreprocessor") as mock_preprocessor:
+                                        # Setup mocks
+                                        mock_asr = MagicMock()
+                                        mock_load_asr.return_value = mock_asr
+                                        
+                                        mock_execute_asr.return_value = ("test transcript", 0.5, 0.8, {})
+                                        
+                                        mock_metrics.return_value = {"rtf": 0.5, "confidence": 0.8}
+                                        
+                                        mock_job.return_value = MagicMock(id="test-job-id")
+                                        
+                                        mock_redis = MagicMock()
+                                        mock_redis_class.return_value = mock_redis
+                                        
+                                        # Mock audio preprocessing
+                                        mock_preprocessor.return_value.preprocess.return_value = {
+                                            "duration": 3.0,
+                                            "sample_rate": 16000,
+                                            "channels": 1,
+                                            "normalized": False
+                                        }
+                                        
+                                        # Test parameters
+                                        task_params = {
+                                            "task_id": "test-task-id",
+                                            "audio_path": "test.wav",
+                                            "asr_backend": "whisper",
+                                            "features": ["clean_transcript", "summary"]
+                                        }
+                                        
+                                        # Execute and verify exception is raised
+                                        with pytest.raises(ModelLoadError) as exc_info:
+                                            process_audio_task(task_params)
+                                        
+                                        # Verify the error details
+                                        assert "CUDA driver initialization failed" in str(exc_info.value)
+                                        
+                                        # Verify ASR cleanup was called (LLM cleanup won't be called since it failed to load)
+                                        mock_unload_asr.assert_called_once_with(mock_asr)
+
+    @patch("src.worker.pipeline.load_llm_model")
+    def test_llm_load_error_updates_redis_status(self, mock_load_llm):
+        """Test that LLM load errors update Redis status to FAILED."""
+        from src.worker.pipeline import process_audio_task
+        from src.api.errors import ModelLoadError
+        
+        # Setup - mock LLM load to raise error
+        mock_load_llm.side_effect = ModelLoadError(
+            message="Failed to load LLM model: Engine core initialization failed",
+            details={"error_type": "RuntimeError"}
+        )
+        
+        # Mock other dependencies
+        with patch("src.worker.pipeline.load_asr_model") as mock_load_asr:
+            with patch("src.worker.pipeline.execute_asr_transcription") as mock_execute_asr:
+                with patch("src.worker.pipeline.unload_asr_model") as mock_unload_asr:
+                    with patch("src.worker.pipeline.unload_llm_model") as mock_unload_llm:
+                        with patch("src.worker.pipeline.calculate_metrics") as mock_metrics:
+                            with patch("src.worker.pipeline.get_current_job") as mock_job:
+                                with patch("src.worker.pipeline.Redis") as mock_redis_class:
+                                    with patch("src.processors.audio.AudioPreprocessor") as mock_preprocessor:
+                                        # Setup mocks
+                                        mock_asr = MagicMock()
+                                        mock_load_asr.return_value = mock_asr
+                                        
+                                        mock_execute_asr.return_value = ("test transcript", 0.5, 0.8, {})
+                                        
+                                        mock_metrics.return_value = {"rtf": 0.5, "confidence": 0.8}
+                                        
+                                        mock_job.return_value = MagicMock(id="test-job-id")
+                                        
+                                        mock_redis = MagicMock()
+                                        mock_redis_class.return_value = mock_redis
+                                        
+                                        # Mock audio preprocessing
+                                        mock_preprocessor.return_value.preprocess.return_value = {
+                                            "duration": 3.0,
+                                            "sample_rate": 16000,
+                                            "channels": 1,
+                                            "normalized": False
+                                        }
+                                        
+                                        # Test parameters
+                                        task_params = {
+                                            "task_id": "test-task-id",
+                                            "audio_path": "test.wav",
+                                            "asr_backend": "whisper",
+                                            "features": ["clean_transcript", "summary"]
+                                        }
+                                        
+                                        # Execute and verify exception is raised
+                                        with pytest.raises(ModelLoadError):
+                                            process_audio_task(task_params)
+                                        
+                                        # Verify Redis status was updated to FAILED
+                                        # The handle_processing_error function should have been called
+                                        # We can verify this by checking if hset was called
+                                        assert mock_redis.hset.called, "Redis hset should have been called"
+                                        
+                                        # Check that the status was set to FAILED
+                                        calls = mock_redis.hset.call_args_list
+                                        failed_call_found = False
+                                        for call in calls:
+                                            mapping = call[1].get("mapping", {})
+                                            if mapping.get("status") == "FAILED":
+                                                failed_call_found = True
+                                                break
+                                        
+                                        assert failed_call_found, "Redis status should be updated to FAILED"

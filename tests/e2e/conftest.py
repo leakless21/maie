@@ -13,7 +13,7 @@ def api_base_url():
 
 @pytest.fixture(scope="session")
 def api_key():
-    return os.getenv("SECRET_API_KEY", "test-key")
+    return os.getenv("SECRET_API_KEY", "test-key-123456789012345678901234567890")
 
 
 @pytest.fixture(scope="session")
@@ -21,8 +21,29 @@ def test_assets_dir():
     return Path(__file__).parent / "assets"
 
 
+@pytest.fixture(scope="session")
+def verify_api_running(api_base_url):
+    """Verify API server is running before running tests"""
+    try:
+        response = requests.get(f"{api_base_url}/health", timeout=5)
+        if response.status_code != 200:
+            pytest.exit(
+                f"API server at {api_base_url} returned status {response.status_code}. "
+                f"Start the API with: ./scripts/dev.sh --api-only",
+                returncode=1,
+            )
+    except requests.exceptions.ConnectionError:
+        pytest.exit(
+            f"API server not running at {api_base_url}. "
+            f"Start it with: ./scripts/dev.sh --api-only",
+            returncode=1,
+        )
+    except Exception as e:
+        pytest.exit(f"Failed to connect to API: {e}", returncode=1)
+
+
 @pytest.fixture
-def api_client(api_base_url, api_key):
+def api_client(api_base_url, api_key, verify_api_running):
     """API client fixture for E2E tests"""
 
     class APIClient:
@@ -58,8 +79,14 @@ def api_client(api_base_url, api_key):
                 response = self.get_status(task_id)
                 if response.status_code == 200:
                     data = response.json()
-                    if data["status"] in ["COMPLETE", "FAILED"]:
+                    if data["status"] == "COMPLETE":
                         return data
+                    elif data["status"] == "FAILED":
+                        # Fail fast with clear error message
+                        error_msg = data.get("error", "Unknown error")
+                        raise AssertionError(
+                            f"Task {task_id} failed: {error_msg}\nFull response: {data}"
+                        )
                 time.sleep(poll_interval)
             raise TimeoutError(f"Task {task_id} did not complete within {timeout}s")
 

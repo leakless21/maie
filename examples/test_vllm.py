@@ -1,6 +1,16 @@
 from loguru import logger
 from vllm import LLM
 
+import sys
+import os
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
+
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 
 def main():
     llm = LLM(

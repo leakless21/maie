@@ -181,6 +181,7 @@ The `scripts/test.sh` script (via Pixi) automatically configures the environment
 
 - **Architecture & Design**: See `docs/TDD.md` for technical design
 - **Requirements**: See `docs/PRD.md` for product requirements
+- **Developer API Workflow**: See `docs/DEVELOPER_API_WORKFLOW.md` for how to run, call, and read results
 - **Implementation Tasks**: See `docs/tdd-followups.md` for remaining work
 - **Configuration**: See `.env.template` for environment variables
 

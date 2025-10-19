@@ -19,7 +19,7 @@
       "description": "Key topics or themes identified in the content",
       "items": {
         "type": "string",
-        "maxLength": 100
+        "maxLength": 200
       },
       "minItems": 1,
       "maxItems": 15

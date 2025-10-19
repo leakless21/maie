@@ -45,12 +45,10 @@ services:
     volumes:
       - ./data/audio:/data/audio:rw # Audio uploads
       - ./templates:/app/templates:ro # Template schemas
-      - ./assets/chat-templates:/app/assets/chat-templates:ro # Chat templates
     environment:
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_DIR=/data/audio
       - TEMPLATES_DIR=/app/templates
-      - CHAT_TEMPLATES_DIR=/app/assets/chat-templates
       - MAX_QUEUE_DEPTH=${MAX_QUEUE_DEPTH:-1000}
       - SECRET_API_KEY=${SECRET_API_KEY}
       - DEBUG=${DEBUG:-false}
@@ -100,13 +98,11 @@ services:
       - ./data/audio:/data/audio:ro # Audio files (read-only)
       - ./data/models:/data/models:ro # AI models (read-only)
       - ./templates:/app/templates:ro # Template schemas
-      - ./assets/chat-templates:/app/assets/chat-templates:ro # Chat templates
     environment:
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_DIR=/data/audio
       - MODEL_DIR=/data/models
       - TEMPLATES_DIR=/app/templates
-      - CHAT_TEMPLATES_DIR=/app/assets/chat-templates
       - WHISPER_MODEL_VARIANT=${WHISPER_MODEL_VARIANT:-erax-wow-turbo}
       - WHISPER_BEAM_SIZE=5
       - WHISPER_VAD_FILTER=True
@@ -206,6 +202,4 @@ volumes:
   model_data:
     driver: local
   template_data:
-    driver: local
-  chat_templates_data:
     driver: local

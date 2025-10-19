@@ -8,6 +8,7 @@ Verifies per TDD NFR-1:
 3. Pipeline version
 4. All config parameters used in processing
 """
+
 import pytest
 
 from src.worker.pipeline import get_version_metadata

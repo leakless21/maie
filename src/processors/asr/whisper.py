@@ -23,13 +23,16 @@ inject a fake module into sys.modules before the backend is imported.
 """
 
 from __future__ import annotations
-
 import os
 from typing import Any, Dict, Optional
 
 from loguru import logger
 
 from src import config as cfg
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
 
 # Cache for faster_whisper module to avoid PyTorch 2.8 re-import bug
@@ -143,7 +146,8 @@ class WhisperBackend(ASRBackend):
 
                 _FASTER_WHISPER_MODULE = fw
             except (
-                Exception
+                ImportError,
+                ModuleNotFoundError,
             ) as exc:  # pragma: no cover - defensive for missing dependency
                 logger.debug("faster_whisper not available: {}", exc)
                 _FASTER_WHISPER_IMPORT_FAILED = True
@@ -196,8 +200,8 @@ class WhisperBackend(ASRBackend):
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for offline deployment."
                 )
-            except Exception as e:
-                raise RuntimeError(f"Failed to check CUDA availability: {e}")
+            except (AttributeError, RuntimeError, OSError) as e:
+                raise RuntimeError(f"Failed to check CUDA availability: {e}") from e
 
         # Ensure device is set to cuda if auto was specified
         if device == "auto":
@@ -226,6 +230,7 @@ class WhisperBackend(ASRBackend):
             "files",
             "revision",
             "use_auth_token",
+            "verbose",
         }
 
         # Allow tests/consumers to pass extra loader kwargs, but filter out invalid ones
@@ -239,6 +244,11 @@ class WhisperBackend(ASRBackend):
             getattr(fw, "load_model", None)
         )
 
+        # Read verbose setting lazily to avoid circular imports at module load time
+        from src.config import settings
+
+        verbose_mode = settings.verbose_components
+
         try:
             logger.debug(
                 "Loading whisper model from {} with kwargs={}",
@@ -247,6 +257,7 @@ class WhisperBackend(ASRBackend):
             )
 
             if is_test_mode:
+                load_kwargs["verbose"] = verbose_mode
                 self.model = fw.load_model(self.model_path, **load_kwargs)
                 # Annotate device for tests
                 try:

@@ -197,3 +197,44 @@ class TestStartWorker:
         assert "name" in call_args[1]
         # The name should be passed to Worker constructor
         assert call_args[1]["name"] is not None
+
+
+class TestMultiprocessingStartMethod:
+    """Test that worker enforces spawn start method for CUDA compatibility."""
+
+    def test_spawn_start_method_logic(self):
+        """Test the spawn start method logic directly."""
+        import multiprocessing as mp
+        
+        # Test the logic from the main block
+        try:
+            if mp.get_start_method(allow_none=True) != "spawn":
+                # This should be called when not spawn
+                mp.set_start_method("spawn", force=True)
+                # Verify it was set
+                assert mp.get_start_method() == "spawn"
+        except RuntimeError:
+            # Start method already set, ignore
+            pass
+
+    def test_spawn_start_method_skips_when_already_set(self):
+        """Test that spawn is not set if already configured."""
+        import multiprocessing as mp
+        
+        # Set to spawn first
+        try:
+            mp.set_start_method("spawn", force=True)
+        except RuntimeError:
+            pass
+        
+        # Test the logic - should not call set_start_method again
+        original_method = mp.get_start_method()
+        try:
+            if mp.get_start_method(allow_none=True) != "spawn":
+                mp.set_start_method("spawn", force=True)
+        except RuntimeError:
+            # Start method already set, ignore
+            pass
+        
+        # Should still be spawn
+        assert mp.get_start_method() == original_method

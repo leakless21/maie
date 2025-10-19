@@ -9,6 +9,7 @@ With proper state management, GPU memory management, and error handling.
 """
 
 import json
+import subprocess
 import time
 import traceback
 from dataclasses import dataclass
@@ -29,6 +30,23 @@ from loguru import logger
 from redis import Redis
 from rq import get_current_job
 
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
+from src.api.errors import (
+    ASRProcessingError,
+    AudioPreprocessingError,
+    AudioValidationError,
+    FileSystemError,
+    LLMProcessingError,
+    ModelLoadError,
+    ModelMemoryError,
+    NetworkError,
+    ProcessingError,
+)
+from src.core.error_handler import leverage_native_error
 from src.api.schemas import TaskStatus
 from src.config import settings
 
@@ -37,30 +55,69 @@ from src.config import settings
 # =============================================================================
 
 
-def _sanitize_metadata(value: Any) -> Any:
+def _sanitize_metadata(value: Any, _seen: Optional[set[int]] = None) -> Any:
     """
     Convert metadata into JSON-serializable primitives.
 
     Handles nested dicts/lists and falls back to string representation for
     complex objects (e.g., MagicMock instances in tests).
+
+    Args:
+        value: The value to sanitize
+        _seen: Internal set to track object IDs and prevent recursion
+
+    Returns:
+        JSON-serializable representation of the value
     """
-    if isinstance(value, dict):
-        return {str(k): _sanitize_metadata(v) for k, v in value.items()}
-    if isinstance(value, (list, tuple, set)):
-        return [_sanitize_metadata(v) for v in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    if hasattr(value, "dict") and callable(value.dict):
-        try:
-            return _sanitize_metadata(value.dict())
-        except Exception:
-            return str(value)
-    if hasattr(value, "__iter__") and not isinstance(value, (bytes, bytearray, str)):
-        try:
-            return [_sanitize_metadata(v) for v in list(value)]
-        except Exception:
-            return str(value)
-    return str(value)
+    # Initialize recursion tracking
+    if _seen is None:
+        _seen = set()
+
+    # Handle MagicMock and other test objects early
+    if hasattr(value, "_mock_name") or hasattr(value, "_mock_parent"):
+        return f"[Mock object: {type(value).__name__}]"
+
+    # Check for recursion using object identity
+    obj_id = id(value)
+    if obj_id in _seen:
+        return f"[Recursive reference to {type(value).__name__}]"
+
+    # Add current object to seen set
+    _seen.add(obj_id)
+
+    try:
+        if isinstance(value, dict):
+            return {str(k): _sanitize_metadata(v, _seen) for k, v in value.items()}
+        if isinstance(value, (list, tuple, set)):
+            return [_sanitize_metadata(v, _seen) for v in value]
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            return value
+        if hasattr(value, "dict") and callable(value.dict):
+            try:
+                return _sanitize_metadata(value.dict(), _seen)
+            except (AttributeError, TypeError, ValueError) as e:
+                logger.debug(
+                    "Failed to serialize object with dict() method",
+                    error=str(e),
+                    object_type=type(value).__name__,
+                )
+                return str(value)
+        if hasattr(value, "__iter__") and not isinstance(
+            value, (bytes, bytearray, str)
+        ):
+            try:
+                return [_sanitize_metadata(v, _seen) for v in list(value)]
+            except (TypeError, ValueError) as e:
+                logger.debug(
+                    "Failed to iterate over object",
+                    error=str(e),
+                    object_type=type(value).__name__,
+                )
+                return str(value)
+        return str(value)
+    finally:
+        # Clean up tracking for this branch
+        _seen.discard(obj_id)
 
 
 def _update_status(
@@ -89,7 +146,7 @@ def _update_status(
         # Serialize complex objects (dicts, lists) to JSON strings
         for key, value in details.items():
             if isinstance(value, (dict, list)):
-                update_data[key] = json.dumps(value)
+                update_data[key] = json.dumps(_sanitize_metadata(value))
             else:
                 update_data[key] = value
 
@@ -188,61 +245,212 @@ class ProcessingResult:
 
 
 def load_asr_model(asr_backend: str = "whisper", **config) -> Any:
-    """Load ASR model into memory based on the specified backend."""
-    logger.info("Loading ASR model with backend: {}", asr_backend)
-    # In a real implementation, this would load the ASR model from the processor module
-    from src.processors.asr.factory import ASRFactory
+    """
+    Load ASR model into memory based on the specified backend.
 
-    asr_model = ASRFactory.create(backend_id=asr_backend, **config)
-    return asr_model
+    Args:
+        asr_backend: ASR backend type ("whisper" or "chunkformer")
+        **config: Additional backend-specific configuration
+
+    Returns:
+        ASR backend instance
+
+    Raises:
+        ModelLoadError: If model loading fails
+    """
+    try:
+        logger.info("Loading ASR model", backend=asr_backend, config=config)
+        from src.processors.asr.factory import ASRFactory
+
+        asr_model = ASRFactory.create(backend_type=asr_backend, **config)
+        logger.info("ASR model loaded successfully", backend=asr_backend)
+        return asr_model
+    except ValueError as e:
+        logger.error("Invalid ASR backend", backend=asr_backend, error=str(e))
+        raise ModelLoadError(
+            message=f"Invalid ASR backend: {asr_backend}",
+            details={
+                "backend": asr_backend,
+                "available_backends": ["whisper", "chunkformer"],
+            },
+        )
+    except (ImportError, RuntimeError, FileNotFoundError, OSError) as e:
+        logger.error("Failed to load ASR model", backend=asr_backend, error=str(e))
+        raise ModelLoadError(
+            message=f"Failed to load ASR model: {str(e)}",
+            details={"backend": asr_backend, "error_type": type(e).__name__},
+        ) from e
+
+    except Exception as e:
+        logger.error(
+            "Unexpected error loading ASR model", backend=asr_backend, error=str(e)
+        )
+        raise ModelLoadError(
+            message=f"Unexpected error loading ASR model: {str(e)}",
+            details={"backend": asr_backend, "error_type": type(e).__name__},
+        ) from e
 
 
 def execute_asr_transcription(
-    asr_model: Any, audio_path: str
+    asr_model: Any, audio_path: str, audio_duration: float
 ) -> Tuple[str, float, float, Dict[str, Any]]:
-    """Execute ASR transcription on the provided audio."""
-    logger.info("Executing ASR transcription on {}", audio_path)
+    """
+    Execute ASR transcription on the provided audio.
 
-    start_time = time.time()
-    # In a real implementation, this would call the ASR model to transcribe the audio
-    result = asr_model.execute(audio_path)  # This is the actual method per TDD
+    Args:
+        asr_model: Loaded ASR backend instance
+        audio_path: Path to audio file (normalized or raw)
+        audio_duration: Actual audio duration in seconds from preprocessing
 
-    processing_time = time.time() - start_time
-    audio_duration = 10.0  # This would be calculated from the actual audio file
-    rtf = processing_time / audio_duration if audio_duration > 0 else 0
+    Returns:
+        Tuple of (transcription, rtf, confidence, asr_metadata)
 
-    transcription = result.transcript if hasattr(result, "transcript") else str(result)
-    confidence = result.confidence_avg if hasattr(result, "confidence_avg") else 0.0
+    Raises:
+        ASRProcessingError: If transcription fails
+    """
+    try:
+        logger.info("Executing ASR transcription", audio_path=audio_path)
 
-    # Collect ASR-specific metadata
-    asr_metadata = {}
-    if hasattr(result, "model_name"):
-        asr_metadata["model_name"] = result.model_name
-    if hasattr(result, "checkpoint_hash"):
-        asr_metadata["checkpoint_hash"] = result.checkpoint_hash
-    if hasattr(result, "duration_ms"):
-        asr_metadata["duration_ms"] = result.duration_ms
+        start_time = time.time()
 
-    return transcription, rtf, confidence, asr_metadata
+        # Execute transcription - read file as bytes for backend
+        with open(audio_path, "rb") as f:
+            audio_bytes = f.read()
+
+        result = asr_model.execute(audio_bytes)
+
+        processing_time = time.time() - start_time
+        rtf = processing_time / audio_duration if audio_duration > 0 else 0
+
+        # Extract transcription text
+        if hasattr(result, "text"):
+            transcription = result.text
+        elif hasattr(result, "transcript"):
+            transcription = result.transcript
+        else:
+            transcription = str(result)
+
+        # Extract confidence
+        confidence = getattr(result, "confidence", None) or getattr(
+            result, "confidence_avg", 0.0
+        )
+
+        # Collect ASR-specific metadata for versioning (NFR-1)
+        asr_metadata = {}
+        if hasattr(result, "model_name"):
+            asr_metadata["model_name"] = result.model_name
+        if hasattr(result, "checkpoint_hash"):
+            asr_metadata["checkpoint_hash"] = result.checkpoint_hash
+        if hasattr(result, "duration_ms"):
+            asr_metadata["duration_ms"] = result.duration_ms
+        if hasattr(result, "language"):
+            asr_metadata["language"] = result.language
+        if hasattr(result, "language_probability"):
+            asr_metadata["language_probability"] = result.language_probability
+
+        try:
+            transcript_length = len(transcription)  # type: ignore[arg-type]
+        except TypeError:
+            transcript_length = len(str(transcription))
+        except Exception:
+            transcript_length = 0
+
+        logger.info(
+            "ASR transcription complete",
+            transcript_length=transcript_length,
+            rtf=rtf,
+            confidence=confidence,
+            processing_time=processing_time,
+        )
+
+        return transcription, rtf, confidence, asr_metadata
+
+    except FileNotFoundError as e:
+        logger.error("Audio file not found", audio_path=audio_path, error=str(e))
+        raise ASRProcessingError(
+            message=f"Audio file not found: {audio_path}",
+            details={"audio_path": audio_path},
+        ) from e
+    except (RuntimeError, OSError, ValueError, TypeError) as e:
+        logger.error(
+            "ASR transcription failed", error=str(e), traceback=traceback.format_exc()
+        )
+        raise ASRProcessingError(
+            message=f"ASR transcription failed: {str(e)}",
+            details={"error_type": type(e).__name__, "audio_path": audio_path},
+        ) from e
+
+    except Exception as e:
+        logger.error(
+            "ASR transcription failed",
+            error=str(e),
+            traceback=traceback.format_exc(),
+        )
+        raise ASRProcessingError(
+            message=f"ASR transcription failed: {str(e)}",
+            details={"error_type": type(e).__name__, "audio_path": audio_path},
+        ) from e
 
 
 def unload_asr_model(asr_model: Any) -> None:
-    """Unload ASR model from memory to free GPU resources."""
-    logger.info("Unloading ASR model...")
-    # In a real implementation, this would properly clean up the ASR model resources
-    asr_model.unload()  # Use the unload method per TDD
-    if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    """
+    Unload ASR model from memory to free GPU resources.
+
+    Critical for sequential processing: Always called in finally block
+    to guarantee GPU memory is freed even if ASR execution fails.
+
+    Args:
+        asr_model: ASR backend instance to unload
+    """
+    try:
+        logger.info("Unloading ASR model")
+        if asr_model is not None and hasattr(asr_model, "unload"):
+            asr_model.unload()
+
+        # Critical: Clear CUDA cache to free GPU memory
+        if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("ASR model unloaded and GPU cache cleared")
+        else:
+            logger.info("ASR model unloaded")
+    except (AttributeError, RuntimeError, OSError) as e:
+        logger.warning("Error during ASR model unload", error=str(e))
+    except Exception as e:
+        logger.warning("Unexpected error during ASR model unload", error=str(e))
 
 
 def load_llm_model() -> Any:
-    """Load LLM model into memory."""
-    logger.info("Loading LLM model...")
-    # In a real implementation, this would load the LLM model from the processor module
-    from src.processors.llm import LLMProcessor
+    """
+    Load LLM model into memory.
 
-    llm_model = LLMProcessor()
-    return llm_model
+    Returns:
+        LLM processor instance
+
+    Raises:
+        ModelLoadError: If model loading fails
+    """
+    try:
+        logger.info("Loading LLM model")
+        from src.processors.llm import LLMProcessor
+
+        llm_model = LLMProcessor()
+        # Trigger lazy loading
+        llm_model._load_model()
+        logger.info("LLM model loaded successfully")
+        return llm_model
+    except (ImportError, RuntimeError, FileNotFoundError, OSError) as e:
+        logger.error("Failed to load LLM model", error=str(e))
+        raise ModelLoadError(
+            message=f"Failed to load LLM model: {str(e)}",
+            details={"error_type": type(e).__name__},
+        ) from e
+
+    except Exception as e:
+        logger.error("Failed to load LLM model", error=str(e))
+        raise ModelLoadError(
+            message=f"Failed to load LLM model: {str(e)}",
+            details={"error_type": type(e).__name__},
+        ) from e
 
 
 def execute_llm_processing(
@@ -264,36 +472,80 @@ def execute_llm_processing(
 
     Returns:
         Tuple of (enhanced_transcript, structured_summary)
+
+    Raises:
+        LLMProcessingError: If LLM processing fails critically
     """
-    logger.info("Executing LLM processing...")
+    try:
+        # Check for empty transcript before any processing
+        safe_text = (transcription or "").strip()
+        if not safe_text:
+            raise LLMProcessingError(
+                message="Empty transcript after ASR; no content to process",
+                details={"transcription_length": 0},
+            )
 
-    results = {}
+        logger.info(
+            "Executing LLM processing", features=features, template_id=template_id
+        )
 
-    # Text enhancement (conditional)
-    if "clean_transcript" in features and llm_model.needs_enhancement(asr_backend):
-        try:
-            enhanced_result = llm_model.enhance_text(transcription)
-            if enhanced_result["enhancement_applied"]:
-                results["clean_transcript"] = enhanced_result["enhanced_text"]
-                results["enhancement_metrics"] = {
-                    "edit_rate_cleaning": enhanced_result.get("edit_rate", 0),
-                    "edit_distance": enhanced_result.get("edit_distance", 0),
-                }
-            else:
-                results["clean_transcript"] = transcription
-        except Exception:
-            logger.exception("Text enhancement failed")
-            results["clean_transcript"] = transcription
-    else:
-        results["clean_transcript"] = transcription
+        results = {}
 
-    # Structured summarization
-    if "summary" in features:
-        if not template_id:
-            logger.warning("template_id required when summary requested")
-            results["summary"] = None
-        else:
+        # Text enhancement (conditional based on ASR backend capabilities)
+        # Skip enhancement if ASR backend provides native punctuation (e.g., Whisper with erax-wow-turbo)
+        needs_enhancement = (
+            "clean_transcript" in features
+            and hasattr(llm_model, "needs_enhancement")
+            and llm_model.needs_enhancement(asr_backend)
+        )
+
+        if needs_enhancement:
             try:
+                logger.info("Applying text enhancement")
+                enhanced_result = llm_model.enhance_text(transcription)
+                if enhanced_result.get("enhancement_applied", False):
+                    results["clean_transcript"] = enhanced_result["enhanced_text"]
+                    results["enhancement_metrics"] = {
+                        "edit_rate_cleaning": enhanced_result.get("edit_rate", 0),
+                        "edit_distance": enhanced_result.get("edit_distance", 0),
+                    }
+                    logger.info(
+                        "Text enhancement applied",
+                        edit_rate=enhanced_result.get("edit_rate", 0),
+                    )
+                else:
+                    results["clean_transcript"] = transcription
+                    logger.info("Text enhancement skipped - not needed")
+            except (RuntimeError, ValueError, TypeError) as e:
+                logger.warning(
+                    "Text enhancement failed, using raw transcript", error=str(e)
+                )
+                results["clean_transcript"] = transcription
+            except Exception as e:
+                logger.warning(
+                    "Unexpected error in text enhancement, using raw transcript",
+                    error=str(e),
+                )
+                results["clean_transcript"] = transcription
+        else:
+            # Skip enhancement - ASR backend provides native punctuation
+            results["clean_transcript"] = transcription
+            logger.info(
+                "Text enhancement skipped - ASR backend provides native punctuation"
+            )
+
+        # Structured summarization
+        if "summary" in features:
+            if not template_id:
+                error_msg = "template_id required when summary feature requested"
+                logger.error(error_msg)
+                raise LLMProcessingError(
+                    message=error_msg,
+                    details={"features": features, "template_id": template_id},
+                )
+
+            try:
+                logger.info("Generating structured summary", template_id=template_id)
                 summary_result = llm_model.generate_summary(
                     transcript=results["clean_transcript"], template_id=template_id
                 )
@@ -303,76 +555,140 @@ def execute_llm_processing(
                         "retry_count": summary_result.get("retry_count", 0),
                         "model_info": summary_result.get("model_info", {}),
                     }
-                else:
-                    logger.error(
-                        "Summary generation failed: {}",
-                        summary_result.get("error", "Unknown error"),
+                    logger.info(
+                        "Summary generated successfully",
+                        retry_count=summary_result.get("retry_count", 0),
                     )
-                    results["summary"] = None
-            except Exception:
-                logger.exception("Summary generation failed")
-                results["summary"] = None
+                else:
+                    error_msg = summary_result.get("error", "Unknown error")
+                    logger.error("Summary generation failed", error=error_msg)
+                    raise LLMProcessingError(
+                        message=f"Summary generation failed: {error_msg}",
+                        details={"template_id": template_id},
+                    )
+            except LLMProcessingError:
+                raise
+            except (RuntimeError, ValueError, TypeError, KeyError) as e:
+                logger.error("Summary generation failed", error=str(e))
+                raise LLMProcessingError(
+                    message=f"Summary generation failed: {str(e)}",
+                    details={
+                        "template_id": template_id,
+                        "error_type": type(e).__name__,
+                    },
+                )
+            except Exception as e:
+                logger.error("Unexpected summary generation exception", error=str(e))
+                raise LLMProcessingError(
+                    message=f"Unexpected summary generation exception: {str(e)}",
+                    details={
+                        "template_id": template_id,
+                        "error_type": type(e).__name__,
+                    },
+                )
 
-    return results.get("clean_transcript"), results.get("summary")
+        return results.get("clean_transcript"), results.get("summary")
+
+    except LLMProcessingError:
+        raise
+    except Exception as e:
+        logger.error(
+            "LLM processing failed", error=str(e), traceback=traceback.format_exc()
+        )
+        raise LLMProcessingError(
+            message=f"LLM processing failed: {str(e)}",
+            details={"error_type": type(e).__name__},
+        )
 
 
 def unload_llm_model(llm_model: Any) -> None:
-    """Unload LLM model from memory to free GPU resources."""
-    logger.info("Unloading LLM model...")
-    # In a real implementation, this would properly clean up the LLM model resources
-    if hasattr(llm_model, "unload"):
-        llm_model.unload()
-    if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
-        torch.cuda.empty_cache()
+    """
+    Unload LLM model from memory to free GPU resources.
+
+    Critical for sequential processing: Always called in finally block
+    to guarantee GPU memory is freed even if LLM execution fails.
+
+    Args:
+        llm_model: LLM processor instance to unload
+    """
+    try:
+        logger.info("Unloading LLM model")
+        if llm_model is not None and hasattr(llm_model, "unload"):
+            llm_model.unload()
+
+        # Critical: Clear CUDA cache to free GPU memory
+        if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            logger.info("LLM model unloaded and GPU cache cleared")
+        else:
+            logger.info("LLM model unloaded")
+    except (AttributeError, RuntimeError, OSError) as e:
+        logger.warning("Error during LLM model unload", error=str(e))
+    except Exception as e:
+        logger.warning("Unexpected error during LLM model unload", error=str(e))
 
 
 def get_version_metadata(
     asr_result_metadata: Dict[str, Any], llm_model: Any = None
 ) -> Dict[str, Any]:
     """
-    Collect version metadata for the models and processing pipeline.
-
-    Per TDD NFR-1, collects:
-    - ASR backend metadata (model_name, checkpoint_hash, config)
-    - LLM version info (if model loaded)
-    - Pipeline version from settings
+    Collect version metadata for the models and processing pipeline per VersionsSchema.
 
     Args:
         asr_result_metadata: Metadata from ASR backend execution
         llm_model: LLM processor instance (optional)
 
     Returns:
-        Complete version metadata dict
+        Complete version metadata dict matching VersionsSchema
     """
-    version_metadata: Dict[str, Any] = {
-        "processing_pipeline": settings.pipeline_version,
-        "maie_worker": settings.pipeline_version,
+    # Build ASR backend info per ASRBackendSchema
+    asr_backend = {
+        "name": asr_result_metadata.get("name", "whisper") if asr_result_metadata else "whisper",
+        "model_variant": asr_result_metadata.get("model_variant", "unknown") if asr_result_metadata else "unknown",
+        "model_path": asr_result_metadata.get("model_path", "") if asr_result_metadata else "",
+        "checkpoint_hash": asr_result_metadata.get("checkpoint_hash", "") if asr_result_metadata else "",
+        "compute_type": asr_result_metadata.get("compute_type", "float16") if asr_result_metadata else "float16",
+        "decoding_params": asr_result_metadata.get("decoding_params", {}) if asr_result_metadata else {},
     }
 
-    # Always include asr key, even if empty
-    version_metadata["asr"] = _sanitize_metadata(asr_result_metadata) if asr_result_metadata else {}
-
-    # Always include llm key
-    llm_info: Optional[Any] = None
+    # Build LLM info per LLMSchema
+    llm_info = None
     if llm_model and hasattr(llm_model, "get_version_info"):
         try:
             llm_info = llm_model.get_version_info()
-        except Exception as e:
+        except (AttributeError, RuntimeError, ValueError) as e:
             logger.error("Failed to get LLM version info", error=str(e))
-            llm_info = {"model_name": "unavailable", "error": str(e)}
-    
+            llm_info = None
+        except Exception as e:
+            logger.error("Unexpected error getting LLM version info", error=str(e))
+            llm_info = None
+
     if llm_info is None:
-        if llm_model is None:
-            # When no model provided, indicate not loaded
-            version_metadata["llm"] = {"model_name": "not_loaded", "reason": "no_model_provided"}
-        elif not hasattr(llm_model, "get_version_info"):
-            # When model exists but has no get_version_info method, indicate not loaded
-            version_metadata["llm"] = {"model_name": "not_loaded", "reason": "method_missing"}
-        else:
-            # When model exists and has method but get_version_info returns None, set to None
-            version_metadata["llm"] = None
+        llm = {
+            "name": "not_loaded",
+            "checkpoint_hash": "",
+            "quantization": "",
+            "thinking": False,
+            "reasoning_parser": None,
+            "structured_output": {},
+            "decoding_params": {},
+        }
     else:
-        version_metadata["llm"] = _sanitize_metadata(llm_info)
+        llm = {
+            "name": llm_info.get("name", "unknown"),
+            "checkpoint_hash": llm_info.get("checkpoint_hash", ""),
+            "quantization": llm_info.get("quantization", ""),
+            "thinking": llm_info.get("thinking", False),
+            "reasoning_parser": llm_info.get("reasoning_parser"),
+            "structured_output": llm_info.get("structured_output", {}),
+            "decoding_params": llm_info.get("decoding_params", {}),
+        }
+
+    version_metadata = {
+        "pipeline_version": settings.pipeline_version,
+        "asr_backend": asr_backend,
+        "llm": llm,
+    }
 
     return version_metadata
 
@@ -384,16 +700,17 @@ def calculate_metrics(
     audio_duration: float,
     asr_rtf: float,
 ) -> Dict[str, Any]:
-    """Calculate runtime metrics for the processing."""
+    """Calculate runtime metrics for the processing per MetricsSchema."""
     total_processing_time = time.time() - start_time
     total_rtf = total_processing_time / audio_duration if audio_duration > 0 else 0
 
+    # Map to MetricsSchema fields
     metrics = {
-        "total_processing_time": total_processing_time,
-        "total_rtf": total_rtf,
-        "asr_rtf": asr_rtf,
-        "transcription_length": len(transcription) if transcription else 0,
-        "audio_duration": audio_duration,
+        "input_duration_seconds": audio_duration,
+        "processing_time_seconds": total_processing_time,
+        "rtf": total_rtf,
+        "vad_coverage": 0.0,  # Default if not available from ASR
+        "asr_confidence_avg": 0.0,  # Default if not available from ASR
     }
 
     # Add enhancement metrics if text enhancement was performed
@@ -471,6 +788,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     asr_model = None  # Track loaded ASR model for cleanup
     llm_model = None  # Track loaded LLM model for cleanup
     audio_duration = 10.0  # Default fallback, will be updated from preprocessing
+    processing_audio_path = audio_path  # Path to use for ASR (normalized or raw)
     version_metadata: Optional[Dict[str, Any]] = None
 
     try:
@@ -478,9 +796,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Stage 1: PREPROCESSING - Audio validation and normalization
         # =====================================================================
         logger.info(
-            f"Starting audio processing for task {job_id}",
+            "Starting audio processing",
             task_id=job_id,
             audio_path=audio_path,
+            asr_backend=asr_backend,
+            features=features,
         )
 
         if redis_conn:
@@ -488,18 +808,31 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
         # Validate audio_path before preprocessing
         if not audio_path or not isinstance(audio_path, str):
-            error_msg = f"Invalid audio_path provided: {audio_path}"
-            logger.error(error_msg, task_id=job_id)
+            error = AudioValidationError(
+                message=f"Invalid audio_path provided: {audio_path}",
+                details={
+                    "audio_path": audio_path,
+                    "expected_type": "str",
+                    "task_id": job_id,
+                },
+            )
+            logger.error(
+                "Invalid audio path",
+                task_id=job_id,
+                error_code=error.error_code,
+                audio_path=audio_path,
+            )
 
             if redis_conn:
-                _update_status(
+                handle_processing_error(
                     redis_conn,
                     task_key,
-                    TaskStatus.FAILED,
-                    details={"error": error_msg},
+                    error,
+                    stage="preprocessing",
+                    error_code=error.error_code,
                 )
 
-            raise ValueError(error_msg)
+            raise error
 
         # Audio preprocessing - validate and normalize to 16kHz mono WAV
         try:
@@ -509,14 +842,16 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             metadata = preprocessor.preprocess(Path(audio_path))
 
             # Update audio_path if normalization was performed
-            if "normalized_path" in metadata:
-                audio_path = str(metadata["normalized_path"])
+            if metadata.get("normalized_path"):
+                processing_audio_path = str(metadata["normalized_path"])
                 logger.info(
                     "Audio normalized",
                     task_id=job_id,
                     original_format=metadata.get("format"),
                     duration=metadata.get("duration"),
                 )
+            else:
+                processing_audio_path = audio_path
 
             # Store audio duration for metrics calculation
             audio_duration = metadata.get("duration", audio_duration)
@@ -527,22 +862,89 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 duration=audio_duration,
                 sample_rate=metadata.get("sample_rate"),
                 channels=metadata.get("channels"),
+                normalized=metadata.get("normalized_path") is not None,
             )
-        except Exception as e:
+        except ValueError as e:
+            # Audio validation errors (too short, etc.)
+            error = AudioValidationError(
+                message=f"Audio validation failed: {str(e)}",
+                details={
+                    "task_id": job_id,
+                    "audio_path": audio_path,
+                    "validation_error": str(e),
+                },
+            )
             logger.error(
-                "Audio preprocessing failed",
+                "Audio validation failed",
                 task_id=job_id,
+                error_code=error.error_code,
                 error=str(e),
             )
             if redis_conn:
                 handle_processing_error(
                     redis_conn,
                     task_key,
-                    e,
+                    error,
                     stage="preprocessing",
-                    error_code="AUDIO_PREPROCESSING_ERROR",
+                    error_code=error.error_code,
                 )
-            raise
+            raise error
+        except (
+            OSError,
+            RuntimeError,
+            ValueError,
+            TypeError,
+            subprocess.CalledProcessError,
+        ) as e:
+            # Preprocessing errors (ffmpeg failures, etc.)
+            error = AudioPreprocessingError(
+                message=f"Audio preprocessing failed: {str(e)}",
+                details={
+                    "task_id": job_id,
+                    "audio_path": audio_path,
+                    "original_error": str(e),
+                },
+            )
+            logger.error(
+                "Audio preprocessing failed",
+                task_id=job_id,
+                error_code=error.error_code,
+                error=str(e),
+            )
+            if redis_conn:
+                handle_processing_error(
+                    redis_conn,
+                    task_key,
+                    error,
+                    stage="preprocessing",
+                    error_code=error.error_code,
+                )
+            raise error
+        except Exception as e:
+            # Unexpected preprocessing errors
+            error = AudioPreprocessingError(
+                message=f"Unexpected audio preprocessing error: {str(e)}",
+                details={
+                    "task_id": job_id,
+                    "audio_path": audio_path,
+                    "original_error": str(e),
+                },
+            )
+            logger.error(
+                "Audio preprocessing failed",
+                task_id=job_id,
+                error_code=error.error_code,
+                error=str(e),
+            )
+            if redis_conn:
+                handle_processing_error(
+                    redis_conn,
+                    task_key,
+                    error,
+                    stage="preprocessing",
+                    error_code=error.error_code,
+                )
+            raise error
 
         # =====================================================================
         # Stage 2: PROCESSING_ASR - ASR transcription with sequential GPU usage
@@ -556,15 +958,24 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             # Step 2a: Load ASR model based on backend
             asr_model = load_asr_model(asr_backend, **config)
 
-            # Step 2b: Execute ASR transcription
+            # Step 2b: Execute ASR transcription with actual duration
             transcription, asr_rtf, confidence, asr_metadata = (
-                execute_asr_transcription(asr_model, audio_path)
+                execute_asr_transcription(
+                    asr_model, processing_audio_path, audio_duration
+                )
             )
+
+            try:
+                process_transcript_length = len(transcription)  # type: ignore[arg-type]
+            except TypeError:
+                process_transcript_length = len(str(transcription))
+            except Exception:
+                process_transcript_length = 0
 
             logger.info(
                 "ASR transcription complete",
                 task_id=job_id,
-                transcript_length=len(transcription),
+                transcript_length=process_transcript_length,
                 rtf=asr_rtf,
                 confidence=confidence,
             )
@@ -579,15 +990,28 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
         try:
             if redis_conn:
+                safe_transcript_len = 0
+                if transcription:
+                    try:
+                        safe_transcript_len = len(transcription)  # type: ignore[arg-type]
+                    except TypeError:
+                        safe_transcript_len = len(str(transcription))
+                    except Exception:
+                        safe_transcript_len = 0
+
                 _update_status(
                     redis_conn,
                     task_key,
                     TaskStatus.PROCESSING_LLM,
-                    {
-                        "transcription_length": (
-                            len(transcription) if transcription else 0
-                        )
-                    },
+                    {"transcription_length": safe_transcript_len},
+                )
+
+            # Check for empty transcript before loading LLM
+            safe_text = (transcription or "").strip()
+            if not safe_text:
+                raise LLMProcessingError(
+                    message="Empty transcript after ASR; no content to process",
+                    details={"transcription_length": 0},
                 )
 
             logger.info("Loading LLM model", task_id=job_id)
@@ -629,7 +1053,6 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
 
         # Calculate metrics (FR-5)
-        # Note: audio_duration was already extracted from preprocessing metadata
         metrics = calculate_metrics(
             transcription, clean_transcript, start_time, audio_duration, asr_rtf
         )
@@ -641,9 +1064,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Prepare result - only include requested features
         result = {"versions": version_metadata, "metrics": metrics, "results": {}}
 
-        # Include requested features in results
-        if "raw_transcript" in features or "clean_transcript" in features:
-            result["results"]["transcript"] = clean_transcript or transcription
+        # Include requested features in results per ResultsSchema
+        if "raw_transcript" in features:
+            result["results"]["raw_transcript"] = transcription
+
+        if "clean_transcript" in features:
+            result["results"]["clean_transcript"] = clean_transcript or transcription
 
         if "summary" in features and structured_summary:
             result["results"]["summary"] = structured_summary
@@ -655,6 +1081,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 task_key,
                 TaskStatus.COMPLETE,
                 {
+                    "completed_at": datetime.now(timezone.utc).isoformat(),
                     "versions": version_metadata,
                     "metrics": metrics,
                     "results": result["results"],
@@ -671,14 +1098,19 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Return result as dictionary
         return result
 
-    except Exception as e:
-        error_msg = f"Error in audio processing: {str(e)}\n{traceback.format_exc()}"
-
+    except (
+        AudioValidationError,
+        AudioPreprocessingError,
+        ASRProcessingError,
+        LLMProcessingError,
+        ModelLoadError,
+    ) as e:
+        # Known MAIE errors - already logged with proper context
         logger.error(
-            "Audio processing failed",
+            "Audio processing failed with known error",
             task_id=job_id,
+            error_code=e.error_code,
             error=str(e),
-            traceback=traceback.format_exc(),
         )
 
         # Update status to FAILED using error handler
@@ -688,21 +1120,62 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 task_key,
                 e,
                 stage="pipeline_execution",
-                error_code="PROCESSING_ERROR",
+                error_code=e.error_code,
             )
 
-        # Return error result
-        return {
-            "versions": None,
-            "metrics": None,
-            "results": None,
-            "status": "error",
-            "error": error_msg,
-        }
+        # Re-raise the exception so RQ marks the job as failed
+        raise e
+    except (ConnectionError, TimeoutError, OSError) as e:
+        # Network and I/O related errors - leverage native errors
+        if isinstance(e, (ConnectionError, TimeoutError)):
+            leverage_native_error(
+                e,
+                f"Network error during audio processing: {str(e)}",
+                NetworkError,
+                task_id=job_id,
+            )
+        else:  # OSError
+            leverage_native_error(
+                e,
+                f"File system error during audio processing: {str(e)}",
+                FileSystemError,
+                task_id=job_id,
+            )
 
-    finally:
-        if redis_conn:
-            redis_conn.close()
+    except (MemoryError, RuntimeError) as e:
+        # System resource errors - leverage native errors
+        if isinstance(e, MemoryError):
+            leverage_native_error(
+                e,
+                f"Insufficient memory during audio processing: {str(e)}",
+                ModelMemoryError,
+                task_id=job_id,
+            )
+        else:  # RuntimeError
+            leverage_native_error(
+                e,
+                f"Runtime error during audio processing: {str(e)}",
+                ProcessingError,
+                task_id=job_id,
+            )
+
+    except Exception as e:
+        # Unknown/unexpected errors - leverage native errors
+        leverage_native_error(
+            e,
+            f"Unexpected error during audio processing: {str(e)}",
+            ProcessingError,
+            task_id=job_id,
+        )
+
+    # This should never be reached due to exception handling above
+    return {
+        "versions": None,
+        "metrics": None,
+        "results": None,
+        "status": "error",
+        "error": {"message": "Unexpected error path taken"},
+    }
 
 
 def handle_processing_error(
@@ -714,6 +1187,9 @@ def handle_processing_error(
 ) -> None:
     """
     Handle processing errors by updating task status to FAILED.
+
+    DEPRECATED: Use handle_maie_error from src.api.errors instead.
+    This function is kept for backward compatibility.
 
     Args:
         client: Redis client for updating task status
@@ -734,6 +1210,7 @@ def handle_processing_error(
             "error": error_message,
             "stage": stage,
             "updated_at": datetime.now(timezone.utc).isoformat(),
+            "completed_at": datetime.now(timezone.utc).isoformat(),
         }
 
         # Add error code if provided

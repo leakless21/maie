@@ -100,9 +100,9 @@ class TestCalculateEditRate:
 
         edit_rate = _calculate_edit_rate(original, enhanced)
 
-        assert (
-            edit_rate == 1.0
-        ), "Completely different strings should have 1.0 edit rate"
+        assert edit_rate == 1.0, (
+            "Completely different strings should have 1.0 edit rate"
+        )
 
     def test_single_character_change(self):
         """Test edit rate for single character substitution."""
@@ -146,9 +146,9 @@ class TestCalculateEditRate:
         edit_rate = _calculate_edit_rate(original, enhanced)
 
         # Should be low since only minor changes (capitalization + period)
-        assert (
-            edit_rate < 0.1
-        ), f"Small enhancements should have low edit rate, got {edit_rate}"
+        assert edit_rate < 0.1, (
+            f"Small enhancements should have low edit rate, got {edit_rate}"
+        )
 
     def test_punctuation_changes(self):
         """Test edit rate with punctuation additions."""

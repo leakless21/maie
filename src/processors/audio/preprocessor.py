@@ -16,10 +16,33 @@ from typing import Any, Dict
 
 from loguru import logger
 
+from src.config import settings
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
 # Public constants aligned with docs
 TARGET_SAMPLE_RATE = 16000
 TARGET_CHANNELS = 1
 MIN_DURATION_SEC = 1.0
+
+
+class AudioCommandError(subprocess.CalledProcessError, ValueError):
+    """Exception raised when external audio tooling fails."""
+
+    def __init__(
+        self,
+        returncode: int,
+        cmd: list[str] | tuple[str, ...],
+        output: str | None = None,
+        stderr: str | None = None,
+    ) -> None:
+        subprocess.CalledProcessError.__init__(
+            self, returncode=returncode, cmd=cmd, output=output, stderr=stderr
+        )
+        message = stderr or "Audio command execution failed"
+        ValueError.__init__(self, message)
 
 
 class AudioPreprocessor:
@@ -51,13 +74,27 @@ class AudioPreprocessor:
             str(path),
         ]
         logger.debug("ffprobe cmd: {}", cmd)
+
+        # Always capture output so we can parse it
         result = subprocess.run(cmd, capture_output=True, text=True)
+        
         if getattr(result, "returncode", 0) != 0:
             stderr = getattr(result, "stderr", "")
             logger.error("ffprobe failed: {}", stderr)
-            raise ValueError(f"FFprobe failed to get audio info: {stderr}")
+            raise AudioCommandError(
+                returncode=result.returncode or 1,
+                cmd=cmd,
+                output=getattr(result, "stdout", None),
+                stderr=stderr,
+            )
 
-        data = json.loads(getattr(result, "stdout", "{}"))
+        stdout_data = getattr(result, "stdout", None)
+        
+        # Log output in verbose mode
+        if settings.verbose_components and stdout_data:
+            logger.debug("ffprobe output: {}", stdout_data)
+        
+        data = json.loads(stdout_data or "{}")
         streams = data.get("streams", [])
         audio_stream = next(
             (s for s in streams if s.get("codec_type") == "audio"), None
@@ -101,11 +138,20 @@ class AudioPreprocessor:
             str(output_path),
         ]
         logger.debug("ffmpeg normalize cmd: {}", cmd)
+
+        # Always capture output for error handling
         result = subprocess.run(cmd, capture_output=True, text=True)
         if getattr(result, "returncode", 0) != 0:
             stderr = getattr(result, "stderr", "")
             logger.error("ffmpeg normalization failed: {}", stderr)
-            raise ValueError(f"FFmpeg failed to normalize audio: {stderr}")
+            raise AudioCommandError(
+                returncode=result.returncode or 1,
+                cmd=cmd,
+                output=getattr(result, "stdout", None),
+                stderr=stderr,
+            )
+        if settings.verbose_components and getattr(result, "stdout", None):
+            logger.debug("ffmpeg normalize output: {}", result.stdout)
         return output_path
 
     def preprocess(self, input_path: Path) -> Dict[str, Any]:

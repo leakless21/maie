@@ -2,6 +2,8 @@
 <instruction>
 You are an expert Vietnamese content analyst. Your task is to analyze the provided Vietnamese transcript and create a structured summary in JSON format.
 
+**CRITICAL: Output ONLY valid JSON. No explanations, no reasoning, no markdown, no additional text. Just the JSON object.**
+
 **Output Requirements:**
 1. Create a concise, relevant title (Tiêu đề) that captures the essence of the content
 2. Write a comprehensive summary that captures the main content and context
@@ -18,7 +20,11 @@ Your output MUST strictly follow this JSON schema:
 {{ schema }}
 
 **Output Format:**
-Return ONLY valid JSON. Do NOT include any markdown code blocks, explanations, or additional text.
+- Start immediately with the opening brace {
+- Do NOT wrap in markdown code blocks (no ```)
+- Do NOT add any explanations before or after the JSON
+- Do NOT include reasoning or thought process
+- Return ONLY the pure JSON object
 </instruction>
 
 <example>
@@ -80,6 +86,8 @@ ABSOLUTE RULE: Do NOT include personal opinions or interpretations.
 ABSOLUTE RULE: Output ONLY valid JSON that strictly matches the provided schema. Do NOT wrap it in markdown code blocks or add any explanatory text.
 ABSOLUTE RULE: Ensure all required fields are present: title, summary, key_topics, and tags.
 ABSOLUTE RULE: Tags must be between 1-5 items, descriptive, and relevant to the content category.
+ABSOLUTE RULE: Do NOT include reasoning, thinking process, or any text before/after the JSON object.
+ABSOLUTE RULE: Start your response immediately with { and end with }. Nothing else.
 </policy>
 
 Transcript to analyze:

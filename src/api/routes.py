@@ -1,14 +1,18 @@
 """Route definitions for the MAIE API."""
 
 import json
+import logging.config
 import re
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Annotated, Any, Dict, List
 
 from litestar import Controller, Request, get, post
 from litestar.datastructures import UploadFile
+from litestar.enums import RequestEncodingType
 from litestar.exceptions import HTTPException, NotFoundException
+from litestar.params import Body
 from litestar.params import Parameter
 from litestar.status_codes import (
     HTTP_202_ACCEPTED,
@@ -17,17 +21,53 @@ from litestar.status_codes import (
     HTTP_422_UNPROCESSABLE_ENTITY,
     HTTP_429_TOO_MANY_REQUESTS,
 )
+from pydantic import ValidationError
+
+from src.api.errors import (
+    APIValidationError,
+    AudioValidationError,
+)
 
 from src.api.schemas import (
     Feature,
     ModelInfoSchema,
     ModelsResponseSchema,
+    ProcessRequestSchema,
     ProcessResponse,
     StatusResponseSchema,
+    TaskStatus,
     TemplateInfoSchema,
     TemplatesResponseSchema,
 )
+from src.api.dependencies import api_key_guard
 from src.config import settings
+from src.config.logging import get_module_logger
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
+
+
+def _patch_logging_queue_listener() -> None:
+    """Ensure Litestar logging config uses ext:// notation for queue listeners."""
+
+    if getattr(logging.config, "_maie_queue_listener_patched", False):
+        return
+
+    original_dict_config = logging.config.dictConfig
+
+    def dict_config_patched(config, *args, **kwargs):
+        handlers = config.get("handlers", {}) if isinstance(config, dict) else {}
+        for handler in handlers.values():
+            listener = handler.get("listener")
+            if listener == "litestar.logging.standard.LoggingQueueListener":
+                handler["listener"] = "ext://litestar.logging.standard.LoggingQueueListener"
+        return original_dict_config(config, *args, **kwargs)
+
+    logging.config.dictConfig = dict_config_patched  # type: ignore[assignment]
+    setattr(logging.config, "_maie_queue_listener_patched", True)
+
+
+_patch_logging_queue_listener()
 
 
 def sanitize_filename(filename: str) -> str:
@@ -64,16 +104,16 @@ def sanitize_filename(filename: str) -> str:
 
 
 def check_queue_depth() -> bool:
-    """
-    Check if the queue has capacity for more jobs.
+    """Check if the queue has capacity for more jobs."""
+    from src.api.dependencies import get_rq_queue
 
-    Note: Currently not implemented. Will be wired up when Redis/RQ integration is complete.
-
-    Returns:
-        True if queue has capacity, False if full
-    """
-    # Placeholder - returns True until Redis integration implemented
-    return True
+    try:
+        queue = get_rq_queue()
+        current_depth = queue.count
+        return current_depth < settings.max_queue_depth
+    except Exception:
+        # Fail open for availability
+        return True
 
 
 async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Path:
@@ -133,9 +173,17 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
                     pass  # Ignore cleanup errors
 
                 file_size_mb = total_size / (1024 * 1024)
+                error = AudioValidationError(
+                    message=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)",
+                    details={
+                        "file_size_mb": file_size_mb,
+                        "max_size_mb": settings.max_file_size_mb,
+                        "filename": file.filename,
+                    },
+                )
                 raise HTTPException(
                     status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-                    detail=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)",
+                    detail=error.message,
                 )
 
             await f.write(chunk)
@@ -143,33 +191,57 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
     return file_path
 
 
-def create_task_in_redis(task_id: uuid.UUID, request_params: Dict[str, Any]) -> None:
-    """
-    Create initial task record in Redis.
+async def create_task_in_redis(
+    task_id: uuid.UUID, request_params: Dict[str, Any]
+) -> None:
+    """Create initial task record in Redis results DB."""
+    from src.api.dependencies import get_results_redis
 
-    Note: Placeholder stub. Will be implemented when Redis integration is complete.
-
-    Args:
-        task_id: Task identifier
-        request_params: Processing parameters
-    """
-    pass
+    redis_client = await get_results_redis()
+    try:
+        task_key = f"task:{task_id}"
+        task_data = {
+            "task_id": str(task_id),
+            "status": TaskStatus.PENDING.value,
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "features": json.dumps(request_params.get("features", [])),
+            "template_id": request_params.get("template_id", ""),
+            "file_path": request_params.get("file_path", ""),
+            "asr_backend": request_params.get("asr_backend", "whisper"),
+        }
+        await redis_client.hset(task_key, mapping=task_data)
+        await redis_client.expire(task_key, settings.result_ttl)
+    finally:
+        await redis_client.aclose()
 
 
 def enqueue_job(
     task_id: uuid.UUID, file_path: Path, request_params: Dict[str, Any]
 ) -> None:
-    """
-    Enqueue processing job to Redis queue.
+    """Enqueue processing job to Redis queue (DB 0)."""
+    from src.api.dependencies import get_rq_queue
+    from src.worker.pipeline import process_audio_task
 
-    Note: Placeholder stub. Will be implemented when RQ integration is complete.
+    queue = get_rq_queue()
 
-    Args:
-        task_id: Task identifier
-        file_path: Path to audio file
-        request_params: Processing parameters
-    """
-    pass
+    task_params = {
+        "task_id": str(task_id),
+        "audio_path": str(file_path),
+        "features": request_params.get("features", ["clean_transcript", "summary"]),
+        "template_id": request_params.get("template_id"),
+        "asr_backend": request_params.get("asr_backend", "whisper"),
+        "redis_host": "localhost",
+        "redis_port": 6379,
+        "redis_db": settings.redis_results_db,
+    }
+
+    queue.enqueue(
+        process_audio_task,
+        task_params,
+        job_id=str(task_id),
+        job_timeout=settings.job_timeout,
+        result_ttl=settings.result_ttl,
+    )
 
 
 class ProcessController(Controller):
@@ -177,33 +249,146 @@ class ProcessController(Controller):
 
     @post(
         "/v1/process",
+        guards=[api_key_guard],
         summary="Process audio file",
-        description="Submit an audio file for processing using specified parameters",
+        description=(
+            "Submit an audio file for processing using specified parameters.\n\n"
+            "This endpoint accepts multipart/form-data with an audio file and optional processing parameters. "
+            "The request is processed asynchronously, and a task ID is returned immediately.\n\n"
+            "**Request Body Parameters (multipart/form-data):**\n\n"
+            "- **file** (required, binary): Audio file to process\n"
+            "  - Supported formats: WAV, MP3, M4A, FLAC\n"
+            "  - Maximum size: 100MB\n"
+            "  - Content-Type: audio/* or application/octet-stream\n\n"
+            "- **features** (optional, array of strings): List of desired outputs\n"
+            "  - Available: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics`\n"
+            "  - Default: `['clean_transcript', 'summary']`\n"
+            "  - Send multiple values as separate form fields\n\n"
+            "- **template_id** (optional, string): Summary format template ID\n"
+            "  - Required if `summary` is included in features\n"
+            "  - Use `/v1/templates` to get available template IDs\n"
+            "  - Example: `meeting_notes_v1`\n\n"
+            "- **asr_backend** (optional, string): ASR backend selection\n"
+            "  - Available: `whisper` (default), `chunkformer`\n"
+            "  - Use `/v1/models` to get available backends\n\n"
+            "**Examples:**\n\n"
+            "Basic processing (default settings):\n"
+            "```bash\n"
+            "curl -X POST 'http://localhost:8000/v1/process' \\\n"
+            "  -H 'X-API-Key: <your_api_key>' \\\n"
+            "  -F 'file=@/path/to/audio.mp3' \\\n"
+            "  -F 'features=clean_transcript' \\\n"
+            "  -F 'features=summary' \\\n"
+            "  -F 'template_id=meeting_notes_v1'\n"
+            "```\n\n"
+            "Raw transcript only:\n"
+            "```bash\n"
+            "curl -X POST 'http://localhost:8000/v1/process' \\\n"
+            "  -H 'X-API-Key: <your_api_key>' \\\n"
+            "  -F 'file=@/path/to/audio.wav' \\\n"
+            "  -F 'features=raw_transcript'\n"
+            "```\n\n"
+            "All features with ChunkFormer backend:\n"
+            "```bash\n"
+            "curl -X POST 'http://localhost:8000/v1/process' \\\n"
+            "  -H 'X-API-Key: <your_api_key>' \\\n"
+            "  -F 'file=@/path/to/audio.m4a' \\\n"
+            "  -F 'features=raw_transcript' \\\n"
+            "  -F 'features=clean_transcript' \\\n"
+            "  -F 'features=summary' \\\n"
+            "  -F 'features=enhancement_metrics' \\\n"
+            "  -F 'template_id=meeting_notes_v1' \\\n"
+            "  -F 'asr_backend=chunkformer'\n"
+            "```\n\n"
+            "**Response:**\n\n"
+            "Returns HTTP 202 Accepted with a task ID for tracking the processing status.\n\n"
+            "**Error Responses:**\n\n"
+            "- 413: File too large (exceeds 100MB)\n"
+            "- 415: Unsupported media type\n"
+            "- 422: Validation error (missing required fields, invalid parameters)\n"
+            "- 429: Queue is full, try again later"
+        ),
         tags=["Processing"],
         status_code=HTTP_202_ACCEPTED,
     )
     async def process_audio(
         self,
         request: Request,
+        data: Annotated[
+            Dict[str, Any],
+            Body(media_type=RequestEncodingType.MULTI_PART),
+        ],
     ) -> ProcessResponse:
         """
         Process an audio file with the specified parameters.
 
         Args:
             request: Litestar request object
+            data: Parsed multipart request payload containing file and parameters
 
         Returns:
             Response with task ID
         """
-        # Parse multipart form data
-        form_data = await request.form()
-
-        # Extract and validate file
-        file = form_data.get("file")
-        if not file or not isinstance(file, UploadFile):
+        prepared_data = dict(data)
+        features_value = prepared_data.get("features")
+        if isinstance(features_value, str):
+            prepared_data["features"] = [features_value]
+        try:
+            payload = ProcessRequestSchema.model_validate(prepared_data)
+        except ValidationError as exc:
             raise HTTPException(
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Missing or invalid 'file' field",
+                detail=str(exc),
+            ) from exc
+
+        # Extract fields from schema
+        file = payload.file
+        features_raw = payload.features
+        template_id = payload.template_id
+        asr_backend = payload.asr_backend or "whisper"
+
+        # Normalize and validate asr_backend
+        from src.processors.asr.factory import ASRFactory
+        if isinstance(asr_backend, str):
+            asr_backend = asr_backend.strip().lower()
+        else:
+            asr_backend = "whisper"
+
+        allowed = set(ASRFactory.BACKENDS.keys())
+        if asr_backend not in allowed:
+            error = APIValidationError(
+                message="Invalid 'asr_backend'",
+                details={"received": asr_backend, "allowed": sorted(allowed)},
+            )
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=error.message,
+            )
+        
+        # Normalize features to list - support both JSON array and repeated fields
+        if isinstance(features_raw, str) and features_raw.startswith('[') and features_raw.endswith(']'):
+            try:
+                features_raw = json.loads(features_raw)
+            except json.JSONDecodeError:
+                features_raw = [features_raw]
+        elif not isinstance(features_raw, list):
+            features_raw = [features_raw] if features_raw else []
+        
+        # Parse features into Feature enum
+        if features_raw:
+            features = [Feature(f) if isinstance(f, str) else f for f in features_raw]
+        else:
+            features = [Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY]
+        
+        # Validate file present and type
+        if not file or not isinstance(file, UploadFile):
+            error = APIValidationError(
+                message="Missing or invalid 'file' field",
+                details={"field": "file", "expected_type": "UploadFile"},
+            )
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=error.message,
             )
 
         # SECURITY: Validate BOTH file extension AND MIME type
@@ -232,44 +417,73 @@ class ProcessController(Controller):
         # Both should be valid (or at least one with the other being empty/unknown)
         if not extension_valid:
             if not mime_valid:
+                error = AudioValidationError(
+                    message=f"Unsupported file type: {file.filename}",
+                    details={
+                        "filename": file.filename,
+                        "extension": file_ext,
+                        "mime_type": content_type,
+                        "allowed_extensions": list(allowed_extensions),
+                        "allowed_mime_types": list(allowed_mime_types),
+                    },
+                )
                 raise HTTPException(
                     status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                    detail=f"Unsupported file type: {file.filename} (extension: {file_ext}, mime: {content_type})",
+                    detail=error.message,
                 )
 
         # Additional check: if MIME type is explicitly NOT audio, reject even if extension is valid
+        # Exception: allow application/octet-stream and text/plain if extension is valid (common for multipart uploads)
         if (
             content_type
             and not content_type.startswith("audio/")
             and content_type not in allowed_mime_types
+            and content_type not in ["application/octet-stream", "text/plain"]
         ):
+            error = AudioValidationError(
+                message=f"File MIME type must be audio/*, got: {content_type}",
+                details={
+                    "filename": file.filename,
+                    "mime_type": content_type,
+                    "expected_mime_prefix": "audio/",
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=f"File MIME type must be audio/*, got: {content_type}",
+                detail=error.message,
             )
 
-        # Parse other form fields FIRST (before streaming file)
-        features_raw = form_data.get("features", '["clean_transcript", "summary"]')
-        if isinstance(features_raw, str):
-            features = json.loads(features_raw)
-        else:
-            features = features_raw
-
-        template_id = form_data.get("template_id")
+        # Normalize features to string values for downstream checks
+        normalized_features = [f.value if isinstance(f, Feature) else f for f in features]
 
         # Validate template_id if summary is requested
-        if "summary" in features or Feature.SUMMARY.value in features:
+        if "summary" in normalized_features or Feature.SUMMARY.value in normalized_features:
             if not template_id:
+                error = APIValidationError(
+                    message="template_id is required when summary is in features",
+                    details={
+                        "features": normalized_features,
+                        "required_field": "template_id",
+                        "condition": "summary feature requested",
+                    },
+                )
                 raise HTTPException(
                     status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-                    detail="template_id is required when summary is in features",
+                    detail=error.message,
                 )
 
         # Check queue capacity (backpressure)
         if not check_queue_depth():
+            error = APIValidationError(
+                message="Queue is full. Please try again later.",
+                details={
+                    "queue_status": "full",
+                    "retry_after": "Please wait and retry",
+                },
+            )
             raise HTTPException(
                 status_code=HTTP_429_TOO_MANY_REQUESTS,
-                detail="Queue is full. Please try again later.",
+                detail=error.message,
             )
 
         # Generate task ID
@@ -280,54 +494,61 @@ class ProcessController(Controller):
 
         # Create task record in Redis
         request_params = {
-            "features": features,
+            "features": normalized_features,
             "template_id": template_id,
             "file_path": str(file_path),
+            "asr_backend": asr_backend,
         }
-        create_task_in_redis(task_id, request_params)
+        await create_task_in_redis(task_id, request_params)
 
         # Enqueue job
         enqueue_job(task_id, file_path, request_params)
 
-        return ProcessResponse(task_id=task_id)
+        return ProcessResponse(task_id=task_id, status="PENDING")
 
 
-def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
-    """
-    Retrieve task data from Redis.
+async def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
+    """Retrieve task data from Redis results DB."""
+    from src.api.dependencies import get_results_redis
 
-    Note: Placeholder stub. Will be implemented when Redis integration is complete.
+    redis_client = await get_results_redis()
+    try:
+        task_key = f"task:{task_id}"
+        task_data = await redis_client.hgetall(task_key)
 
-    Args:
-        task_id: Task identifier
+        if not task_data:
+            return None
 
-    Returns:
-        Task data dictionary or None if not found
-    """
-    return None
+        # Deserialize JSON fields
+        for field in ["features", "results", "metrics", "versions"]:
+            if field in task_data and task_data[field]:
+                try:
+                    task_data[field] = json.loads(task_data[field])
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        return task_data
+    finally:
+        await redis_client.aclose()
 
 
 def get_available_models() -> ModelsResponseSchema:
-    """
-    Get list of available ASR models/backends.
+    """Get list of available ASR models/backends from ASRFactory."""
+    from src.processors.asr.factory import ASRFactory
 
-    Note: Currently returns hardcoded whisper backend. Will be implemented with ASRFactory
-    when processor modules are complete.
+    models = []
 
-    Returns:
-        ModelsResponseSchema with models list
-    """
-    # Placeholder - hardcoded default whisper backend
-    models = [
-        ModelInfoSchema(
-            id="whisper",
-            name="Whisper (CTranslate2)",
-            description="Default ASR backend with native punctuation",
+    for backend_name, backend_class in ASRFactory.BACKENDS.items():
+        model_info = ModelInfoSchema(
+            id=backend_name,
+            name=f"{backend_name.title()} Backend",
+            description=f"ASR backend using {backend_name}",
             type="ASR",
-            version="erax-wow-turbo-v1.1",
+            version="1.0",
             supported_languages=["en", "vi", "zh", "ja", "ko"],
         )
-    ]
+        models.append(model_info)
+
     return ModelsResponseSchema(models=models)
 
 
@@ -371,6 +592,7 @@ class StatusController(Controller):
 
     @get(
         "/v1/status/{task_id:uuid}",
+        guards=[api_key_guard],
         summary="Get processing status",
         description="Check the status of a processing task by its ID",
         tags=["Status"],
@@ -389,7 +611,7 @@ class StatusController(Controller):
             Status information for the specified task
         """
         # Retrieve task from Redis
-        task_data = get_task_from_redis(task_id)
+        task_data = await get_task_from_redis(task_id)
 
         if not task_data:
             raise NotFoundException(f"Task {task_id} not found")
