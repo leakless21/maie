@@ -8,6 +8,7 @@ Entry points must call `configure_logging()` explicitly.
 from __future__ import annotations
 
 import contextvars
+import logging
 import os
 import re
 import sys
@@ -123,6 +124,31 @@ def _ensure_dir(path: Path) -> None:
         pass
 
 
+class InterceptHandler(logging.Handler):
+    def emit(self, record: logging.LogRecord) -> None:
+        try:
+            level = _loguru_logger.level(record.levelname).name
+        except ValueError:
+            level = record.levelno
+        _loguru_logger.opt(depth=6, exception=record.exc_info).log(
+            level, record.getMessage()
+        )
+
+
+def intercept_stdlib_logging(
+    level: int | str = logging.INFO, names: list[str] | None = None
+) -> None:
+    logging.root.handlers = [InterceptHandler()]
+    logging.root.setLevel(
+        level if isinstance(level, int)
+        else getattr(logging, str(level).upper(), logging.INFO)
+    )
+    for name in (names or ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio"]):
+        logger = logging.getLogger(name)
+        logger.handlers = []
+        logger.propagate = True
+
+
 def get_logger():
     """Return the Loguru logger (Loguru is mandatory)."""
     return _loguru_logger
@@ -164,6 +190,10 @@ def configure_logging(
         if console_serialize is not None
         else settings.log_console_serialize
     )
+    
+    # Prefer JSON console logs in production when not explicitly set
+    if console_serialize is None and getattr(settings, "environment", "development") == "production":
+        console_ser = True
     file_ser = (
         file_serialize if file_serialize is not None else settings.log_file_serialize
     )
@@ -269,6 +299,11 @@ def configure_logging(
             )
         except (ValueError, OSError, PermissionError):
             pass
+
+    try:
+        intercept_stdlib_logging(level=level)
+    except Exception:
+        pass
 
     return _loguru_logger
 

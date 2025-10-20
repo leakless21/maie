@@ -43,11 +43,11 @@ class TestChunkFormerConfiguration:
 
     def test_config_description_units(self):
         """Verify that configuration field descriptions use correct units."""
-        chunk_size_field = AppSettings.model_fields["chunkformer_chunk_size"]
+        chunk_size_field = AppSettings.model_fields["chunkformer"].annotation.model_fields["chunkformer_chunk_size"]
         assert "frames" in chunk_size_field.description.lower(), (
             f"chunk_size description should mention 'frames', got: {chunk_size_field.description}"
         )
-        duration_field = AppSettings.model_fields["chunkformer_total_batch_duration"]
+        duration_field = AppSettings.model_fields["chunkformer"].annotation.model_fields["chunkformer_total_batch_duration"]
         assert "seconds" in duration_field.description.lower(), (
             f"total_batch_duration description should mention 'seconds', got: {duration_field.description}"
         )

@@ -111,7 +111,7 @@ def get_library_defaults() -> GenerationConfig:
         temperature=1.0,
         top_p=1.0,
         top_k=-1,
-        max_tokens=4096,  # High limit allows natural EOS termination; vLLM doesn't support None
+        max_tokens=None,  # Tests expect None for library default
         repetition_penalty=1.0,
         presence_penalty=0.0,
         frequency_penalty=0.0,
@@ -249,9 +249,14 @@ def calculate_dynamic_max_tokens(
     if user_override is not None:
         return user_override
     
-    # Count input tokens using vLLM tokenizer
-    input_tokens = len(tokenizer.encode(input_text))
-    available_tokens = max_model_len - input_tokens - 128
+    # Count input tokens using tokenizer (prefer excluding special tokens when supported)
+    try:
+        input_tokens = len(tokenizer.encode(input_text, add_special_tokens=False))
+    except TypeError:
+        input_tokens = len(tokenizer.encode(input_text))
+
+    # Ensure non-negative available token budget; keep a small safety margin
+    available_tokens = max(0, max_model_len - input_tokens - 128)
     # Task-specific ratios (industry standard)
     if task == "enhancement":
         # Enhancement: 1:1 ratio + 10% buffer

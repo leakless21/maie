@@ -214,6 +214,16 @@ class LLMProcessor(LLMBackend):
 
             self._model_loaded = True
             logger.info(f"LLM model loaded successfully: {model_name}")
+            
+            # Initialize tokenizer after model is loaded
+            try:
+                self._ensure_tokenizer(model_name)
+                if self.tokenizer is not None:
+                    logger.debug(f"Tokenizer initialized for {model_name}")
+                else:
+                    logger.warning(f"Tokenizer initialization failed for {model_name}")
+            except Exception as e:
+                logger.warning(f"Failed to initialize tokenizer during model load: {e}")
 
         except ImportError:
             logger.warning("vLLM not installed, LLM features will be unavailable")
@@ -241,6 +251,77 @@ class LLMProcessor(LLMBackend):
                 "reason": f"Load error: {e}",
             }
             raise
+
+    def _ensure_tokenizer(self, model_name: str) -> None:
+        """
+        Ensure a tokenizer is available for token counting and prompt formatting.
+
+        Preference order:
+        1) vLLM-provided tokenizer via model.get_tokenizer()
+        2) Hugging Face AutoTokenizer.from_pretrained(model_name)
+        """
+        if self.tokenizer is not None:
+            return
+
+        # Try vLLM's tokenizer handle if exposed by the offline LLM instance
+        try:
+            if self.model is not None and hasattr(self.model, "get_tokenizer"):
+                tok = self.model.get_tokenizer()
+                if tok is not None and hasattr(tok, "encode"):
+                    self.tokenizer = tok
+                    return
+        except Exception as e:
+            logger.debug(f"Unable to obtain tokenizer from vLLM model: {e}")
+
+        # Fallback to Hugging Face tokenizer
+        try:
+            from transformers import AutoTokenizer  # local import to avoid hard dep when unused
+
+            self.tokenizer = AutoTokenizer.from_pretrained(
+                model_name, trust_remote_code=True
+            )
+        except Exception as e:
+            logger.warning(f"Failed to load Hugging Face tokenizer for {model_name}: {e}")
+            self.tokenizer = None
+
+    def _format_with_chat_template(self, messages: list, add_generation_prompt: bool = True) -> str:
+        """
+        Format messages using the tokenizer's chat template if available.
+        
+        Args:
+            messages: List of message dictionaries with 'role' and 'content' keys
+            add_generation_prompt: Whether to add generation prompt
+            
+        Returns:
+            Formatted prompt string
+        """
+        if self.tokenizer is None:
+            # Fallback: simple concatenation
+            formatted = ""
+            for msg in messages:
+                role = msg.get("role", "user")
+                content = msg.get("content", "")
+                formatted += f"{role}: {content}\n"
+            return formatted
+        
+        try:
+            # Try to use chat template if available
+            if hasattr(self.tokenizer, "apply_chat_template"):
+                return self.tokenizer.apply_chat_template(
+                    messages, 
+                    tokenize=False, 
+                    add_generation_prompt=add_generation_prompt
+                )
+        except Exception as e:
+            logger.debug(f"Chat template failed, using fallback: {e}")
+        
+        # Fallback: simple concatenation
+        formatted = ""
+        for msg in messages:
+            role = msg.get("role", "user")
+            content = msg.get("content", "")
+            formatted += f"{role}: {content}\n"
+        return formatted
 
     def execute(self, text: str, **kwargs) -> LLMResult:
         """
@@ -323,6 +404,37 @@ class LLMProcessor(LLMBackend):
             # Use text as prompt directly for other tasks
             prompt_text = text
 
+        # Build final prompt using chat template if needed
+        final_prompt = prompt_text
+        if task in ["enhancement", "summary"] and self.tokenizer is not None:
+            try:
+                # Try to format as chat if the input looks like a conversation
+                if isinstance(text, str) and ("user:" in text.lower() or "assistant:" in text.lower()):
+                    # Parse simple conversation format
+                    messages = []
+                    lines = text.split('\n')
+                    current_role = "user"
+                    current_content = []
+                    
+                    for line in lines:
+                        line = line.strip()
+                        if line.startswith(("user:", "assistant:", "system:")):
+                            if current_content:
+                                messages.append({"role": current_role, "content": "\n".join(current_content).strip()})
+                            current_role = line.split(":")[0].lower()
+                            current_content = [line.split(":", 1)[1].strip()] if ":" in line else []
+                        elif line:
+                            current_content.append(line)
+                    
+                    if current_content:
+                        messages.append({"role": current_role, "content": "\n".join(current_content).strip()})
+                    
+                    if len(messages) > 1:
+                        final_prompt = self._format_with_chat_template(messages, add_generation_prompt=True)
+            except Exception as e:
+                logger.debug(f"Chat template formatting failed, using original prompt: {e}")
+                final_prompt = prompt_text
+
         # Select environment config based on task
         env_config = (
             self.env_config_enhancement
@@ -349,8 +461,15 @@ class LLMProcessor(LLMBackend):
         }
         runtime_overrides_dict = {k: kwargs[k] for k in candidate_keys if k in kwargs}
         
-        # Calculate dynamic max_tokens if not explicitly provided and tokenizer is available
+        # Calculate dynamic max_tokens if not explicitly provided
         if "max_tokens" not in runtime_overrides_dict and "max_new_tokens" not in runtime_overrides_dict:
+            # Ensure tokenizer is ready
+            if self.tokenizer is None:
+                try:
+                    self._ensure_tokenizer(self.model_path)
+                except Exception as e:
+                    logger.debug(f"Tokenizer initialization skipped/failed: {e}")
+
             if self.tokenizer is not None:
                 try:
                     # Get model's max_model_len from settings
@@ -362,9 +481,9 @@ class LLMProcessor(LLMBackend):
                     else:
                         max_model_len = 32768  # fallback
                     
-                    # Calculate dynamic max_tokens
+                    # Calculate dynamic max_tokens using final prompt
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
-                        input_text=prompt_text,  # Use prompt_text (after template rendering for summary)
+                        input_text=final_prompt,  # Use final_prompt (after chat template formatting)
                         tokenizer=self.tokenizer,
                         task=task,
                         max_model_len=max_model_len,
@@ -413,7 +532,7 @@ class LLMProcessor(LLMBackend):
             else:
                 sampling = apply_overrides_to_sampling(base_sampling, overrides)
 
-            outputs = self.model.generate([prompt_text], sampling)
+            outputs = self.model.generate([final_prompt], sampling)
             generated_text = outputs[0].outputs[0].text if outputs else ""
 
         except Exception as e:
@@ -642,6 +761,11 @@ class LLMProcessor(LLMBackend):
                 parsed_data, error_message = validate_llm_output(raw_output, schema)
 
                 if parsed_data is not None:
+                    # Post-process to reduce hallucinations for certain templates
+                    try:
+                        parsed_data = self._postprocess_summary(template_id, transcript, parsed_data)
+                    except Exception:
+                        pass
                     # Success - return structured summary
                     logger.debug(
                         f"Summary generated successfully on attempt {retry_count + 1}"
@@ -759,6 +883,40 @@ class LLMProcessor(LLMBackend):
                 "repetition_penalty": 1.05,
             },
         }
+
+    # Internal helpers
+    def _postprocess_summary(self, template_id: str, transcript: str, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Lightweight guardrails to curb hallucinated names/dates.
+
+        - For meeting_notes_v1: ensure meeting_date appears in transcript; else null.
+          Ensure participants are verbatim substrings of transcript; else drop.
+        - For interview_transcript_v1: ensure interview_date appears in transcript; else null.
+        """
+        try:
+            t_lower = (transcript or "").lower()
+            if template_id == "meeting_notes_v1":
+                md = data.get("meeting_date")
+                if isinstance(md, str) and md and (md.lower() not in t_lower):
+                    data["meeting_date"] = None
+
+                participants = data.get("participants")
+                if isinstance(participants, list):
+                    filtered = []
+                    for p in participants:
+                        if isinstance(p, str) and p.strip() and (p.lower() in t_lower):
+                            filtered.append(p)
+                    data["participants"] = filtered
+
+            elif template_id == "interview_transcript_v1":
+                md = data.get("interview_date")
+                if isinstance(md, str) and md and (md.lower() not in t_lower):
+                    data["interview_date"] = None
+
+        except Exception:
+            # Best-effort; never fail the pipeline on guardrails
+            return data
+
+        return data
 
 
 # Expose a module-level 'torch' symbol for tests to patch

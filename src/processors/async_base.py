@@ -11,9 +11,10 @@ from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager
 from typing import Any, Optional, Tuple, Dict, AsyncGenerator
 from dataclasses import dataclass
-import logging
 
-logger = logging.getLogger(__name__)
+from src.config.logging import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 @dataclass

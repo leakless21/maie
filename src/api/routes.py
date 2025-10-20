@@ -332,7 +332,28 @@ class ProcessController(Controller):
         prepared_data = dict(data)
         features_value = prepared_data.get("features")
         if isinstance(features_value, str):
-            prepared_data["features"] = [features_value]
+            # Handle JSON string format
+            if features_value.startswith('[') and features_value.endswith(']'):
+                try:
+                    import json
+                    parsed = json.loads(features_value)
+                    if isinstance(parsed, list):
+                        prepared_data["features"] = parsed
+                    else:
+                        prepared_data["features"] = [features_value]
+                except json.JSONDecodeError:
+                    prepared_data["features"] = [features_value]
+            else:
+                prepared_data["features"] = [features_value]
+        elif isinstance(features_value, list) and len(features_value) == 1 and isinstance(features_value[0], str) and features_value[0].startswith('['):
+            # Handle case where multipart parser wraps JSON string in a list
+            try:
+                import json
+                parsed = json.loads(features_value[0])
+                if isinstance(parsed, list):
+                    prepared_data["features"] = parsed
+            except json.JSONDecodeError:
+                pass
         try:
             payload = ProcessRequestSchema.model_validate(prepared_data)
         except ValidationError as exc:

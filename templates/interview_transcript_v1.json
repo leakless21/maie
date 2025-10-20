@@ -1,9 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Interview Transcript V1",
-  "description": "Structured format for interview transcripts with categorization tags",
+  "description": "Structured format for interview transcripts with categorization tags. Optionally include interview_date if the transcript clearly contains it.",
   "type": "object",
   "properties": {
+    "interview_date": {
+      "type": ["string", "null"],
+      "description": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
     "interview_summary": {
       "type": "string",
       "description": "A comprehensive summary of the interview content",

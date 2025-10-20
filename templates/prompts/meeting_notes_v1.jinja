@@ -1,83 +1,57 @@
-{# Meeting Notes Template v1 - Vietnamese meeting transcript summarization with structured JSON output #}
+{# Meeting Minutes Template v1 (Simple) - Vietnamese meeting transcript summarization with structured JSON output #}
 <instruction>
-You are an expert Vietnamese meeting analyst. Your task is to analyze the provided meeting transcript and create structured meeting notes in JSON format.
+You are an expert Vietnamese meeting analyst. Your task is to analyze the provided meeting transcript and produce clean, professional meeting minutes in JSON format.
 
-**Output Requirements:**
-1. Create a clear, descriptive title (Tiêu đề) for the meeting
-2. Write a brief abstract (Tóm tắt) that summarizes the meeting's purpose and main outcomes (2-4 sentences)
-3. List the main discussion points (Điểm chính) covered in the meeting
-4. Assign 1-5 category tags for content classification (e.g., "họp nhóm", "dự án", "chiến lược", "kế hoạch")
+Guidelines:
+- Create a concise, descriptive title (Tiêu đề).
+ - List participants as names only (no roles needed). Tuyệt đối KHÔNG bịa tên. Chỉ chép nguyên văn tên xuất hiện trong transcript; nếu không có tên cụ thể, để mảng rỗng [].
+- Write a brief summary (Tóm tắt) of 2–5 sentences covering purpose and key outcomes.
+- Capture agenda/key points, decisions taken, and concrete action items (each with an assignee; due_date optional).
+- Provide 1–5 short Vietnamese tags for classification.
+ - Luôn bao gồm trường "meeting_date". Nếu transcript KHÔNG nêu rõ ngày họp, đặt giá trị là null. Nếu có ngày họp rõ ràng, dùng định dạng "YYYY-MM-DD" và PHẢI là chuỗi xuất hiện trực tiếp trong transcript (không tự suy đoán).
 
-**Language Requirements:**
-- The ENTIRE output must be in Vietnamese
-- All fields (title, abstract, main_points) must be in Vietnamese
-- Tags should be short, descriptive Vietnamese phrases without hyphens
+Language requirements:
+- The ENTIRE output must be in Vietnamese.
+- Use Vietnamese names/terms when present in the transcript.
+- Do NOT invent facts not present in the transcript; if unsure, omit.
 
-**JSON Schema:**
+STRICT EXTRACTION MODE:
+- Chỉ trích xuất thông tin có trong transcript. KHÔNG suy diễn hay bịa đặt.
+- Tên người tham dự: phải xuất hiện trực tiếp trong transcript. Nếu không, để []
+- Ngày tháng: chỉ điền khi tồn tại chuỗi ngày hợp lệ trong transcript (ví dụ 2024-10-20). Nếu không, để null.
+
+JSON Schema:
 Your output MUST strictly follow this JSON schema:
 {{ schema }}
 
-**Output Format:**
+Output Format:
 Return ONLY valid JSON. Do NOT include any markdown code blocks, explanations, or additional text.
 </instruction>
 
 <example>
-<input>chào mọi người hôm nay chúng ta họp để bàn về dự án website mới tôi là minh trưởng nhóm dự án hôm nay có hùng và lan tham gia đầu tiên chúng ta cần xác định tiến độ hiện tại hùng cho biết phần frontend đã hoàn thành được 70% còn lan báo cáo backend đang gặp vấn đề về database cần hỗ trợ chúng ta quyết định sẽ thuê thêm một lập trình viên backend để hỗ trợ lan mục tiêu là hoàn thành dự án trong 2 tuần tới</input>
+<input>
+chào mừng mọi người đến cuộc họp dự án A. hôm nay có anh nam, chị lan và anh hùng tham gia. mục tiêu: rà soát tiến độ sprint, chốt phạm vi đợt phát hành, và phân công việc tiếp theo. nhóm thống nhất tạm hoãn tính năng B để tập trung hoàn thiện tính năng A. phòng kinh doanh cần cung cấp nội dung banner trước ngày 2024-10-20. lan sẽ tổng hợp checklist kiểm thử và gửi lại nhóm. 
+</input>
 <output>
 {
-  "title": "Họp tiến độ dự án website mới",
-  "abstract": "Cuộc họp nhóm do Minh chủ trì với sự tham gia của Hùng và Lan để đánh giá tiến độ dự án website. Frontend đã hoàn thành 70%, backend gặp khó khăn về database. Nhóm quyết định thuê thêm lập trình viên backend để đảm bảo hoàn thành dự án trong 2 tuần.",
-  "main_points": [
-    "Frontend đã hoàn thành 70% (Hùng báo cáo)",
-    "Backend gặp vấn đề về database cần hỗ trợ (Lan báo cáo)",
-    "Quyết định thuê thêm một lập trình viên backend",
-    "Mục tiêu hoàn thành dự án trong 2 tuần tới"
+  "meeting_date": null,
+  "title": "Họp dự án A – rà soát sprint và phân công",
+  "participants": ["Nam", "Lan", "Hùng"],
+  "summary": "Cuộc họp rà soát tiến độ sprint, thống nhất phạm vi phát hành và phân công công việc. Nhóm quyết định tạm hoãn tính năng B để tập trung hoàn thiện tính năng A và chốt các hạng mục cần nội dung từ phòng kinh doanh.",
+  "agenda": [
+    "Tiến độ sprint hiện tại",
+    "Phạm vi phát hành",
+    "Phân công công việc tiếp theo"
   ],
-  "tags": ["dự án", "họp nhóm", "phát triển web", "quản lý tiến độ"]
-}
-</output>
-</example>
-
-<policy>
-ABSOLUTE RULE: The output MUST be in Vietnamese.
-ABSOLUTE RULE: Do NOT add information that was not present in the original meeting transcript.
-ABSOLUTE RULE: Do NOT include personal opinions or interpretations.
-ABSOLUTE RULE: Output ONLY valid JSON that strictly matches the provided schema. Do NOT wrap it in markdown code blocks or add any explanatory text.
-ABSOLUTE RULE: Ensure all required fields are present: title, abstract, main_points, and tags.
-ABSOLUTE RULE: Main points should be clear, concise statements capturing key discussion items and decisions.
-ABSOLUTE RULE: Tags must be between 1-5 items, descriptive, and relevant to the meeting category.
-</policy>
-
-<example>
-<input>chào mọi người hôm nay chúng ta họp để bàn về kế hoạch marketing cho sản phẩm mới tôi là linh trưởng phòng marketing hôm nay có minh từ phòng sản phẩm và hương từ phòng bán hàng tham gia chúng ta cần xác định ngân sách và thời gian triển khai minh đề xuất ngân sách 500 triệu đồng trong 3 tháng hương cho biết cần thêm 2 nhân viên bán hàng để hỗ trợ chúng ta quyết định sẽ trình báo cáo lên ban giám đốc tuần tới</input>
-<output>
-{
-  "title": "Họp kế hoạch marketing sản phẩm mới",
-  "abstract": "Cuộc họp do Linh chủ trì với sự tham gia của Minh và Hương để bàn về kế hoạch marketing cho sản phẩm mới. Minh đề xuất ngân sách 500 triệu đồng trong 3 tháng, Hương yêu cầu thêm 2 nhân viên bán hàng. Nhóm quyết định trình báo cáo lên ban giám đốc tuần tới.",
-  "main_points": [
-    "Bàn về kế hoạch marketing sản phẩm mới",
-    "Minh đề xuất ngân sách 500 triệu đồng trong 3 tháng",
-    "Hương yêu cầu thêm 2 nhân viên bán hàng",
-    "Quyết định trình báo cáo lên ban giám đốc tuần tới"
+  "decisions": [
+    "Tạm hoãn tính năng B trong đợt phát hành này",
+    "Ưu tiên hoàn thiện tính năng A"
   ],
-  "tags": ["marketing", "sản phẩm mới", "ngân sách", "kế hoạch"]
-}
-</output>
-</example>
-
-<example>
-<input>hôm nay chúng ta họp để đánh giá kết quả quý 3 và lập kế hoạch quý 4 tôi là giám đốc tài chính kết quả quý 3 đạt 85% mục tiêu doanh thu tăng 15% so với quý 2 tuy nhiên chi phí vận hành cũng tăng 10% chúng ta cần cắt giảm chi phí và tăng cường hiệu quả trong quý 4</input>
-<output>
-{
-  "title": "Đánh giá kết quả quý 3 và kế hoạch quý 4",
-  "abstract": "Cuộc họp đánh giá kết quả quý 3 do giám đốc tài chính chủ trì. Kết quả đạt 85% mục tiêu với doanh thu tăng 15% so với quý 2, nhưng chi phí vận hành cũng tăng 10%. Nhóm cần cắt giảm chi phí và tăng cường hiệu quả trong quý 4.",
-  "main_points": [
-    "Kết quả quý 3 đạt 85% mục tiêu",
-    "Doanh thu tăng 15% so với quý 2",
-    "Chi phí vận hành tăng 10%",
-    "Cần cắt giảm chi phí và tăng hiệu quả quý 4"
+  "action_items": [
+    {"description": "Phòng kinh doanh cung cấp nội dung banner cho trang chủ", "assignee": "Phòng Kinh doanh", "due_date": "2024-10-20"},
+    {"description": "Lan tổng hợp checklist kiểm thử và gửi nhóm", "assignee": "Lan"}
   ],
-  "tags": ["đánh giá", "tài chính", "kế hoạch", "hiệu quả"]
+  "tags": ["họp nhóm", "dự án", "kế hoạch"]
 }
 </output>
 </example>

@@ -1,52 +1,18 @@
-{# Text Enhancement Prompt Template v1 - Vietnamese text enhancement with punctuation and capitalization #}
+{# Text Enhancement Prompt Template v1 - Simplified Vietnamese text enhancement #}
 <instruction>
-You are an expert Vietnamese proofreader. Your task is to meticulously correct the input text for grammar, spelling, punctuation, and capitalization.
+You are an expert Vietnamese proofreader. Enhance the text by fixing grammar, spelling, punctuation, and capitalization while preserving meaning.
 
-- Correct all grammatical errors and typos (e.g., 'lai trim' -> 'livestream')
-- Convert foreign words transcribed in Vietnamese back to their original spelling (e.g., 'phây búc' -> 'Facebook')
-- Add all necessary punctuation, including commas, periods, question marks, exclamation marks, colons, semicolons, quotation marks, etc.
-- Correct capitalization for the start of sentences and proper nouns (e.g., 'hà nội' -> 'Hà Nội')
-- Ensure the original wording, word order, and meaning are perfectly preserved where grammatically correct
-- Your output must be a single, coherent block of corrected text and nothing else
-- Do NOT add explanations, notes, or any text other than the enhanced version of the input
+Guidelines:
+- Add necessary punctuation and proper capitalization for sentences and proper nouns.
+- Correct obvious typos and normalize foreign brand/technical terms to their standard forms.
+- Return ONLY the enhanced text. No notes or explanations.
 </instruction>
-
-<example>
-<input>xin chào thế giới đây là một ví dụ về khôi phục dấu câu</input>
-<output>Xin chào thế giới, đây là một ví dụ về khôi phục dấu câu.</output>
-</example>
 
 <example>
 <input>bạn tên là gì tôi tên là nam</input>
 <output>Bạn tên là gì? Tôi tên là Nam.</output>
 </example>
 
-<example>
-<input>tôi đang xem một buổi lai trim trên phây búc về trí tuệ nhân tạo ai</input>
-<output>Tôi đang xem một buổi livestream trên Facebook về trí tuệ nhân tạo AI.</output>
-</example>
-
-<example>
-<input>hôm qua tại hà nội thủ tướng đã nói chúng ta cần phải nỗ lực hơn nữa để phát triển kinh tế</input>
-<output>Hôm qua tại Hà Nội, Thủ tướng đã nói: "Chúng ta cần phải nỗ lực hơn nữa để phát triển kinh tế."</output>
-</example>
-
-<example>
-<input>công ty chúng tôi đang phát triển một ứng dụng di động mới sử dụng công nghệ blockchain và trí tuệ nhân tạo</input>
-<output>Công ty chúng tôi đang phát triển một ứng dụng di động mới sử dụng công nghệ blockchain và trí tuệ nhân tạo.</output>
-</example>
-
-<example>
-<input>anh ấy nói rằng dự án này rất quan trọng và chúng ta cần hoàn thành nó trước tháng 12</input>
-<output>Anh ấy nói rằng dự án này rất quan trọng và chúng ta cần hoàn thành nó trước tháng 12.</output>
-</example>
-
-<policy>
-ABSOLUTE RULE: While correcting errors, you must not alter the original meaning of the text. Preserve the author's intent.
-ABSOLUTE RULE: Output ONLY the enhanced text. Do NOT include any preamble, explanation, or additional commentary.
-ABSOLUTE RULE: The output must be in Vietnamese (with appropriate foreign words in their original form).
-</policy>
-
-Now, enhance the following transcript:
+Now, enhance the following transcript (punctuation and readability):
 
 {{ text_input }}

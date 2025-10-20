@@ -1,40 +1,73 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Meeting Notes V1",
-  "description": "Structured format for meeting transcripts with categorization tags",
+  "title": "Meeting Minutes V1 (Simple)",
+  "description": "Simplified structured meeting minutes for Vietnamese transcripts. No tool access assumed; roles and administrative fields are excluded. Optionally include meeting_date if the transcript clearly contains it.",
   "type": "object",
   "properties": {
     "title": {
       "type": "string",
-      "description": "The title of the meeting",
+      "description": "Tiêu đề cuộc họp",
       "maxLength": 200
     },
-    "abstract": {
+    "meeting_date": {
+      "type": ["string", "null"],
+      "description": "Ngày họp (YYYY-MM-DD) hoặc null nếu không xác định được",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "participants": {
+      "type": "array",
+      "description": "Danh sách người tham dự (chỉ tên)",
+      "items": { "type": "string", "maxLength": 100 },
+      "minItems": 0,
+      "maxItems": 100
+    },
+    "summary": {
       "type": "string",
-      "description": "A brief summary of the meeting's purpose and outcomes",
+      "description": "Tóm tắt ngắn gọn về mục tiêu và kết quả chính của cuộc họp",
       "maxLength": 1000
     },
-    "main_points": {
+    "agenda": {
       "type": "array",
-      "description": "Key discussion points covered in the meeting",
-      "items": {
-        "type": "string",
-        "maxLength": 500
-      },
+      "description": "Các mục nghị sự hoặc điểm chính được thảo luận",
+      "items": { "type": "string", "maxLength": 300 },
       "minItems": 1,
       "maxItems": 20
     },
+    "decisions": {
+      "type": "array",
+      "description": "Các quyết định đã được thống nhất",
+      "items": { "type": "string", "maxLength": 300 },
+      "minItems": 0,
+      "maxItems": 100
+    },
+    "action_items": {
+      "type": "array",
+      "description": "Các công việc tiếp theo (giao việc)",
+      "items": {
+        "type": "object",
+        "properties": {
+          "description": { "type": "string", "maxLength": 500 },
+          "assignee": { "type": "string", "maxLength": 100 },
+          "due_date": {
+            "type": "string",
+            "description": "Hạn hoàn thành (YYYY-MM-DD)",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+          }
+        },
+        "required": ["description"],
+        "additionalProperties": false
+      },
+      "minItems": 0,
+      "maxItems": 200
+    },
     "tags": {
       "type": "array",
-      "description": "Category tags for content classification (FR-6)",
-      "items": {
-        "type": "string",
-        "maxLength": 50
-      },
+      "description": "Thẻ phân loại ngắn (1-5 thẻ)",
+      "items": { "type": "string", "maxLength": 50 },
       "minItems": 1,
       "maxItems": 5
     }
   },
-  "required": ["title", "abstract", "main_points", "tags"],
+  "required": ["title", "participants", "summary", "tags"],
   "additionalProperties": false
 }

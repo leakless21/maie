@@ -83,6 +83,27 @@ class ProcessRequestSchema(BaseModel):
         }
     )
 
+    @field_validator("features", mode="before")
+    @classmethod
+    def _coerce_features(cls, value: Any) -> List[Feature]:
+        """Convert features from various input formats to List[Feature]."""
+        if isinstance(value, str):
+            # Handle JSON string format
+            if value.startswith('[') and value.endswith(']'):
+                try:
+                    import json
+                    parsed = json.loads(value)
+                    if isinstance(parsed, list):
+                        return [Feature(f) if isinstance(f, str) else f for f in parsed]
+                except (json.JSONDecodeError, ValueError):
+                    pass
+            # Handle single feature as string
+            return [Feature(value)]
+        elif isinstance(value, list):
+            return [Feature(f) if isinstance(f, str) else f for f in value]
+        else:
+            return [Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY]
+
     @field_validator("file", mode="before")
     @classmethod
     def _coerce_file(cls, value: Any) -> UploadFile:

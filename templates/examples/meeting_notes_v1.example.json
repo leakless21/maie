@@ -1,0 +1,19 @@
+{
+  "title": "Họp dự án X – rà soát tiến độ và phân công",
+  "participants": ["Minh", "Lan", "Hùng"],
+  "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
+  "agenda": [
+    "Cập nhật tiến độ sprint",
+    "Phạm vi phát hành",
+    "Phân công công việc"
+  ],
+  "decisions": [
+    "Ưu tiên xử lý lỗi còn tồn đọng",
+    "Giữ nguyên phạm vi tính năng hiện tại"
+  ],
+  "action_items": [
+    {"description": "Lan tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "assignee": "Lan", "due_date": "2025-10-23"},
+    {"description": "Hùng cập nhật test cases cho tính năng thanh toán", "assignee": "Hùng"}
+  ],
+  "tags": ["họp nhóm", "dự án", "kế hoạch"]
+}

@@ -177,6 +177,6 @@ def test_pipeline_logging_integration_smoke(monkeypatch):
     result = pipeline.process_audio_task(task_params)
     assert result["status"] == "error"
     assert any(
-        r["level"] == "ERROR" and "Audio processing failed" in r["message"]
+        r["level"] == "ERROR" and "Invalid audio path" in r["message"]
         for r in dummy.records
     )

@@ -132,10 +132,10 @@ class ChunkformerSettings(BaseModel):
     chunkformer_model_variant: str = Field(
         default="khanhld/chunkformer-large-vie",
     )
-    chunkformer_chunk_size: int = Field(default=64)
-    chunkformer_left_context_size: int = Field(default=128)
-    chunkformer_right_context_size: int = Field(default=128)
-    chunkformer_total_batch_duration: int = Field(default=14400)
+    chunkformer_chunk_size: int = Field(default=64, description="Chunk size in frames")
+    chunkformer_left_context_size: int = Field(default=128, description="Left context size in frames")
+    chunkformer_right_context_size: int = Field(default=128, description="Right context size in frames")
+    chunkformer_total_batch_duration: int = Field(default=14400, description="Total batch duration in seconds")
     chunkformer_return_timestamps: bool = Field(default=True)
     chunkformer_device: str = Field(default="cuda")
     chunkformer_batch_size: int | None = Field(default=None)
