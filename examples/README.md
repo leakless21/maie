@@ -8,18 +8,20 @@ The MAIE system consists of several key components that can be tested independen
 
 - **Audio Preprocessing**: Validate and normalize audio files
 - **ASR (Automatic Speech Recognition)**: Convert speech to text using different backends
-- **LLM Processing**: Text enhancement and summarization using vLLM
+- **LLM Processing**: Text enhancement and summary using vLLM
 
 ## Prerequisites
 
 Before running these examples, ensure you have:
 
 1. **Pixi package manager** installed:
+
    ```bash
    curl -fsSL https://pixi.sh/install.sh | bash
    ```
 
 2. **Dependencies installed**:
+
    ```bash
    pixi install
    ```
@@ -36,6 +38,7 @@ Before running these examples, ensure you have:
 Validates and normalizes audio files for ASR input.
 
 **Usage:**
+
 ```bash
 # Basic preprocessing
 pixi run python examples/infer_preprocess.py --input-audio data/audio/sample.wav
@@ -45,10 +48,12 @@ pixi run python examples/infer_preprocess.py --input-audio input.mp3 --output-au
 ```
 
 **Output:**
+
 - JSON format with audio metadata
 - Keys: `format`, `duration`, `sample_rate`, `channels`, `normalized`, `normalized_path`
 
 **Example output:**
+
 ```json
 {
   "format": "wav",
@@ -65,6 +70,7 @@ pixi run python examples/infer_preprocess.py --input-audio input.mp3 --output-au
 Speech-to-text conversion using OpenAI's Whisper model.
 
 **Usage:**
+
 ```bash
 # Basic transcription
 pixi run python examples/infer_asr_whisper.py --audio data/audio/sample.wav
@@ -77,6 +83,7 @@ pixi run python examples/infer_asr_whisper.py --audio input.wav --json
 ```
 
 **Parameters:**
+
 - `--audio`: Path to input audio file (required)
 - `--model-path`: Custom model path (optional)
 - `--beam-size`: Beam search size (optional)
@@ -84,11 +91,13 @@ pixi run python examples/infer_asr_whisper.py --audio input.wav --json
 - `--json`: Output results in JSON format
 
 **Example output:**
+
 ```
 Hello, this is a test transcription.
 ```
 
 **JSON output:**
+
 ```json
 {
   "transcript": "Hello, this is a test transcription.",
@@ -102,6 +111,7 @@ Hello, this is a test transcription.
 Speech-to-text conversion using ChunkFormer model for streaming/real-time scenarios.
 
 **Usage:**
+
 ```bash
 # Basic transcription
 pixi run python examples/infer_asr_chunkformer.py --audio data/audio/sample.wav
@@ -114,6 +124,7 @@ pixi run python examples/infer_asr_chunkformer.py --audio input.wav --json
 ```
 
 **Parameters:**
+
 - `--audio`: Path to input audio file (required)
 - `--model-path`: Custom model path (optional)
 - `--left-context`: Left context window size (optional)
@@ -122,14 +133,15 @@ pixi run python examples/infer_asr_chunkformer.py --audio input.wav --json
 
 ### 4. LLM Processing (`infer_vllm.py`)
 
-Text enhancement and summarization using vLLM backend.
+Text enhancement and summary using vLLM backend.
 
 **Usage:**
+
 ```bash
 # Text enhancement
 pixi run python examples/infer_vllm.py --task enhancement --text "hello world"
 
-# Meeting summarization
+# Meeting summary
 pixi run python examples/infer_vllm.py --task summary --text "...transcript..." --template-id meeting
 
 # With custom model and parameters
@@ -137,9 +149,10 @@ pixi run python examples/infer_vllm.py --task enhancement --text "input text" --
 ```
 
 **Parameters:**
+
 - `--task`: Task type (`enhancement` or `summary`)
 - `--text`: Input text to process (required)
-- `--template-id`: Template ID for summarization tasks
+- `--template-id`: Template ID for summary tasks
 - `--model-path`: Custom model path (optional)
 - `--temperature`: Sampling temperature (0.0-2.0)
 - `--top-p`: Top-p sampling parameter
@@ -147,6 +160,7 @@ pixi run python examples/infer_vllm.py --task enhancement --text "input text" --
 - `--max-tokens`: Maximum tokens to generate
 
 **Example outputs:**
+
 - **Enhancement**: Enhanced/cleaned text
 - **Summary**: Structured JSON summary or formatted text
 
@@ -155,6 +169,7 @@ pixi run python examples/infer_vllm.py --task enhancement --text "input text" --
 Comprehensive testing suite for Vietnamese language processing.
 
 **Usage:**
+
 ```bash
 # Run all Vietnamese tests
 pixi run python examples/run_vietnamese_tests.py
@@ -164,6 +179,7 @@ pixi run python examples/run_vietnamese_tests.py --help
 ```
 
 **Environment Variables:**
+
 - `LLM_TEST_MODEL_PATH`: Path to local LLM model
 - `LLM_TEST_API_KEY`: API key for cloud LLM service
 - `LLM_TEST_TEMPERATURE`: Generation temperature
@@ -175,6 +191,7 @@ pixi run python examples/run_vietnamese_tests.py --help
 Basic vLLM functionality test with sample prompts.
 
 **Usage:**
+
 ```bash
 pixi run python examples/test_vllm.py
 ```
@@ -229,15 +246,18 @@ All scripts provide comprehensive error handling:
 ### Common Issues
 
 1. **"Audio not found" error**:
+
    - Check file path and permissions
    - Ensure audio file exists and is readable
 
 2. **"Model loading failed" error**:
+
    - Verify model path is correct
    - Check model file integrity
    - Ensure sufficient disk space and memory
 
 3. **"Dependencies not found" error**:
+
    - Run `pixi install` to install dependencies
    - Check Python environment setup
 

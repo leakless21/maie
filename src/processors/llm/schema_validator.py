@@ -94,10 +94,29 @@ def validate_llm_output(
         >>> print(data)  # {"title": "Test"}
         >>> print(error)  # None
     """
+    # Log the raw output for debugging (truncated if too long)
+    output_preview = output.strip()[:200] + ("..." if len(output.strip()) > 200 else "")
+    logger.debug(f"Validating LLM output: {output_preview!r}")
+    
     # First, try to parse as JSON
     try:
         parsed_data = json.loads(output.strip())
+        logger.debug(f"Successfully parsed JSON with {len(parsed_data)} top-level keys: {list(parsed_data.keys())}")
     except json.JSONDecodeError as e:
+        # Enhanced logging for JSON parse failures
+        logger.error(
+            "JSON parsing failed",
+            extra={
+                "error_type": "json_parse_error",
+                "error_message": str(e),
+                "raw_output": output.strip(),
+                "output_length": len(output.strip()),
+                "output_preview": output_preview,
+                "line": getattr(e, 'lineno', 'unknown'),
+                "column": getattr(e, 'colno', 'unknown'),
+                "position": getattr(e, 'pos', 'unknown')
+            }
+        )
         return None, f"Invalid JSON format: {e}"
 
     # Then validate against schema
@@ -106,14 +125,46 @@ def validate_llm_output(
         logger.debug("LLM output validated successfully against schema")
         return parsed_data, None
     except ValidationError as e:
+        # Enhanced logging for schema validation failures
+        error_details = extract_validation_errors(e)
         error_msg = f"Schema validation failed: {e.message}"
         if e.path:
             error_msg += f" (at path: {' -> '.join(str(p) for p in e.path)})"
-        logger.warning(f"Schema validation failed: {error_msg}")
+        
+        logger.error(
+            "Schema validation failed",
+            extra={
+                "error_type": "schema_validation_error",
+                "error_message": e.message,
+                "validation_path": list(e.path),
+                "validation_absolute_path": list(e.absolute_path),
+                "validator": e.validator,
+                "validator_value": e.validator_value,
+                "failed_instance": e.instance,
+                "schema_path": list(e.schema_path),
+                "raw_output": output.strip(),
+                "output_preview": output_preview,
+                "parsed_data": parsed_data,
+                "schema_summary": {
+                    "type": schema.get("type"),
+                    "properties": list(schema.get("properties", {}).keys()),
+                    "required": schema.get("required", [])
+                }
+            }
+        )
         return None, error_msg
     except Exception as e:
         error_msg = f"Unexpected validation error: {e}"
-        logger.error(f"Schema validation error: {error_msg}")
+        logger.error(
+            "Unexpected schema validation error",
+            extra={
+                "error_type": "unexpected_validation_error",
+                "error_message": str(e),
+                "raw_output": output.strip(),
+                "output_preview": output_preview,
+                "parsed_data": parsed_data if 'parsed_data' in locals() else None
+            }
+        )
         return None, error_msg
 
 

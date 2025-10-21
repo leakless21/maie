@@ -358,13 +358,14 @@ class TestExecuteASRTranscription:
             audio_path = f.name
 
         try:
-            transcription, rtf, confidence, metadata = execute_asr_transcription(
+            # Phase 1: Now returns (ASRResult, rtf, metadata)
+            asr_result, rtf, metadata = execute_asr_transcription(
                 mock_model, audio_path, 2.0
             )
 
-            assert transcription == "Hello world"
+            assert asr_result.text == "Hello world"
             assert rtf == 0.5  # 1.0 / 2.0
-            assert confidence == 0.95
+            assert asr_result.confidence == 0.95
             assert metadata["model_name"] == "test-model"
             assert metadata["checkpoint_hash"] == "abc123"
         finally:
@@ -372,10 +373,11 @@ class TestExecuteASRTranscription:
 
     def test_transcription_with_transcript_attr(self, mocker):
         """Test transcription result with transcript attribute."""
+        from src.processors.base import ASRResult
+        
         mock_model = Mock()
-        mock_result = Mock(spec=["transcript", "confidence"])
-        mock_result.transcript = "Alternative text"
-        mock_result.confidence = 0.88
+        # Mock an ASRResult with text field (standard interface)
+        mock_result = ASRResult(text="Alternative text", confidence=0.88)
         mock_model.execute.return_value = mock_result
 
         with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
@@ -383,32 +385,13 @@ class TestExecuteASRTranscription:
             audio_path = f.name
 
         try:
-            transcription, rtf, confidence, metadata = execute_asr_transcription(
+            # Phase 1: Now returns (ASRResult, rtf, metadata)
+            asr_result, rtf, metadata = execute_asr_transcription(
                 mock_model, audio_path, 1.0
             )
 
-            assert transcription == "Alternative text"
-            assert confidence == 0.88
-        finally:
-            Path(audio_path).unlink()
-
-    def test_transcription_fallback_to_str(self, mocker):
-        """Test transcription fallback to string representation."""
-        mock_model = Mock()
-        mock_result = "String result"
-        mock_model.execute.return_value = mock_result
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(b"fake audio data")
-            audio_path = f.name
-
-        try:
-            transcription, rtf, confidence, metadata = execute_asr_transcription(
-                mock_model, audio_path, 1.0
-            )
-
-            assert transcription == "String result"
-            assert confidence == 0.0  # Default when not available
+            assert asr_result.text == "Alternative text"
+            assert asr_result.confidence == 0.88
         finally:
             Path(audio_path).unlink()
 
@@ -686,6 +669,7 @@ class TestProcessAudioTask:
             mock_asr_result.text = "Hello world"
             mock_asr_result.confidence = 0.95
             mock_asr_result.model_name = "test-asr"
+            mock_asr_result.segments = []  # Proper empty list instead of Mock
             mock_asr_model.execute.return_value = mock_asr_result
 
             mock_llm_model = Mock()
@@ -919,6 +903,7 @@ class TestProcessAudioTask:
             mock_asr_result = Mock()
             mock_asr_result.text = "Hello world"
             mock_asr_result.confidence = 0.95
+            mock_asr_result.segments = []  # Proper empty list instead of Mock
             mock_asr_model.execute.return_value = mock_asr_result
 
             mock_llm_model = Mock()

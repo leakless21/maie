@@ -342,6 +342,22 @@ class WhisperBackend(ASRBackend):
         if language is not None:
             transcribe_kwargs["language"] = language
 
+        # Apply word_timestamps from env or config
+        # NOTE: word_timestamps=True is REQUIRED for accurate segment timestamps in faster-whisper
+        # Without it, segment timestamps are often incorrect (e.g., 0.16s for 8s audio)
+        env_word_ts = os.getenv("WHISPER_WORD_TIMESTAMPS")
+        if env_word_ts is not None:
+            word_timestamps = str(env_word_ts).strip().lower() in {
+                "1",
+                "true",
+                "yes",
+                "y",
+                "on",
+            }
+        else:
+            word_timestamps = getattr(cfg.settings, "whisper_word_timestamps", True)
+        transcribe_kwargs["word_timestamps"] = word_timestamps
+
         # Apply VAD filter settings (env overrides config)
         env_vad = os.getenv("WHISPER_VAD_FILTER")
         if env_vad is not None:

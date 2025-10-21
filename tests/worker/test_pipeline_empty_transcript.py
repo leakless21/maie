@@ -51,7 +51,10 @@ class TestPipelineEmptyTranscriptHandling:
         mock_load_asr_model.return_value = mock_asr_model
 
         # Mock ASR transcription to return empty transcript
-        mock_execute_asr_transcription.return_value = ("", 0.0, 0.0, {})
+        # Phase 1: Now returns (ASRResult, rtf, metadata) instead of (text, rtf, confidence, metadata)
+        from src.processors.base import ASRResult
+        empty_result = ASRResult(text="", confidence=0.0)
+        mock_execute_asr_transcription.return_value = (empty_result, 0.0, {})
 
         task_params = {
             "audio_path": "dummy.wav",
@@ -59,13 +62,13 @@ class TestPipelineEmptyTranscriptHandling:
             "asr_backend": "chunkformer",
         }
 
-        # Act & Assert
-        with pytest.raises(LLMProcessingError) as exc_info:
-            process_audio_task(task_params)
+        # Act - pipeline now returns structured error response instead of raising
+        result = process_audio_task(task_params)
 
-        # Verify error message contains expected text
-        assert "Empty transcript" in str(exc_info.value.message)
-        assert exc_info.value.details["transcription_length"] == 0
+        # Assert - verify error response
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "LLM_PROCESSING_ERROR"
+        assert "Empty transcript" in result["error"]["message"]
 
         # Verify LLM model was never loaded
         mock_load_llm_model.assert_not_called()
@@ -110,7 +113,10 @@ class TestPipelineEmptyTranscriptHandling:
         mock_load_asr_model.return_value = mock_asr_model
 
         # Mock ASR transcription to return whitespace-only transcript
-        mock_execute_asr_transcription.return_value = ("   \n\t  ", 0.0, 0.0, {})
+        # Phase 1: Now returns (ASRResult, rtf, metadata) instead of (text, rtf, confidence, metadata)
+        from src.processors.base import ASRResult
+        whitespace_result = ASRResult(text="   \n\t  ", confidence=0.0)
+        mock_execute_asr_transcription.return_value = (whitespace_result, 0.0, {})
 
         task_params = {
             "audio_path": "dummy.wav",
@@ -118,13 +124,13 @@ class TestPipelineEmptyTranscriptHandling:
             "asr_backend": "chunkformer",
         }
 
-        # Act & Assert
-        with pytest.raises(LLMProcessingError) as exc_info:
-            process_audio_task(task_params)
+        # Act - pipeline now returns structured error response instead of raising
+        result = process_audio_task(task_params)
 
-        # Verify error message contains expected text
-        assert "Empty transcript" in str(exc_info.value.message)
-        assert exc_info.value.details["transcription_length"] == 0
+        # Assert - verify error response
+        assert result["status"] == "error"
+        assert result["error"]["code"] == "LLM_PROCESSING_ERROR"
+        assert "Empty transcript" in result["error"]["message"]
 
         # Verify LLM model was never loaded
         mock_load_llm_model.assert_not_called()
@@ -164,8 +170,11 @@ class TestPipelineEmptyTranscriptHandling:
         mock_asr_model = Mock()
         mock_load_asr_model.return_value = mock_asr_model
 
-        # Mock ASR transcription to return non-empty transcript
-        mock_execute_asr_transcription.return_value = ("Hello world", 0.5, 0.8, {})
+        # Mock ASR transcription to return valid transcript
+        # Phase 1: Now returns (ASRResult, rtf, metadata) instead of (text, rtf, confidence, metadata)
+        from src.processors.base import ASRResult
+        valid_result = ASRResult(text="Hello world", confidence=0.8)
+        mock_execute_asr_transcription.return_value = (valid_result, 0.5, {})
 
         # Mock LLM model and processing
         mock_llm_model = Mock()

@@ -544,8 +544,11 @@ class TestIntegration:
             assert sampling_params["presence_penalty"] == 0.0
             assert sampling_params["frequency_penalty"] == 0.0
 
+            # Stop tokens should be present from library defaults (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
+            assert "stop" in sampling_params
+            assert "<|im_end|>" in sampling_params["stop"]
+            
             # Should not include None values
-            assert "stop" not in sampling_params
             assert "min_p" not in sampling_params
 
     def test_vllm_sampling_params_compatibility(self):

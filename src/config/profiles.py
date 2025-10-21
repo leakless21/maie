@@ -13,8 +13,8 @@ DEVELOPMENT_PROFILE: ProfileData = {
         "log_level": "DEBUG",
         "log_console_serialize": False,
         "log_file_serialize": True,
-        "log_rotation": "100 MB",
-        "log_retention": "7 days",
+        "log_rotation": "50 MB",
+        "log_retention": "3 days",
     },
     "api": {
         "secret_key": "dev_api_key_change_in_production",
@@ -30,6 +30,14 @@ DEVELOPMENT_PROFILE: ProfileData = {
         "worker_concurrency": 1,
         "worker_prefetch_multiplier": 2,
         "worker_prefetch_timeout": 10,
+    },
+    "llm_enhance": {
+        "gpu_memory_utilization": 0.9,
+        "max_model_len": 25000,
+    },
+    "llm_sum": {
+        "gpu_memory_utilization": 0.9,
+        "max_model_len": 25000,
     },
     "features": {
         "enable_enhancement": False,
@@ -66,6 +74,14 @@ PRODUCTION_PROFILE: ProfileData = {
         "worker_concurrency": 2,
         "worker_prefetch_multiplier": 4,
         "worker_prefetch_timeout": 30,
+    },
+    "llm_enhance": {
+        "gpu_memory_utilization": 0.9,
+        "max_model_len": 25000,
+    },
+    "llm_sum": {
+        "gpu_memory_utilization": 0.9,
+        "max_model_len": 25000,
     },
     "features": {
         "enable_enhancement": True,

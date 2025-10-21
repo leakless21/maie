@@ -106,6 +106,10 @@ def get_library_defaults() -> GenerationConfig:
 
     Returns:
         GenerationConfig with vLLM default values
+    
+    Note:
+        Added stop tokens to prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md).
+        Qwen3 uses <|im_end|> as the standard chat format terminator.
     """
     return GenerationConfig(
         temperature=1.0,
@@ -115,6 +119,7 @@ def get_library_defaults() -> GenerationConfig:
         repetition_penalty=1.0,
         presence_penalty=0.0,
         frequency_penalty=0.0,
+        stop=["<|im_end|>", "<|endoftext|>"],  # Prevent echoing chat template
     )
 
 

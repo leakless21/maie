@@ -2,6 +2,11 @@
 Configuration package exposing application settings and logging helpers.
 """
 
+import os
+
+# Ensure PyTorch uses expandable CUDA segments to reduce fragmentation warnings.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
+
 from .model import AppSettings
 from .loader import get_settings, reset_settings_cache, settings
 from .logging import (
@@ -9,10 +14,9 @@ from .logging import (
     clear_correlation_id,
     configure_logging,
     correlation_id,
-    correlation_scope,
     generate_correlation_id,
     get_logger,
-    logger_with_context,
+    get_module_logger,
 )  # noqa: E402
 
 __all__ = [
@@ -26,6 +30,5 @@ __all__ = [
     "clear_correlation_id",
     "correlation_id",
     "generate_correlation_id",
-    "correlation_scope",
-    "logger_with_context",
+    "get_module_logger",
 ]

@@ -1,5 +1,6 @@
 """Pydantic request/response models for the MAIE API."""
 
+import json
 import mimetypes
 from datetime import datetime
 from enum import Enum
@@ -91,7 +92,6 @@ class ProcessRequestSchema(BaseModel):
             # Handle JSON string format
             if value.startswith('[') and value.endswith(']'):
                 try:
-                    import json
                     parsed = json.loads(value)
                     if isinstance(parsed, list):
                         return [Feature(f) if isinstance(f, str) else f for f in parsed]
@@ -269,6 +269,8 @@ class StatusResponseSchema(BaseModel):
         description="Current status of the task (pending, processing, completed, failed)",
     )
     error: Optional[str] = Field(None, description="Error message if the task failed")
+    error_code: Optional[str] = Field(None, description="Error code for categorizing the failure (e.g., ASR_PROCESSING_ERROR, MODEL_LOAD_ERROR)")
+    stage: Optional[str] = Field(None, description="Processing stage where the error occurred (e.g., preprocessing, asr, llm)")
     submitted_at: datetime | None = None
     completed_at: datetime | None = None
     versions: Optional[VersionsSchema] = Field(
@@ -279,49 +281,66 @@ class StatusResponseSchema(BaseModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example": {
-                "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-                "status": "COMPLETE",
-                "versions": {
-                    "pipeline_version": "1.0.0",
-                    "asr_backend": {
-                        "name": "whisper",
-                        "model_variant": "erax-wow-turbo",
-                        "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
-                        "checkpoint_hash": "a1b2c3d4...",
-                        "compute_type": "int8_float16",
-                        "decoding_params": {"beam_size": 5, "vad_filter": True},
-                    },
-                    "llm": {
-                        "name": "qwen3",
-                        "checkpoint_hash": "z9y8x7w6...",
-                        "quantization": "awq-4bit",
-                        "thinking": False,
-                        "reasoning_parser": None,
-                        "structured_output": {
-                            "title": "string",
-                            "main_points": ["string"],
-                            "tags": ["string"],
+            "examples": [
+                {
+                    "description": "Successful completion",
+                    "value": {
+                        "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+                        "status": "COMPLETE",
+                        "versions": {
+                            "pipeline_version": "1.0.0",
+                            "asr_backend": {
+                                "name": "whisper",
+                                "model_variant": "erax-wow-turbo",
+                                "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
+                                "checkpoint_hash": "a1b2c3d4...",
+                                "compute_type": "int8_float16",
+                                "decoding_params": {"beam_size": 5, "vad_filter": True},
+                            },
+                            "llm": {
+                                "name": "qwen3",
+                                "checkpoint_hash": "z9y8x7w6...",
+                                "quantization": "awq-4bit",
+                                "thinking": False,
+                                "reasoning_parser": None,
+                                "structured_output": {
+                                    "title": "string",
+                                    "main_points": ["string"],
+                                    "tags": ["string"],
+                                },
+                                "decoding_params": {"temperature": 0.3, "top_p": 0.9},
+                            },
                         },
-                        "decoding_params": {"temperature": 0.3, "top_p": 0.9},
-                    },
+                        "metrics": {
+                            "input_duration_seconds": 2701.3,
+                            "processing_time_seconds": 162.8,
+                            "rtf": 0.06,
+                            "vad_coverage": 0.88,
+                            "asr_confidence_avg": 0.91,
+                        },
+                        "results": {
+                            "clean_transcript": "The meeting on October 4th...",
+                            "summary": {
+                                "title": "Q4 Budget Planning",
+                                "main_points": ["Budget approved"],
+                                "tags": ["Finance", "Budget"],
+                            },
+                        },
+                    }
                 },
-                "metrics": {
-                    "input_duration_seconds": 2701.3,
-                    "processing_time_seconds": 162.8,
-                    "rtf": 0.06,
-                    "vad_coverage": 0.88,
-                    "asr_confidence_avg": 0.91,
-                },
-                "results": {
-                    "clean_transcript": "The meeting on October 4th...",
-                    "summary": {
-                        "title": "Q4 Budget Planning",
-                        "main_points": ["Budget approved"],
-                        "tags": ["Finance", "Budget"],
-                    },
-                },
-            }
+                {
+                    "description": "Failed with ASR error",
+                    "value": {
+                        "task_id": "a1b2c3d4-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+                        "status": "FAILED",
+                        "error": "ASR transcription failed: Audio file not found",
+                        "error_code": "ASR_PROCESSING_ERROR",
+                        "stage": "asr",
+                        "submitted_at": "2025-10-20T07:43:53Z",
+                        "completed_at": "2025-10-20T07:45:20Z"
+                    }
+                }
+            ]
         }
     )
 

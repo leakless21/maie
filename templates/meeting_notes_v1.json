@@ -24,7 +24,7 @@
     "summary": {
       "type": "string",
       "description": "Tóm tắt ngắn gọn về mục tiêu và kết quả chính của cuộc họp",
-      "maxLength": 1000
+      "maxLength": 2000
     },
     "agenda": {
       "type": "array",
@@ -49,8 +49,8 @@
           "description": { "type": "string", "maxLength": 500 },
           "assignee": { "type": "string", "maxLength": 100 },
           "due_date": {
-            "type": "string",
-            "description": "Hạn hoàn thành (YYYY-MM-DD)",
+            "type": ["string", "null"],
+            "description": "Hạn hoàn thành (YYYY-MM-DD) hoặc null nếu transcript không nêu rõ",
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
           }
         },

@@ -227,7 +227,7 @@ def mock_llm_processor():
                 "name": "mock-qwen-v1",
                 "checkpoint_hash": "xyz789",
                 "quantization": "awq-4bit",
-                "task": "summarization",
+                "task": "summary",
             },
         }
     )
@@ -370,12 +370,12 @@ def mock_model_paths(tmp_path, monkeypatch):
 
     # Create model directories
     (models_dir / "whisper" / "erax-wow-turbo").mkdir(parents=True)
-    (models_dir / "chunkformer" / "large-vie").mkdir(parents=True)
+    (models_dir / "chunkformer-rnnt-large-vie").mkdir(parents=True)
     (models_dir / "llm" / "qwen3-4b-awq").mkdir(parents=True)
 
     # Create marker files
     (models_dir / "whisper" / "erax-wow-turbo" / "config.json").touch()
-    (models_dir / "chunkformer" / "large-vie" / "config.yaml").touch()
+    (models_dir / "chunkformer-rnnt-large-vie" / "config.yaml").touch()
     (models_dir / "llm" / "qwen3-4b-awq" / "config.json").touch()
 
     from src import config

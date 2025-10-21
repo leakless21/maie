@@ -74,7 +74,7 @@ test-debug = "pytest -vv --tb=long --showlocals -ra -s"
 lint = "ruff check --fix"
 format = "ruff format"
 api = "uvicorn src.api.main:app"
-worker = "python -m src.worker.main"
+worker = "python src/worker/main.py"
 style = "ruff check --fix && ruff format -v && dead"  # Combined formatting and linting
 download-models = "bash scripts/download-models.sh"  # Keep existing bash script
 

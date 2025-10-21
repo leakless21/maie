@@ -9,6 +9,16 @@ export PYTHONPATH="${PYTHONPATH:-.}:$(pwd)"
 export ENVIRONMENT="${ENVIRONMENT:-development}"
 export LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
 
+# Default to first GPU if not explicitly set (dev expects GPU usage)
+if [[ -z "${CUDA_VISIBLE_DEVICES:-}" ]]; then
+  export CUDA_VISIBLE_DEVICES=0
+fi
+
+# Fix PyTorch CUDA memory fragmentation (NFR-10: Memory efficiency)
+# This allows PyTorch to use expandable memory segments, preventing OOM
+# errors caused by fragmentation when running sequential ASR->LLM pipeline
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # Load environment file if it exists
 if [[ -f .env ]]; then
   echo "Loading environment variables from .env file..."

@@ -1,27 +1,39 @@
 #!/usr/bin/env python3
 """
-CLI: vLLM-based LLM inference using MAIE's LLMProcessor.
+CLI: vLLM-based LLM inference using MAIE's LLMProcessor with Chat API.
 
 Usage examples:
+  # Text enhancement (uses generate API)
   python examples/infer_vllm.py --task enhancement --text "hello world"
-  python examples/infer_vllm.py --task summary --text "...transcript..." --template-id meeting
+  
+  # Summary with chat API (new approach)
+  python examples/infer_vllm.py --task summary --text "...transcript..." --template-id generic_summary_v2
+  
+  # Legacy summary (old templates with fallback)
+  python examples/infer_vllm.py --task summary --text "...transcript..." --template-id generic_summary_v1
 
 Prints the resulting text (enhanced transcript or summary JSON) to stdout.
+
+Note: Summary task now uses vLLM's chat() API with OpenAI-format messages.
+The chat API automatically handles chat template formatting and stop tokens.
 """
 
 from __future__ import annotations
 
+import os
+import sys
 import argparse
 import json
 from typing import Any, Dict
-
-import os
-import sys
 
 # Ensure repository root is on sys.path when running directly
 _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
+
+# Mitigate CUDA memory fragmentation when running standalone.
+# Respect any value the user already provided.
+os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from src.config import configure_logging, get_logger
 from src.processors.llm import LLMProcessor
@@ -49,6 +61,38 @@ def main() -> int:
     parser.add_argument("--max-tokens", type=int)
     args = parser.parse_args()
 
+    # Enforce GPU-only for vLLM in all environments.
+    # Fail fast if CUDA is not available to avoid silently falling back to CPU.
+    try:
+        import torch  # type: ignore
+
+        if not torch.cuda.is_available():
+            logger.error(
+                "CUDA is not available. GPU is required for vLLM."
+            )
+            print(
+                json.dumps(
+                    {
+                        "error": "gpu_required",
+                        "message": "CUDA not available; vLLM examples require GPU",
+                    }
+                )
+            )
+            return 2
+    except ImportError:
+        logger.error(
+            "PyTorch is not installed. GPU is required for vLLM."
+        )
+        print(
+            json.dumps(
+                {
+                    "error": "gpu_required",
+                    "message": "PyTorch not installed; vLLM examples require GPU",
+                }
+            )
+        )
+        return 2
+
     overrides: Dict[str, Any] = {}
     if args.temperature is not None:
         overrides["temperature"] = args.temperature
@@ -70,13 +114,21 @@ def main() -> int:
             output_text = getattr(result, "text", None) or str(result)
             print(output_text)
         else:
-            # summary
+            # summary - now uses chat API automatically
             result = processor.execute(
                 args.text,
                 task="summary",
                 template_id=args.template_id,
                 **overrides,
             )
+            
+            # Check if chat API was used
+            method = getattr(result, "metadata", {}).get("method") if hasattr(result, "metadata") else None
+            if method == "chat_api":
+                logger.info("✓ Used vLLM chat() API with OpenAI-format messages")
+            else:
+                logger.info("↻ Used fallback generate() API with old template")
+            
             # Expect LLMResult.text to carry rendered/serialized summary; if metadata has structured JSON, prefer that
             structured = (
                 getattr(result, "metadata", {}).get("structured_summary")

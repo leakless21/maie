@@ -99,7 +99,7 @@ class TestChunkFormerVariants:
 
         assert processor.needs_enhancement("chunkformer-base") is True
         assert processor.needs_enhancement("chunkformer-large") is True
-        assert processor.needs_enhancement("chunkformer-ctc-large-vie") is True
+        assert processor.needs_enhancement("chunkformer-rnnt-large-vie") is True
 
 
 class TestFeatureSelectionIntegration:

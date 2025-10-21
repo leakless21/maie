@@ -188,7 +188,7 @@ maie/
      - `whisper_device: Literal["cuda", "auto"]` (default: "cuda", CPU not supported)
      - `whisper_condition_on_previous_text: bool` (default: True)
    - ChunkFormer
-     - `chunkformer_model_name: str` (default: "khanhld/chunkformer-large-vie")
+     - `chunkformer_model_name: str` (default: "khanhld/chunkformer-rnnt-large-vie")
      - `chunkformer_chunk_size: int` (default: 64)
      - `chunkformer_left_context: int` (default: 128)
      - `chunkformer_right_context: int` (default: 128)
@@ -1293,7 +1293,7 @@ Versioning: capture your own `checkpoint_hash` for local model dirs for reproduc
 
 #### ChunkFormer
 
-- Models: e.g., `khanhld/chunkformer-large-vie` (HF Hub). Research: <https://arxiv.org/abs/2502.14673>
+- Models: e.g., `khanhld/chunkformer-rnnt-large-vie` (HF Hub). Research: <https://arxiv.org/abs/2502.14673>
 - Purpose: long-form ASR with chunking/context techniques to keep memory steady for very long audio.
 - Installation: `pip install chunkformer` (provides Python API and `chunkformer-decode` CLI)
 - Integration approach:
@@ -1303,7 +1303,7 @@ Versioning: capture your own `checkpoint_hash` for local model dirs for reproduc
 
 Recommended defaults (see ASR Settings above):
 
-- `chunkformer_model_name = "khanhld/chunkformer-large-vie"`
+- `chunkformer_model_name = "khanhld/chunkformer-rnnt-large-vie"`
 - `chunk_size=64`, `left_context=128`, `right_context=128`, `total_batch_duration=14400`, `return_timestamps=True`
 
 Notes:
@@ -1331,7 +1331,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 
 **Instance Attributes**:
 
-- `model_name: str` - Model identifier (e.g., "khanhld/chunkformer-large-vie")
+- `model_name: str` - Model identifier (e.g., "khanhld/chunkformer-rnnt-large-vie")
 - `chunk_size: int` - Size of each processing chunk in frames (default: 64)
 - `left_context_size: int` - Left context frames for each chunk (default: 128)
 - `right_context_size: int` - Right context frames for each chunk (default: 128)
@@ -1361,7 +1361,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 
      # Load from Hugging Face Hub
      self.model = ChunkFormerModel.from_pretrained(
-         self.model_name  # e.g., "khanhld/chunkformer-large-vie"
+         self.model_name  # e.g., "khanhld/chunkformer-rnnt-large-vie"
      )
 
      # Or load from local directory
@@ -1445,7 +1445,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
      ```bash
      # Command-line interface
      chunkformer-decode \
-         --model_checkpoint khanhld/chunkformer-large-vie \
+         --model_checkpoint khanhld/chunkformer-rnnt-large-vie \
          --audio_list path/to/data.tsv \
          --total_batch_duration 14400 \
          --chunk_size 64 \
@@ -1513,7 +1513,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 
    ```bash
    chunkformer-decode \
-       --model_checkpoint khanhld/chunkformer-large-vie \
+       --model_checkpoint khanhld/chunkformer-rnnt-large-vie \
        --long_form_audio path/to/long_audio.wav \
        --total_batch_duration 14400 \
        --chunk_size 64 \
@@ -1536,7 +1536,7 @@ BEGIN CHUNKFORMER DETAILS (official PyPI API and CLI)
 from chunkformer import ChunkFormerModel
 
 # Load model
-model = ChunkFormerModel.from_pretrained("khanhld/chunkformer-large-vie")
+model = ChunkFormerModel.from_pretrained("khanhld/chunkformer-rnnt-large-vie")
 
 # Single file transcription
 transcription = model.endless_decode(

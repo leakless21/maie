@@ -101,6 +101,8 @@ class TestProcessAudioTaskHappyPath:
         mock_asr_model = MagicMock()
         mock_load_asr.return_value = mock_asr_model
 
+        # Phase 1: Now returns (ASRResult, rtf, metadata) instead of (text, rtf, confidence, metadata)
+        from src.processors.base import ASRResult
         asr_transcription = "This is a test transcription from the mock ASR backend."
         asr_rtf = 0.5
         asr_confidence = 0.92
@@ -109,10 +111,10 @@ class TestProcessAudioTaskHappyPath:
             "checkpoint_hash": "abc123",
             "duration_ms": 5000,
         }
+        asr_result = ASRResult(text=asr_transcription, confidence=asr_confidence)
         mock_exec_asr.return_value = (
-            asr_transcription,
+            asr_result,
             asr_rtf,
-            asr_confidence,
             asr_metadata,
         )
 
@@ -234,7 +236,7 @@ class TestProcessAudioTaskHappyPath:
         tmp_path,
     ):
         """
-        Test pipeline with only transcript feature (no summarization).
+        Test pipeline with only transcript feature (no summary).
 
         Expected behavior:
         - ASR executes normally
@@ -275,9 +277,12 @@ class TestProcessAudioTaskHappyPath:
         mock_asr_model = MagicMock()
         mock_load_asr.return_value = mock_asr_model
 
+        # Phase 1: Now returns (ASRResult, rtf, metadata)
+        from src.processors.base import ASRResult
         asr_transcription = "This is a test transcription."
         asr_metadata = {"model_name": "whisper", "checkpoint_hash": "abc123"}
-        mock_exec_asr.return_value = (asr_transcription, 0.5, 0.92, asr_metadata)
+        asr_result = ASRResult(text=asr_transcription, confidence=0.92)
+        mock_exec_asr.return_value = (asr_result, 0.5, asr_metadata)
 
         # Mock LLM results (enhancement only, no summary)
         mock_llm_model = MagicMock()
@@ -390,13 +395,16 @@ class TestProcessAudioTaskHappyPath:
         mock_asr_model = MagicMock()
         mock_load_asr.return_value = mock_asr_model
 
+        # Phase 1: Now returns (ASRResult, rtf, metadata)
+        from src.processors.base import ASRResult
         asr_metadata = {
             "model_name": "erax-wow-turbo-v1.1",
             "checkpoint_hash": "a1b2c3d4e5f6",
             "compute_type": "int8_float16",
             "decoding_params": {"beam_size": 5, "vad_filter": True, "temperature": 0.0},
         }
-        mock_exec_asr.return_value = ("Test transcript", 0.5, 0.92, asr_metadata)
+        asr_result = ASRResult(text="Test transcript", confidence=0.92)
+        mock_exec_asr.return_value = (asr_result, 0.5, asr_metadata)
 
         # Mock LLM results
         mock_llm_model = MagicMock()
@@ -546,14 +554,16 @@ class TestProcessAudioTaskHappyPath:
         mock_asr_model = MagicMock()
         mock_load_asr.return_value = mock_asr_model
 
+        # Phase 1: Now returns (ASRResult, rtf, metadata)
+        from src.processors.base import ASRResult
         asr_transcription = "This is a test transcription."
         asr_rtf = 0.5  # Specific RTF for ASR
         asr_confidence = 0.92  # High confidence
         asr_metadata = {"model_name": "whisper", "checkpoint_hash": "abc123"}
+        asr_result = ASRResult(text=asr_transcription, confidence=asr_confidence)
         mock_exec_asr.return_value = (
-            asr_transcription,
+            asr_result,
             asr_rtf,
-            asr_confidence,
             asr_metadata,
         )
 
@@ -676,10 +686,12 @@ class TestProcessAudioTaskHappyPath:
         # Mock ASR results
         mock_asr_model = MagicMock()
         mock_load_asr.return_value = mock_asr_model
+        # Phase 1: Now returns (ASRResult, rtf, metadata)
+        from src.processors.base import ASRResult
+        asr_result = ASRResult(text="Test transcript", confidence=0.92)
         mock_exec_asr.return_value = (
-            "Test transcript",
+            asr_result,
             0.5,
-            0.92,
             {"model_name": "whisper"},
         )
 

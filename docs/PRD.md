@@ -22,7 +22,7 @@ Architecture Overview: The system uses a three-tier architecture with API server
 
   - whisper: Default backend for V1.0, using Whisper-based models via CTranslate2 runtime. The default model variant is EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), which provides native punctuation and capitalization, optimized for throughput with VAD filtering.
 
-  - chunkformer: Alternative backend for long-form audio transcription, using ChunkFormer models optimized for single-request latency. The default model variant is `khanhld/chunkformer-large-vie`, which provides chunk-wise processing with configurable context windows and significantly faster processing for long audio files.
+  - chunkformer: Alternative backend for long-form audio transcription, using ChunkFormer models optimized for single-request latency. The default model variant is `khanhld/chunkformer-rnnt-large-vie`, which provides chunk-wise processing with configurable context windows and significantly faster processing for long audio files.
 
   **V1.0 ASR Feature Scope:**
 
@@ -102,7 +102,7 @@ Request Body (`multipart/form-data`)
 
 Successful Final Response (JSON Body)
 
-**Note:** The example below shows Whisper backend response. For ChunkFormer backend, the `asr_backend` section would include `name: "chunkformer"`, `model_variant: "large-vie"`, `model_path: "khanhld/chunkformer-large-vie"`, and architecture parameters like `chunk_size`, `left_context_size`, `right_context_size`, `total_batch_duration`, `return_timestamps`.
+**Note:** The example below shows Whisper backend response. For ChunkFormer backend, the `asr_backend` section would include `name: "chunkformer"`, `model_variant: "rnnt-large-vie"`, `model_path: "khanhld/chunkformer-rnnt-large-vie"`, and architecture parameters like `chunk_size`, `left_context_size`, `right_context_size`, `total_batch_duration`, `return_timestamps`.
 
 ```json
 {

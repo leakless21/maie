@@ -14,7 +14,7 @@ This document explains the request dataflow for each API endpoint, including the
 ### Logging
 - All service logs flow through Loguru (`src/config/logging.py`).
 - Standard-library and third‑party loggers (e.g., uvicorn, vLLM) are intercepted into the same sinks.
-- In production, console logs default to JSON; files rotate/retain and redact sensitive data.
+- In production, console logs default to JSON; files rotate and retain logs.
 - A correlation id is supported and can be bound per request/task.
 
 ### Global App Wiring

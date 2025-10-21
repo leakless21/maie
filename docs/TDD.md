@@ -176,7 +176,7 @@ For `POST /v1/process`:
 3. Validate `asr_backend` (optional, default: `"whisper"`)
    - Valid values: `"whisper"`, `"chunkformer"` (V1.0)
    - For `"whisper"`, model variant determined by `WHISPER_MODEL_VARIANT` (default: `erax-wow-turbo`, org CT2 default)
-   - For `"chunkformer"`, model name determined by `CHUNKFORMER_MODEL_NAME` (default: `khanhld/chunkformer-large-vie`)
+   - For `"chunkformer"`, model name determined by `CHUNKFORMER_MODEL_NAME` (default: `khanhld/chunkformer-rnnt-large-vie`)
 4. Validate `template_id` is provided if `"summary"` in features (FR-4)
 5. Generate UUID v4 as `task_id`
 6. Check queue depth for backpressure
@@ -605,7 +605,7 @@ Each concrete processor must implement:
   - `whisper_device`: `cuda`
   - `whisper_condition_on_previous_text`: `true`
 - ChunkFormer:
-  - `chunkformer_model_name`: `khanhld/chunkformer-large-vie`
+  - `chunkformer_model_name`: `khanhld/chunkformer-rnnt-large-vie`
   - `chunkformer_chunk_size`: `64`
   - `chunkformer_left_context`: `128`
   - `chunkformer_right_context`: `128`
@@ -692,7 +692,7 @@ whisper_language = "en"  # Optional: force language
 
 **Configuration:**
 
-- Model: `khanhld/chunkformer-large-vie` (Hugging Face Hub)
+- Model: `khanhld/chunkformer-rnnt-large-vie` (Hugging Face Hub)
 - Architecture: Chunk-wise processing (ICASSP 2025)
 - Processing: Unbatched, sequential chunks
 - Context: Configurable left/right context windows
@@ -706,7 +706,7 @@ whisper_language = "en"  # Optional: force language
 **Version Metadata (NFR-1):**
 
 - Backend name: `chunkformer`
-- Model variant: `large-vie`
+- Model variant: `rnnt-large-vie`
 - Checkpoint hash: Auto-detected from HuggingFace
 - Architecture params: `chunk_size_frames`, `left_context_frames`, `right_context_frames`, `total_batch_duration_seconds`
 
@@ -1098,8 +1098,7 @@ All Python dependencies managed through Pixi for:
 │   └── models/             # AI model weights
 │       ├── whisper/
 │       │   └── erax-wow-turbo/
-│       ├── chunkformer/
-│       │   └── large-vie/
+│       ├── chunkformer-rnnt-large-vie/
 │       └── llm/
 │           └── qwen3-4b-awq/
 │
@@ -1208,7 +1207,7 @@ worker:
 | Model                 | Size   | Download Source | Local Path                            |
 | --------------------- | ------ | --------------- | ------------------------------------- |
 | EraX-WoW-Turbo V1.1   | ~3GB   | HuggingFace Hub | `/data/models/whisper/erax-wow-turbo` |
-| ChunkFormer Large     | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer/large-vie`  |
+| ChunkFormer RNNT Large | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer-rnnt-large-vie`  |
 | Qwen3-4B-Instruct AWQ | ~2.5GB | HuggingFace Hub | `/data/models/llm/qwen3-4b-awq`       |
 
 **Download Strategy:**
@@ -1230,8 +1229,8 @@ hf download erax-ai/EraX-WoW-Turbo-V1.1-CT2 \
   --local-dir "$MODEL_DIR/whisper/erax-wow-turbo" \
   --local-dir-use-symlinks False
 
-hf download khanhld/chunkformer-large-vie \
-  --local-dir "$MODEL_DIR/chunkformer/large-vie" \
+hf download khanhld/chunkformer-rnnt-large-vie \
+  --local-dir "$MODEL_DIR/chunkformer-rnnt-large-vie" \
   --local-dir-use-symlinks False
 
 echo "Downloading LLM models..."
@@ -1283,7 +1282,7 @@ def verify_models():
     """Verify all required models exist before accepting jobs"""
     required = [
         "/data/models/whisper/erax-wow-turbo",
-        "/data/models/chunkformer/large-vie",
+        "/data/models/chunkformer-rnnt-large-vie",
         "/data/models/llm/qwen3-4b-awq"
     ]
 
@@ -1421,7 +1420,7 @@ All system behavior configured via environment variables loaded from `.env` file
 | `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)  |
 | `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                          |
 | `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)            |
-| `CHUNKFORMER_MODEL_NAME`             | ChunkFormer model name                 | `khanhld/chunkformer-large-vie` |
+| `CHUNKFORMER_MODEL_NAME`             | ChunkFormer model name                 | `khanhld/chunkformer-rnnt-large-vie` |
 | `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`          |
 | `SECRET_API_KEY`                     | API authentication                     | —                               |
 | `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                            |
@@ -2222,7 +2221,7 @@ api:
    hf download cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit --local-dir data/models/qwen3-4b-awq
 
    # ChunkFormer
-   hf download khanhld/chunkformer-large-vie --local-dir data/models/chunkformer
+   hf download khanhld/chunkformer-rnnt-large-vie --local-dir data/models/chunkformer-rnnt-large-vie
    ```
 
 5. Build and start services:

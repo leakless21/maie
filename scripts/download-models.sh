@@ -160,7 +160,7 @@ if [[ "$DOWNLOAD_CHUNKFORMER" == true ]]; then
  echo "Downloading ChunkFormer Large model..."
   # Note: Using a placeholder model name since the exact model identifier may vary
   # This would need to be updated with the actual model identifier
-  if ! download_model "khanhld/chunkformer-ctc-large-vie" "$MODELS_DIR/chunkformer-ctc-large-vie" "ChunkFormer-CTC-Large-Vie"; then
+  if ! download_model "khanhld/chunkformer-rnnt-large-vie" "$MODELS_DIR/chunkformer-rnnt-large-vie" "ChunkFormer-RNNT-Large-Vie"; then
     EXIT_CODE=1
   fi
 fi

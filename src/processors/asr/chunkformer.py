@@ -1,6 +1,6 @@
 """
 ChunkFormer ASR backend implementation for MAIE.
-Supports chunkformer-large-vie model.
+Supports chunkformer-rnnt-large-vie model.
 """
 
 import os
@@ -212,51 +212,88 @@ class ChunkFormerBackend(ASRBackend):
                     }
                     # Add any additional kwargs
                     params.update(kwargs)
+                    
+                    from src.config.logging import get_module_logger
+                    logger = get_module_logger(__name__)
+                    
                     result = self.model.endless_decode(audio_path, **params)
+                    
+                    # Debug log: See what ChunkFormer actually returns
+                    logger.debug(
+                        "ChunkFormer endless_decode result type: {}",
+                        type(result).__name__
+                    )
 
-                    # endless_decode may return a dict, list, or string; normalize
-                    if isinstance(result, dict):
+                    # ChunkFormer's endless_decode returns a list of segments directly
+                    # Each segment has: {"start": "[HH:MM:SS.mmm]", "end": "[HH:MM:SS.mmm]", "decode": "text"}
+                    if isinstance(result, list):
+                        # Direct list of segments from ChunkFormer
+                        segments = result
+                        language = None  # ChunkFormer doesn't provide language detection
+                        confidence = None  # ChunkFormer doesn't provide confidence scores
+                        
+                        logger.debug(
+                            "ChunkFormer returned {} segments",
+                            len(segments)
+                        )
+                        
+                        # Normalize segments: ChunkFormer uses "decode" field, we need "text" for API consistency
+                        normalized_segments = []
+                        for seg in segments:
+                            if isinstance(seg, dict):
+                                # Extract text from "decode" field (ChunkFormer's output format)
+                                text = seg.get("decode", seg.get("text", ""))
+                                normalized_segments.append({
+                                    "start": seg.get("start"),  # ChunkFormer format: "[HH:MM:SS.mmm]"
+                                    "end": seg.get("end"),      # ChunkFormer format: "[HH:MM:SS.mmm]"
+                                    "text": text.strip() if text else ""
+                                })
+                            else:
+                                # Handle object-like segments (fallback)
+                                text = getattr(seg, "decode", None) or getattr(seg, "text", "")
+                                normalized_segments.append({
+                                    "start": getattr(seg, "start", None),
+                                    "end": getattr(seg, "end", None),
+                                    "text": text.strip() if text else ""
+                                })
+                        
+                        segments = normalized_segments
+                        
+                        if segments:
+                            logger.debug(
+                                "First segment sample - start: {} end: {} text: {}",
+                                segments[0].get("start"),
+                                segments[0].get("end"),
+                                segments[0].get("text", "")[:50]
+                            )
+                    elif isinstance(result, dict):
+                        # Fallback for dict response (shouldn't happen with endless_decode)
                         segments = result.get("segments", [])
                         language = result.get("language", None)
                         confidence = result.get("confidence", None)
-                    elif isinstance(result, list):
-                        # Handle case where model returns list of segments directly
-                        segments = result
-                        language = None
-                        confidence = None
+                        
+                        # Normalize dict segments as well
+                        normalized_segments = []
+                        for seg in segments:
+                            if isinstance(seg, dict):
+                                text = seg.get("decode", seg.get("text", ""))
+                                normalized_segments.append({
+                                    "start": seg.get("start"),
+                                    "end": seg.get("end"),
+                                    "text": text.strip() if text else ""
+                                })
+                        segments = normalized_segments
                     else:
-                        # treat as plain text
-                        segments = [{"start": None, "end": None, "text": str(result)}]
+                        # Treat as plain text (fallback for unexpected return type)
+                        text_str = str(result).strip()
+                        segments = [{"start": None, "end": None, "text": text_str}] if text_str else []
                         language = None
                         confidence = None
-
-                    # Process segments to extract text properly
-                    if segments and isinstance(segments[0], dict):
-                        first_seg = segments[0]
-
-                        # Check if segments have 'decode' field instead of 'text'
-                        if "decode" in first_seg and "text" not in first_seg:
-                            # Convert 'decode' to 'text' for consistency
-                            for seg in segments:
-                                if "decode" in seg:
-                                    seg["text"] = seg.pop("decode")
-                        # Also check if segment text is a JSON string representation
-                        elif isinstance(first_seg.get("text"), str) and first_seg[
-                            "text"
-                        ].startswith("["):
-                            # Try to parse the text as JSON and extract the decode field
-                            try:
-                                import json
-
-                                json_text = first_seg["text"].replace("'", '"')
-                                parsed = json.loads(json_text)
-                                if isinstance(parsed, list) and len(parsed) > 0:
-                                    item = parsed[0]
-                                    if isinstance(item, dict) and "decode" in item:
-                                        # Replace the text with the actual decoded text
-                                        first_seg["text"] = item["decode"]
-                            except (json.JSONDecodeError, KeyError, IndexError):
-                                pass  # Keep original text if parsing fails
+                        
+                        logger.warning(
+                            "ChunkFormer returned unexpected type: {}, treating as plain text",
+                            type(result).__name__
+                        )
                 elif hasattr(self.model, "decode") and callable(
                     getattr(self.model, "decode")
                 ):
@@ -273,9 +310,17 @@ class ChunkFormerBackend(ASRBackend):
                     # Add any additional kwargs
                     params.update(kwargs)
 
+                    from src.config.logging import get_module_logger
+                    logger = get_module_logger(__name__)
+
                     # Model.decode may accept an iterator/list of chunks or a file path;
                     # pass the path and let the model handle chunking if it supports it.
                     result = self.model.decode(audio_path, **params)
+
+                    logger.debug(
+                        "ChunkFormer decode result type: {}",
+                        type(result).__name__
+                    )
 
                     if not isinstance(result, dict):
                         raise RuntimeError(
@@ -285,31 +330,68 @@ class ChunkFormerBackend(ASRBackend):
                     segments = result.get("segments", [])
                     language = result.get("language", None)
                     confidence = result.get("confidence", None)
+                    
+                    # Normalize segments: ChunkFormer uses "decode" field
+                    normalized_segments = []
+                    for seg in segments:
+                        if isinstance(seg, dict):
+                            # Extract text from "decode" field (ChunkFormer's output format)
+                            text = seg.get("decode", seg.get("text", ""))
+                            normalized_segments.append({
+                                "start": seg.get("start"),
+                                "end": seg.get("end"),
+                                "text": text.strip() if text else ""
+                            })
+                        else:
+                            # Handle object-like segments
+                            text = getattr(seg, "decode", None) or getattr(seg, "text", "")
+                            normalized_segments.append({
+                                "start": getattr(seg, "start", None),
+                                "end": getattr(seg, "end", None),
+                                "text": text.strip() if text else ""
+                            })
+                    
+                    segments = normalized_segments
+                    
+                    if segments:
+                        logger.debug(
+                            "First segment from decode - start: {} end: {} text: {}",
+                            segments[0].get("start"),
+                            segments[0].get("end"),
+                            segments[0].get("text", "")[:50]
+                        )
                 else:
                     # Fallback to transcribe-like API
                     if hasattr(self.model, "transcribe") and callable(
                         getattr(self.model, "transcribe")
                     ):
+                        from src.config.logging import get_module_logger
+                        logger = get_module_logger(__name__)
+                        
                         segs, info = self.model.transcribe(audio_path, **kwargs)
 
                         # Normalize segments to list of dicts
-                        segments = []
+                        normalized_segments = []
                         for s in segs:
                             if isinstance(s, dict):
-                                segments.append(s)
+                                # Extract text from "decode" or "text" field
+                                text = s.get("decode", s.get("text", ""))
+                                normalized_segments.append({
+                                    "start": s.get("start", None),
+                                    "end": s.get("end", None),
+                                    "text": text.strip() if text else ""
+                                })
                             else:
-                                # Handle both 'text' and 'decode' fields
-                                text = getattr(s, "text", "") or getattr(
-                                    s, "decode", ""
-                                )
-                                segments.append(
-                                    {
-                                        "start": getattr(s, "start", None),
-                                        "end": getattr(s, "end", None),
-                                        "text": text,
-                                    }
-                                )
+                                # Handle object-like segments
+                                text = getattr(s, "decode", None) or getattr(s, "text", "")
+                                normalized_segments.append({
+                                    "start": getattr(s, "start", None),
+                                    "end": getattr(s, "end", None),
+                                    "text": text.strip() if text else ""
+                                })
 
+                        segments = normalized_segments
+                        
                         language = (
                             getattr(info, "language", None)
                             if info is not None
@@ -320,16 +402,20 @@ class ChunkFormerBackend(ASRBackend):
                             if info is not None
                             else None
                         )
+                        
+                        if segments:
+                            logger.debug(
+                                "Transcribe returned {} segments",
+                                len(segments)
+                            )
                     else:
                         raise RuntimeError(
                             "Loaded ChunkFormer model has no compatible decode/transcribe API"
                         )
 
-            # Handle both 'text' and 'decode' fields for transcribed text
-            def get_text(seg):
-                return seg.get("text") or seg.get("decode") or ""
-
-            text_parts = [get_text(seg) for seg in segments if get_text(seg)]
+            # Extract full text by joining all segment texts
+            # All segments should now have normalized "text" field
+            text_parts = [seg.get("text", "") for seg in segments if seg.get("text", "").strip()]
             text = " ".join(text_parts).strip()
             return ASRResult(
                 text=text, segments=segments, language=language, confidence=confidence

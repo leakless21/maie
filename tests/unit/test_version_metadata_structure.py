@@ -158,7 +158,7 @@ class TestASRMetadataCollection:
     def test_chunkformer_metadata_structure(self):
         """Test that ChunkFormer backend metadata has required fields."""
         asr_metadata = {
-            "model_name": "chunkformer-ctc-large-vie",
+            "model_name": "chunkformer-rnnt-large-vie",
             "checkpoint_hash": "hash_xyz789",
             "backend": "chunkformer",
             "language": "vi",
@@ -168,7 +168,7 @@ class TestASRMetadataCollection:
         version_metadata = get_version_metadata(asr_metadata, None)
 
         asr = version_metadata["asr"]
-        assert asr["model_name"] == "chunkformer-ctc-large-vie"
+        assert asr["model_name"] == "chunkformer-rnnt-large-vie"
         assert asr["checkpoint_hash"] == "hash_xyz789"
         assert asr["backend"] == "chunkformer"
 

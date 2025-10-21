@@ -110,9 +110,13 @@ class AsrSettings(BaseModel):
     whisper_device: str = Field(default="cuda")
     whisper_compute_type: str = Field(default="float16")
     whisper_cpu_fallback: bool = Field(default=False)
-    whisper_condition_on_previous_text: bool = Field(default=True)
+    whisper_condition_on_previous_text: bool = Field(default=False)
     whisper_language: str | None = Field(default=None)
     whisper_cpu_threads: int | None = Field(default=None)
+    whisper_word_timestamps: bool = Field(
+        default=True,
+        description="Enable word-level timestamps. Required for accurate segment timestamps in faster-whisper.",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -128,9 +132,9 @@ class AsrSettings(BaseModel):
 
 
 class ChunkformerSettings(BaseModel):
-    chunkformer_model_path: str = Field(default="data/models/chunkformer-ctc-large-vie")
+    chunkformer_model_path: str = Field(default="data/models/chunkformer-rnnt-large-vie")
     chunkformer_model_variant: str = Field(
-        default="khanhld/chunkformer-large-vie",
+        default="khanhld/chunkformer-rnnt-large-vie",
     )
     chunkformer_chunk_size: int = Field(default=64, description="Chunk size in frames")
     chunkformer_left_context_size: int = Field(default=128, description="Left context size in frames")
@@ -152,7 +156,7 @@ class ChunkformerSettings(BaseModel):
 class LlmEnhanceSettings(BaseModel):
     model: str = Field(default="data/models/qwen3-4b-instruct-2507-awq")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    max_model_len: int = Field(default=25000)
     temperature: float = Field(default=0.0, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
@@ -193,7 +197,7 @@ class LlmEnhanceSettings(BaseModel):
 class LlmSumSettings(BaseModel):
     model: str = Field(default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    max_model_len: int = Field(default=25000)
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
@@ -202,7 +206,7 @@ class LlmSumSettings(BaseModel):
     max_num_seqs: int | None = Field(
         default=None,
         ge=1,
-        description="Maximum concurrent sequences for summarization vLLM runs",
+        description="Maximum concurrent sequences for summary vLLM runs",
     )
     max_num_batched_tokens: int | None = Field(
         default=None,
@@ -212,7 +216,7 @@ class LlmSumSettings(BaseModel):
     max_num_partial_prefills: int | None = Field(
         default=None,
         ge=1,
-        description="Chunked prefill configuration for summarization workloads",
+        description="Chunked prefill configuration for summary workloads",
     )
 
     model_config = ConfigDict(validate_assignment=True)
@@ -327,6 +331,7 @@ class AppSettings(BaseSettings):
         ),
         "whisper_language": ("asr", "whisper_language"),
         "whisper_cpu_threads": ("asr", "whisper_cpu_threads"),
+        "whisper_word_timestamps": ("asr", "whisper_word_timestamps"),
         "chunkformer_model_path": ("chunkformer", "chunkformer_model_path"),
         "chunkformer_model_variant": ("chunkformer", "chunkformer_model_variant"),
         "chunkformer_chunk_size": ("chunkformer", "chunkformer_chunk_size"),

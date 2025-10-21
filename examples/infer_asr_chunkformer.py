@@ -26,6 +26,7 @@ if _PROJECT_ROOT not in sys.path:
 
 from src.config import configure_logging, get_logger
 from src.config.logging import get_module_logger
+from src.processors.audio import AudioPreprocessor
 from src.worker.pipeline import (
     execute_asr_transcription,
     load_asr_model,
@@ -60,16 +61,72 @@ def main() -> int:
     if args.right_context is not None:
         config["right_context"] = args.right_context
 
+    preprocessor = AudioPreprocessor()
+    try:
+        metadata = preprocessor.preprocess(audio_path)
+    except Exception as e:
+        logger.exception("Audio preprocessing failed: {}", e)
+        if args.json:
+            print(
+                json.dumps(
+                    {"error": "preprocessing_failed", "message": str(e), "path": str(audio_path)}
+                )
+            )
+        return 3
+
+    if metadata.get("normalized_path"):
+        logger.info(
+            "Audio normalized",
+            original_format=metadata.get("format"),
+            duration=metadata.get("duration"),
+        )
+
+    logger.info(
+        "Audio preprocessing complete",
+        duration=metadata.get("duration"),
+        sample_rate=metadata.get("sample_rate"),
+        channels=metadata.get("channels"),
+        normalized=metadata.get("normalized_path") is not None,
+    )
+
+    processing_audio_path = metadata.get("normalized_path") or audio_path
+    audio_duration = float(metadata.get("duration", 0.0))
+    processing_audio_path = str(processing_audio_path)
+
     asr = None
     try:
         asr = load_asr_model("chunkformer", **config)
-        transcript, rtf, conf, _meta = execute_asr_transcription(asr, str(audio_path))
+        # Phase 1: execute_asr_transcription now returns (ASRResult, rtf, metadata)
+        asr_result, rtf, _meta = execute_asr_transcription(
+            asr, processing_audio_path, audio_duration
+        )
+        
         if args.json:
-            print(
-                json.dumps({"transcript": transcript, "rtf": rtf, "confidence": conf})
-            )
+            result_dict = {
+                "transcript": asr_result.text,
+                "rtf": rtf,
+                "confidence": asr_result.confidence,
+            }
+            # Include segments if available (Phase 1 enhancement)
+            if asr_result.segments:
+                result_dict["segments"] = asr_result.segments
+            print(json.dumps(result_dict))
         else:
-            print(transcript)
+            # Use segments by default - print each segment with timestamp
+            if asr_result.segments:
+                for segment in asr_result.segments:
+                    start = segment.get("start", "")
+                    end = segment.get("end", "")
+                    text = segment.get("text", "").strip()
+                    if text:
+                        # Handle both numeric (Whisper) and string (ChunkFormer) timestamps
+                        if isinstance(start, (int, float)) and isinstance(end, (int, float)):
+                            print(f"[{start:.2f}s - {end:.2f}s] {text}")
+                        else:
+                            print(f"[{start} - {end}] {text}")
+            else:
+                # Fallback to full transcript if no segments
+                print(asr_result.text)
         return 0
     except Exception as e:  # noqa: BLE001 - top-level CLI error reporting
         logger.exception("ChunkFormer inference failed: {}", e)

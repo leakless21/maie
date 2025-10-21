@@ -4,7 +4,7 @@ Sequential processing pipeline for the Modular Audio Intelligence Engine (MAIE).
 This module contains the main processing logic that executes:
 1. Audio preprocessing (normalization, validation)
 2. ASR (Automatic Speech Recognition) processing
-3. LLM (Large Language Model) processing (enhancement + summarization)
+3. LLM (Large Language Model) processing (enhancement + summary)
 With proper state management, GPU memory management, and error handling.
 """
 
@@ -293,7 +293,7 @@ def load_asr_model(asr_backend: str = "whisper", **config) -> Any:
 
 def execute_asr_transcription(
     asr_model: Any, audio_path: str, audio_duration: float
-) -> Tuple[str, float, float, Dict[str, Any]]:
+) -> Tuple[Any, float, Dict[str, Any]]:
     """
     Execute ASR transcription on the provided audio.
 
@@ -303,7 +303,10 @@ def execute_asr_transcription(
         audio_duration: Actual audio duration in seconds from preprocessing
 
     Returns:
-        Tuple of (transcription, rtf, confidence, asr_metadata)
+        Tuple of (asr_result, rtf, asr_metadata)
+        - asr_result: Full ASRResult object with text, segments, confidence, etc.
+        - rtf: Real-time factor
+        - asr_metadata: Version/model metadata
 
     Raises:
         ASRProcessingError: If transcription fails
@@ -322,54 +325,44 @@ def execute_asr_transcription(
         processing_time = time.time() - start_time
         rtf = processing_time / audio_duration if audio_duration > 0 else 0
 
-        # Extract transcription text
-        if hasattr(result, "text"):
-            transcription = result.text
-        elif hasattr(result, "transcript"):
-            transcription = result.transcript
-        else:
-            transcription = str(result)
-
-        # Extract confidence
-        confidence = getattr(result, "confidence", None) or getattr(
-            result, "confidence_avg", 0.0
-        )
-
         # Collect ASR-specific metadata for versioning (NFR-1)
-        asr_metadata = {}
-        if hasattr(result, "model_name"):
-            asr_metadata["model_name"] = result.model_name
-        if hasattr(result, "checkpoint_hash"):
-            asr_metadata["checkpoint_hash"] = result.checkpoint_hash
-        if hasattr(result, "duration_ms"):
-            asr_metadata["duration_ms"] = result.duration_ms
-        if hasattr(result, "language"):
-            asr_metadata["language"] = result.language
-        if hasattr(result, "language_probability"):
-            asr_metadata["language_probability"] = result.language_probability
+        asr_metadata: Dict[str, Any] = {}
+        if hasattr(asr_model, "get_version_info"):
+            try:
+                backend_info = asr_model.get_version_info()
+                if isinstance(backend_info, dict):
+                    asr_metadata.update(backend_info)
+            except Exception as exc:
+                logger.warning("Failed to collect ASR version info", error=str(exc))
 
-        try:
-            transcript_length = len(transcription)  # type: ignore[arg-type]
-        except TypeError:
-            transcript_length = len(str(transcription))
-        except Exception:
-            transcript_length = 0
+        asr_metadata["language"] = result.language
 
-        # Sanitize confidence for logging to avoid pickling of mocks in handlers
-        try:
-            confidence_logged = float(confidence) if confidence is not None else None
-        except Exception:
-            confidence_logged = None
+        model_name = asr_metadata.get("model_name") or getattr(result, "model_name", None)
+        if not model_name:
+            model_name = asr_metadata.get("model_variant") or asr_metadata.get("backend")
+        asr_metadata["model_name"] = model_name or "unknown"
 
+        if not asr_metadata.get("checkpoint_hash"):
+            asr_metadata["checkpoint_hash"] = getattr(result, "checkpoint_hash", None)
+
+        # Calculate character and word counts for visibility
+        char_count = len(result.text)
+        word_count = len(result.text.split()) if result.text else 0
+        segment_count = len(result.segments) if result.segments else 0
+        
         logger.info(
-            "ASR transcription complete",
-            transcript_length=transcript_length,
+            f"ASR transcription complete | {char_count:,} chars | {word_count:,} words | {segment_count} segment(s) | RTF: {rtf:.3f}",
+            transcript_length=char_count,
+            word_count=word_count,
+            segment_count=segment_count,
             rtf=rtf,
-            confidence=confidence_logged,
+            confidence=result.confidence,
             processing_time=processing_time,
         )
 
-        return transcription, rtf, confidence, asr_metadata
+        # Phase 1: Return full ASRResult object directly from backend
+        # Backends (ChunkFormer, Whisper) already return proper ASRResult with segments
+        return result, rtf, asr_metadata
 
     except FileNotFoundError as e:
         logger.error("Audio file not found", audio_path=audio_path, error=str(e))
@@ -473,7 +466,7 @@ def execute_llm_processing(
         llm_model: LLM processor instance
         transcription: Raw transcription text
         features: List of requested features
-        template_id: Template ID for structured summarization
+        template_id: Template ID for structured summary
         asr_backend: ASR backend used (affects enhancement decision)
 
     Returns:
@@ -507,7 +500,15 @@ def execute_llm_processing(
 
         if needs_enhancement:
             try:
-                logger.info("Applying text enhancement")
+                input_char_count = len(transcription)
+                input_word_count = len(transcription.split()) if transcription else 0
+                
+                logger.info(
+                    f"=== LLM INPUT: Text enhancement | {input_char_count:,} chars | {input_word_count:,} words ===",
+                    char_count=input_char_count,
+                    word_count=input_word_count,
+                )
+                
                 enhanced_result = llm_model.enhance_text(transcription)
                 if enhanced_result.get("enhancement_applied", False):
                     results["clean_transcript"] = enhanced_result["enhanced_text"]
@@ -515,9 +516,16 @@ def execute_llm_processing(
                         "edit_rate_cleaning": enhanced_result.get("edit_rate", 0),
                         "edit_distance": enhanced_result.get("edit_distance", 0),
                     }
+                    
+                    output_char_count = len(enhanced_result["enhanced_text"])
+                    output_word_count = len(enhanced_result["enhanced_text"].split()) if enhanced_result["enhanced_text"] else 0
+                    
                     logger.info(
-                        "Text enhancement applied",
+                        f"=== LLM OUTPUT: Text enhanced | {output_char_count:,} chars | {output_word_count:,} words | Edit rate: {enhanced_result.get('edit_rate', 0):.2%} ===",
+                        char_count=output_char_count,
+                        word_count=output_word_count,
                         edit_rate=enhanced_result.get("edit_rate", 0),
+                        edit_distance=enhanced_result.get("edit_distance", 0),
                     )
                 else:
                     results["clean_transcript"] = transcription
@@ -540,7 +548,7 @@ def execute_llm_processing(
                 "Text enhancement skipped - ASR backend provides native punctuation"
             )
 
-        # Structured summarization
+        # Structured summary
         if "summary" in features:
             if not template_id:
                 error_msg = "template_id required when summary feature requested"
@@ -552,8 +560,22 @@ def execute_llm_processing(
 
             try:
                 logger.info("Generating structured summary", template_id=template_id)
+                
+                # Log the ASR transcript being passed to LLM
+                clean_transcript = results["clean_transcript"]
+                transcript_char_count = len(clean_transcript)
+                transcript_word_count = len(clean_transcript.split()) if clean_transcript else 0
+                
+                logger.info(
+                    f"=== LLM INPUT: ASR transcript for summary | {transcript_char_count:,} chars | {transcript_word_count:,} words ===",
+                    template_id=template_id,
+                    char_count=transcript_char_count,
+                    word_count=transcript_word_count,
+                    preview=clean_transcript[:200] + ("..." if len(clean_transcript) > 200 else ""),
+                )
+                
                 summary_result = llm_model.generate_summary(
-                    transcript=results["clean_transcript"], template_id=template_id
+                    transcript=clean_transcript, template_id=template_id
                 )
                 if summary_result.get("summary"):
                     results["summary"] = summary_result["summary"]
@@ -561,9 +583,19 @@ def execute_llm_processing(
                         "retry_count": summary_result.get("retry_count", 0),
                         "model_info": summary_result.get("model_info", {}),
                     }
+                    
+                    # Log LLM output metrics
+                    summary_str = str(summary_result["summary"])
+                    summary_char_count = len(summary_str)
+                    summary_word_count = len(summary_str.split()) if summary_str else 0
+                    compression = transcript_char_count / summary_char_count if summary_char_count > 0 else 0
+                    
                     logger.info(
-                        "Summary generated successfully",
+                        f"=== LLM OUTPUT: Summary generated | {summary_char_count:,} chars | {summary_word_count:,} words | Compression: {compression:.1f}x ===",
                         retry_count=summary_result.get("retry_count", 0),
+                        char_count=summary_char_count,
+                        word_count=summary_word_count,
+                        compression_ratio=f"{compression:.2f}x" if compression > 0 else "N/A",
                     )
                 else:
                     error_msg = summary_result.get("error", "Unknown error")
@@ -820,7 +852,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             - audio_path: Path to the audio file to process
             - asr_backend: ASR backend to use (default: "whisper")
             - features: List of features to process (default: ["clean_transcript", "summary"])
-            - template_id: Template ID for summarization (required if "summary" in features)
+            - template_id: Template ID for summary (required if "summary" in features)
             - config: Additional configuration for the ASR backend
             - redis_host, redis_port, redis_db: Redis connection parameters
 
@@ -1055,30 +1087,21 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             asr_model = load_asr_model(asr_backend, **config)
 
             # Step 2b: Execute ASR transcription with actual duration
-            transcription, asr_rtf, confidence, asr_metadata = (
-                execute_asr_transcription(
-                    asr_model, processing_audio_path, audio_duration
-                )
+            # Phase 1: Now returns full ASRResult object with segments/timestamps
+            asr_result, asr_rtf, asr_metadata = execute_asr_transcription(
+                asr_model, processing_audio_path, audio_duration
             )
 
-            try:
-                process_transcript_length = len(transcription)  # type: ignore[arg-type]
-            except TypeError:
-                process_transcript_length = len(str(transcription))
-            except Exception:
-                process_transcript_length = 0
+            # Extract text and confidence directly from ASRResult
+            transcription = asr_result.text
+            confidence = asr_result.confidence
 
-            # Sanitize confidence for logging to avoid Mock pickling issues
-            try:
-                _safe_conf_val = float(confidence) if confidence is not None else None
-            except Exception:
-                _safe_conf_val = None
             logger.info(
                 "ASR transcription complete",
                 task_id=job_id,
-                transcript_length=process_transcript_length,
+                transcript_length=len(transcription),
                 rtf=asr_rtf,
-                confidence=_safe_conf_val,
+                confidence=confidence,
             )
         finally:
             # Step 2c: CRITICAL - Always unload ASR model to free GPU memory
@@ -1087,7 +1110,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 asr_model = None
 
         # =====================================================================
-        # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summarization)
+        # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summary)
         # =====================================================================
         try:
             if redis_conn:
@@ -1120,7 +1143,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             # Step 3a: Load LLM model
             llm_model = load_llm_model()
 
-            # Step 3b: Execute LLM processing (enhancement and/or summarization)
+            # Step 3b: Execute LLM processing (enhancement and/or summary)
             clean_transcript, structured_summary = execute_llm_processing(
                 llm_model, transcription, features, template_id, asr_backend
             )
@@ -1176,6 +1199,16 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
         if "summary" in features and structured_summary:
             result["results"]["summary"] = structured_summary
+
+        # Phase 1: Include ASR segments for future use (timestamps, confidence per segment)
+        # This preserves rich ASR data without breaking existing API consumers
+        if asr_result.segments:
+            result["results"]["segments"] = asr_result.segments
+            logger.debug(
+                "ASR segments preserved in results",
+                task_id=job_id,
+                segment_count=len(asr_result.segments),
+            )
 
         # Update status to COMPLETE and store final results
         if redis_conn:

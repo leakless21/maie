@@ -1,387 +1,213 @@
 """
-Loguru configuration helpers used across the application.
+Simplified logging configuration for the MAIE project.
 
-This module wires Loguru using centralized settings while remaining import-safe.
-Entry points must call `configure_logging()` explicitly.
+This module provides a clean, straightforward logging setup using Loguru
+that focuses on error pinpointing and human-readable logs.
 """
 
 from __future__ import annotations
 
 import contextvars
 import logging
-import os
-import re
 import sys
 import uuid
-from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any, Optional
 
-from loguru import logger as _loguru_logger  # type: ignore
+from loguru import logger as _loguru_logger
 
 from .loader import settings
 
+# Context variable for correlation IDs to track requests across components
 correlation_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "correlation_id", default=None
 )
 
-
 def generate_correlation_id(prefix: str = "") -> str:
-    """Generate a UUID-based correlation id. Caller may add prefixes for easier grouping."""
-    return (prefix + "-") * bool(prefix) + uuid.uuid4().hex
-
+    """Generate a UUID-based correlation id for request tracing."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}" if prefix else uuid.uuid4().hex[:8]
 
 def bind_correlation_id(value: Optional[str] = None) -> None:
-    """
-    Bind a correlation id to the current context.
-
-    Example:
-        bind_correlation_id(generate_correlation_id("req"))
-        logger.info("processing")
-    """
+    """Bind a correlation id to the current context."""
     if value is None:
         value = generate_correlation_id()
     correlation_id.set(value)
-
 
 def clear_correlation_id() -> None:
     """Clear the correlation id from the current context."""
     correlation_id.set(None)
 
-
-_SENSITIVE_FIELD_NAMES = {
-    "password",
-    "passwd",
-    "secret",
-    "token",
-    "api_key",
-    "apikey",
-    "authorization",
-    "auth",
-}
-_SENSITIVE_VALUE_PATTERNS = [
-    re.compile(r"(?i)(bearer\s+[A-Za-z0-9\-\._~+/]+=*)"),
-    re.compile(r"(?i)(api[_-]?key[:=]\s*[A-Za-z0-9\-\._~+/]+=*)"),
-    # Removed overly broad pattern: re.compile(r"[A-Za-z0-9-_]{32,}"),
-    # This was catching UUIDs, task IDs, and other legitimate identifiers
-    re.compile(r"(?i)password[:=]\s*\S+"),
-    re.compile(r"(?i)secret[:=]\s*\S+"),
-]
-
-
-def _mask_value(value: Any) -> Any:
-    """Return a masked version of value for simple primitives."""
-    if value is None:
-        return None
-    try:
-        string_value = str(value)
-    except (TypeError, ValueError):
-        return "REDACTED"
-    if len(string_value) <= 4:
-        return "REDACTED"
-    return string_value[:2] + ("*" * (len(string_value) - 4)) + string_value[-2:]
-
-
-def _redact_text(text: str) -> str:
-    """Redact sensitive value patterns inside text using defined regex patterns."""
-    if not text:
-        return text
-    redacted = text
-    for pattern in _SENSITIVE_VALUE_PATTERNS:
-        redacted = pattern.sub(lambda match: "REDACTED", redacted)
-    return redacted
-
-
-def _redact_extra(extra: Dict[str, Any]) -> Dict[str, Any]:
-    """Redact sensitive keys/values from `extra` dictionary."""
-    if not isinstance(extra, dict):
-        return extra
-    output: Dict[str, Any] = {}
-    for key, value in extra.items():
-        if key.lower() in _SENSITIVE_FIELD_NAMES:
-            output[key] = "REDACTED"
-        elif isinstance(value, dict):
-            output[key] = _redact_extra(value)
-        else:
-            # Don't mask values by default, only pass them through
-            output[key] = value
-    return output
-
-
-def _secure_opener(path: str, flags: int):
-    """
-    Open a file with secure permissions (0o600) to avoid accidental world-readable logs.
-
-    This function matches the signature expected by ``loguru.logger.add(..., opener=...)``.
-    """
-    return os.open(path, flags, 0o600)
-
-
-def _ensure_dir(path: Path) -> None:
-    try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-    except (OSError, PermissionError):
-        pass
-
-
 class InterceptHandler(logging.Handler):
+    """Handler to intercept standard logging and forward to loguru."""
     def emit(self, record: logging.LogRecord) -> None:
+        # Get corresponding Loguru level
         try:
             level = _loguru_logger.level(record.levelname).name
         except ValueError:
             level = record.levelno
-        _loguru_logger.opt(depth=6, exception=record.exc_info).log(
+
+        # Forward to loguru
+        frame, depth = logging.currentframe(), 2
+        while frame and frame.f_code.co_filename == logging.__file__:
+            frame = frame.f_back
+            depth += 1
+
+        _loguru_logger.opt(depth=depth, exception=record.exc_info).log(
             level, record.getMessage()
         )
 
-
-def intercept_stdlib_logging(
-    level: int | str = logging.INFO, names: list[str] | None = None
-) -> None:
+def intercept_stdlib_logging(level: int | str = logging.INFO) -> None:
+    """Intercept standard library loggers to use loguru."""
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(
         level if isinstance(level, int)
         else getattr(logging, str(level).upper(), logging.INFO)
     )
-    for name in (names or ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio"]):
+    
+    # Intercept common third-party loggers
+    for name in ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio"]:
         logger = logging.getLogger(name)
         logger.handlers = []
         logger.propagate = True
 
-
 def get_logger():
-    """Return the Loguru logger (Loguru is mandatory)."""
+    """Return the configured Loguru logger."""
     return _loguru_logger
 
-
-def configure_logging(
-    *,
-    environment: Optional[str] = None,
-    log_level: Optional[str] = None,
-    file_dir: Optional[str] = None,
-    rotation: Optional[str] = None,
-    retention: Optional[str] = None,
-    compression: Optional[str] = None,
-    console_serialize: Optional[bool] = None,
-    file_serialize: Optional[bool] = None,
-    diagnose: Optional[bool] = None,
-    backtrace: Optional[bool] = None,
-    force: bool = False,
-):
+def configure_logging() -> Any:
     """
-    Apply a safe, environment-aware logging configuration using Loguru.
-
-    Configuration source precedence:
-    1) Explicit function arguments
-    2) Centralized settings from `src.config.loader`
-    """
-    logger = get_logger()
-
-    if not settings.enable_loguru and not force:
-        return logger
-
-    level = (log_level or settings.log_level).upper()
-    dirpath = Path(file_dir) if file_dir is not None else settings.log_dir
-    rot = rotation or settings.log_rotation
-    ret = retention or settings.log_retention
-    comp = compression or settings.log_compression
-    console_ser = (
-        console_serialize
-        if console_serialize is not None
-        else settings.log_console_serialize
-    )
+    Apply a simplified logging configuration using Loguru.
     
-    # Prefer JSON console logs in production when not explicitly set
-    if console_serialize is None and getattr(settings, "environment", "development") == "production":
-        console_ser = True
-    file_ser = (
-        file_serialize if file_serialize is not None else settings.log_file_serialize
-    )
-    diag = diagnose if diagnose is not None else settings.loguru_diagnose
-    btrace = backtrace if backtrace is not None else settings.loguru_backtrace
-
+    This configuration focuses on:
+    - Clean, human-readable console output
+    - UTC timestamps for consistency
+    - Automatic correlation ID injection
+    - Error-focused file logging
+    """
+    # Remove default handlers to avoid duplicates
     try:
         _loguru_logger.remove()
-    except (ValueError, RuntimeError):
+    except ValueError:
         pass
 
-    def _filter_and_redact(record: Dict[str, Any]) -> bool:
-        """
-        Mutate the record in place:
-        - Inject `request_id` from context if not present in extra.
-        - Ensure `module` key is present for consistent formatting.
-        - Redact sensitive keys and value patterns.
-        Returns True to allow the record to be logged.
-        """
-        try:
-            request_id_value = correlation_id.get()
-            extra = record.get("extra", {})
-            if request_id_value and "request_id" not in extra:
-                extra["request_id"] = request_id_value
+    # Get settings
+    level = settings.log_level.upper()
+    log_dir = Path(settings.log_dir)
+    
+    # Ensure log directory exists
+    log_dir.mkdir(parents=True, exist_ok=True)
 
-            # Ensure module key is present for consistent formatting
-            if "module" not in extra:
-                extra["module"] = "unknown"
+    # Console format - clean and readable with correlation ID
+    console_format = (
+        "<green>{time:YYYY-MM-DD HH:mm:ss.SSS}</green> | "
+        "<level>{level: <8}</level> | "
+        "<cyan>{extra[module]}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
+        "{extra[correlation_id]} | "
+        "<level>{message}</level>"
+    )
 
-            record["extra"] = _redact_extra(extra)
+    # Add console handler with clean formatting
+    _loguru_logger.add(
+        sys.stdout,
+        format=console_format,
+        level=level,
+        colorize=True,
+        backtrace=settings.loguru_backtrace,
+        diagnose=settings.loguru_diagnose,
+        filter=lambda record: _inject_context(record)
+    )
 
-            message = record.get("message")
-            if isinstance(message, str) and message:
-                record["message"] = _redact_text(message)
-        except (ValueError, TypeError, KeyError):
-            try:
-                record["extra"] = {"module": "unknown"}
-            except (ValueError, TypeError):
-                pass
-        return True
+    # Add file handler for all logs with rotation
+    _loguru_logger.add(
+        log_dir / "app.log",
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+            "{extra[module]}:{function}:{line} | {extra[correlation_id]} | {message}"
+        ),
+        level=level,
+        rotation=settings.log_rotation,
+        retention=settings.log_retention,
+        compression=settings.log_compression,
+        backtrace=settings.loguru_backtrace,
+        diagnose=False,
+        filter=lambda record: _inject_context(record)
+    )
 
-    console_sink = sys.stdout
-    try:
-        if console_ser:
-            _loguru_logger.add(
-                console_sink,
-                level=level,
-                serialize=True,
-                diagnose=diag,
-                backtrace=btrace,
-                filter=_filter_and_redact,
-                enqueue=True,
-            )
-        else:
-            console_format = (
-                settings.loguru_format
-                or "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <blue>{extra[module]}</blue> | {message} | <cyan>{extra}</cyan>"
-            )
-            _loguru_logger.add(
-                console_sink,
-                level=level,
-                format=console_format,
-                colorize=True,
-                diagnose=diag,
-                backtrace=btrace,
-                filter=_filter_and_redact,
-                enqueue=True,
-            )
-    except (ValueError, OSError, PermissionError):
-        pass
+    # Add file handler for errors only with extended retention and structured data
+    _loguru_logger.add(
+        log_dir / "errors.log",
+        format=(
+            "{time:YYYY-MM-DD HH:mm:ss.SSS} | {level: <8} | "
+            "{extra[module]}:{function}:{line} | {extra[correlation_id]} | {message} | {exception} | "
+            "STRUCTURED: {extra}"
+        ),
+        level="ERROR",
+        rotation=settings.log_rotation,
+        retention=settings.log_retention,
+        compression=settings.log_compression,
+        backtrace=True,
+        diagnose=False,
+        filter=lambda record: _inject_context(record)
+    )
 
-    if dirpath is not None:
-        try:
-            _ensure_dir(dirpath / "app.log")
-            _ensure_dir(dirpath / "errors.log")
-            app_log_path = str(dirpath / "app.log")
-            _loguru_logger.add(
-                app_log_path,
-                level=level,
-                rotation=rot,
-                retention=ret,
-                compression=comp,
-                serialize=file_ser,
-                diagnose=False,
-                backtrace=btrace,
-                filter=_filter_and_redact,
-                opener=_secure_opener,
-                enqueue=True,
-            )
-            errors_log_path = str(dirpath / "errors.log")
-            _loguru_logger.add(
-                errors_log_path,
-                level="ERROR",
-                rotation=os.getenv("LOG_ROTATION_ERRORS", "100 MB"),
-                retention=os.getenv("LOG_RETENTION_ERRORS", "90 days"),
-                compression=os.getenv("LOG_COMPRESSION_ERRORS", comp),
-                serialize=False,
-                diagnose=False,
-                backtrace=True,
-                filter=_filter_and_redact,
-                opener=_secure_opener,
-                enqueue=True,
-            )
-        except (ValueError, OSError, PermissionError):
-            pass
-
-    try:
-        intercept_stdlib_logging(level=level)
-    except Exception:
-        pass
+    # Intercept standard library loggers
+    intercept_stdlib_logging(level=level)
 
     return _loguru_logger
 
 
-@contextmanager
-def correlation_scope(name: Optional[str] = None):
+def _inject_context(record):
     """
-    Context manager to create a scoped correlation id.
-
-    Example:
-        with correlation_scope("req"):
-            logger.info("running")
+    Inject context information into log records.
+    
+    This function is used as a filter to add correlation IDs and module info
+    to each log record.
     """
-    previous = correlation_id.get()
-    try:
-        bind_correlation_id(
-            name and generate_correlation_id(name) or generate_correlation_id()
-        )
-        yield correlation_id.get()
-    finally:
-        correlation_id.set(previous)
-
-
-def logger_with_context(**extra) -> Any:
+    # Inject correlation ID
+    cid = correlation_id.get()
+    record["extra"]["correlation_id"] = cid or "no-correlation-id"
+    
+    # Inject module info
+    module_name = record["name"]
+    if module_name.startswith("src."):
+        module_name = module_name[4:]  # Remove 'src.' prefix
+    elif module_name.startswith("tests."):
+        module_name = module_name[6:]  # Remove 'tests.' prefix
+    record["extra"]["module"] = module_name
+    
+    # Add basic ML context fields if available in the record
+    # These would typically be added via logger.bind() in ML operations
+    ml_context_fields = [
+        "model_name",
+        "inference_time_ms",
+        "audio_duration_sec",
+        "tokens_processed",
+        "gpu_memory_mb",
+        "task_id"
+    ]
+    
+    # Check if any ML context fields are already bound to the logger
+    for field in ml_context_fields:
+        if field not in record["extra"]:
+            # Set default values for missing ML context fields to ensure consistency
+            record["extra"][field] = record["extra"].get(field, None)
+    
+    return True
+def get_module_logger(module_name: str) -> Any:
     """
-    Return a logger bound with the current correlation id and provided extra.
-
-    This lets callers migrate incrementally:
-        logger = logger_with_context(user_id=user.id)
-        logger.info("event")
-    """
-    logger = get_logger()
-    try:
-        request_id_value = correlation_id.get()
-        if request_id_value:
-            extra.setdefault("request_id", request_id_value)
-        return logger.bind(**extra)
-    except (ValueError, TypeError, AttributeError):
-        return logger
-
-
-def get_module_logger(module_name: Optional[str] = None) -> Any:
-    """
-    Return a logger bound with the current module name for better debugging.
-
+    Get a logger with module context for better debugging.
+    
     Usage:
         logger = get_module_logger(__name__)
         logger.info("Processing started")
-
-    Args:
-        module_name: The module name (typically __name__). If None, attempts to detect from caller.
-
-    Returns:
-        Logger bound with module information
     """
-    logger = get_logger()
-    try:
-        if module_name is None:
-            # Try to get module name from caller's frame
-            import inspect
-
-            frame = inspect.currentframe()
-            if frame and frame.f_back:
-                module_name = frame.f_back.f_globals.get("__name__", "unknown")
-
-        if module_name:
-            # Clean up module name for readability
-            if module_name.startswith("src."):
-                module_name = module_name[4:]  # Remove 'src.' prefix
-            elif module_name.startswith("tests."):
-                module_name = module_name[6:]  # Remove 'tests.' prefix
-
-            return logger.bind(module=module_name)
-        else:
-            return logger
-    except (ValueError, TypeError, AttributeError):
-        return logger
-
+    # Clean up module name for readability
+    if module_name.startswith("src."):
+        module_name = module_name[4:]  # Remove 'src.' prefix
+    elif module_name.startswith("tests."):
+        module_name = module_name[6:]  # Remove 'tests.' prefix
+    
+    return _loguru_logger.bind(module=module_name)
 
 __all__ = [
     "get_logger",
@@ -390,7 +216,5 @@ __all__ = [
     "clear_correlation_id",
     "correlation_id",
     "generate_correlation_id",
-    "correlation_scope",
-    "logger_with_context",
     "get_module_logger",
 ]

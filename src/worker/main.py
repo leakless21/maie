@@ -96,6 +96,13 @@ def start_worker() -> None:
 
 
 if __name__ == "__main__":
+    # CRITICAL: Disable vLLM V1 multiprocessing to avoid hanging in RQ worker context
+    # vLLM's V1 engine spawns a separate EngineCore process, but this causes issues
+    # when vLLM is loaded from within an RQ worker process (not __main__).
+    # See: https://docs.vllm.ai/en/latest/design/multiprocessing.html
+    import os
+    os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
+    
     # Enforce spawn start method for CUDA compatibility with vLLM
     import multiprocessing as mp
     try:

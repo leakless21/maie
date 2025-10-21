@@ -178,22 +178,22 @@ class TestLLMProcessingErrors:
         assert stored_data["status"] == TaskStatus.FAILED.value
         assert "LLM_PROCESSING_ERROR" in stored_data.get("error_code", "")
 
-    def test_llm_summarization_failure(self, mock_redis_sync):
-        """Test handling of LLM summarization failure."""
-        error = RuntimeError("Summarization generation failed")
+    def test_llm_summary_failure(self, mock_redis_sync):
+        """Test handling of LLM summary failure."""
+        error = RuntimeError("Summary generation failed")
         task_key = "task:test-llm-summary"
 
         handle_processing_error(
             mock_redis_sync,
             task_key,
             error,
-            stage="llm_summarization",
+            stage="llm_summary",
             error_code="LLM_PROCESSING_ERROR",
         )
 
         stored_data = mock_redis_sync._data.get(task_key, {})
         assert stored_data["status"] == TaskStatus.FAILED.value
-        assert stored_data.get("stage") == "llm_summarization"
+        assert stored_data.get("stage") == "llm_summary"
 
     def test_schema_validation_failure(self, mock_redis_sync):
         """Test handling of prompt schema validation failure."""
@@ -383,7 +383,10 @@ class TestRQJobFailureHandling:
                                         mock_asr = MagicMock()
                                         mock_load_asr.return_value = mock_asr
                                         
-                                        mock_execute_asr.return_value = ("test transcript", 0.5, 0.8, {})
+                                        # Phase 1: Now returns (ASRResult, rtf, metadata)
+                                        from src.processors.base import ASRResult
+                                        asr_result = ASRResult(text="test transcript", confidence=0.8)
+                                        mock_execute_asr.return_value = (asr_result, 0.5, {})
                                         
                                         mock_metrics.return_value = {"rtf": 0.5, "confidence": 0.8}
                                         
@@ -408,12 +411,13 @@ class TestRQJobFailureHandling:
                                             "features": ["clean_transcript", "summary"]
                                         }
                                         
-                                        # Execute and verify exception is raised
-                                        with pytest.raises(ModelLoadError) as exc_info:
-                                            process_audio_task(task_params)
+                                        # Execute - pipeline now returns structured error response
+                                        result = process_audio_task(task_params)
                                         
-                                        # Verify the error details
-                                        assert "CUDA driver initialization failed" in str(exc_info.value)
+                                        # Verify the error response
+                                        assert result["status"] == "error"
+                                        assert result["error"]["code"] == "MODEL_LOAD_ERROR"
+                                        assert "CUDA driver initialization failed" in result["error"]["message"]
                                         
                                         # Verify ASR cleanup was called (LLM cleanup won't be called since it failed to load)
                                         mock_unload_asr.assert_called_once_with(mock_asr)
@@ -443,7 +447,10 @@ class TestRQJobFailureHandling:
                                         mock_asr = MagicMock()
                                         mock_load_asr.return_value = mock_asr
                                         
-                                        mock_execute_asr.return_value = ("test transcript", 0.5, 0.8, {})
+                                        # Phase 1: Now returns (ASRResult, rtf, metadata)
+                                        from src.processors.base import ASRResult
+                                        asr_result = ASRResult(text="test transcript", confidence=0.8)
+                                        mock_execute_asr.return_value = (asr_result, 0.5, {})
                                         
                                         mock_metrics.return_value = {"rtf": 0.5, "confidence": 0.8}
                                         
@@ -468,9 +475,12 @@ class TestRQJobFailureHandling:
                                             "features": ["clean_transcript", "summary"]
                                         }
                                         
-                                        # Execute and verify exception is raised
-                                        with pytest.raises(ModelLoadError):
-                                            process_audio_task(task_params)
+                                        # Execute - pipeline now returns structured error response
+                                        result = process_audio_task(task_params)
+                                        
+                                        # Verify error response
+                                        assert result["status"] == "error"
+                                        assert result["error"]["code"] == "MODEL_LOAD_ERROR"
                                         
                                         # Verify Redis status was updated to FAILED
                                         # The handle_processing_error function should have been called
