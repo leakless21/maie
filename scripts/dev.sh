@@ -106,6 +106,20 @@ if [[ "$API_ONLY" == true && "$WORKER_ONLY" == true ]]; then
   exit 1
 elif [[ "$API_ONLY" == true ]]; then
   echo "Starting API server on $HOST:$PORT..."
+  
+  # Function to handle script termination
+  cleanup() {
+    echo "Shutting down API server..."
+    echo "Cleaning up any remaining RQ worker processes..."
+    pkill -f "rq:worker" 2>/dev/null || true
+    pkill -f "pixi run worker" 2>/dev/null || true
+    echo "Cleanup completed."
+    exit 0
+  }
+  
+  # Set up signal traps
+  trap cleanup SIGINT SIGTERM
+  
   if [[ "$RELOAD" == true ]]; then
     exec pixi run api --host "$HOST" --port "$PORT" --reload
   else
@@ -113,7 +127,40 @@ elif [[ "$API_ONLY" == true ]]; then
   fi
 elif [[ "$WORKER_ONLY" == true ]]; then
   echo "Starting worker process..."
-  exec pixi run worker
+  
+  # Start worker in background to capture PID
+  pixi run worker &
+  WORKER_PID=$!
+  
+  # Function to handle script termination
+  cleanup() {
+    echo "Shutting down worker process..."
+    
+    # Kill worker process if it was started
+    if [[ -n "${WORKER_PID:-}" ]]; then
+      echo "Stopping worker process (PID: $WORKER_PID)..."
+      kill $WORKER_PID 2>/dev/null || true
+    fi
+    
+    # Also kill any remaining RQ worker processes
+    echo "Cleaning up any remaining RQ worker processes..."
+    pkill -f "rq:worker" 2>/dev/null || true
+    pkill -f "pixi run worker" 2>/dev/null || true
+    
+    # Wait for process to terminate
+    if [[ -n "${WORKER_PID:-}" ]]; then
+      wait $WORKER_PID 2>/dev/null || true
+    fi
+    
+    echo "Cleanup completed."
+    exit 0
+  }
+  
+  # Set up signal traps
+  trap cleanup SIGINT SIGTERM
+  
+  # Wait for worker process
+  wait $WORKER_PID
 else
   echo "Starting API server on $HOST:$PORT and worker process..."
   
@@ -132,13 +179,38 @@ else
   pixi run worker &
   WORKER_PID=$!
   
-  # Function to handle script termination
-  cleanup() {
-    echo "Shutting down services..."
-    kill $API_PID $WORKER_PID 2>/dev/null || true
-    wait $API_PID $WORKER_PID 2>/dev/null || true
-    exit 0
- }
+# Function to handle script termination
+cleanup() {
+  echo "Shutting down services..."
+  
+  # Kill API server if it was started
+  if [[ -n "${API_PID:-}" ]]; then
+    echo "Stopping API server (PID: $API_PID)..."
+    kill $API_PID 2>/dev/null || true
+  fi
+  
+  # Kill worker process if it was started
+  if [[ -n "${WORKER_PID:-}" ]]; then
+    echo "Stopping worker process (PID: $WORKER_PID)..."
+    kill $WORKER_PID 2>/dev/null || true
+  fi
+  
+  # Also kill any remaining RQ worker processes
+  echo "Cleaning up any remaining RQ worker processes..."
+  pkill -f "rq:worker" 2>/dev/null || true
+  pkill -f "pixi run worker" 2>/dev/null || true
+  
+  # Wait for processes to terminate
+  if [[ -n "${API_PID:-}" ]]; then
+    wait $API_PID 2>/dev/null || true
+  fi
+  if [[ -n "${WORKER_PID:-}" ]]; then
+    wait $WORKER_PID 2>/dev/null || true
+  fi
+  
+  echo "Cleanup completed."
+  exit 0
+}
   
   # Set up signal traps
   trap cleanup SIGINT SIGTERM

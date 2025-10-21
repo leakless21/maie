@@ -318,6 +318,8 @@ class LLMProcessor(LLMBackend):
         Returns:
             LLMResult with processed text and metadata
         """
+        logger.info(f"execute() method called with text length: {len(text)}, task: {kwargs.get('task', 'general')}")
+        logger.info(f"First 200 chars of text: {text[:200]}")
         task = kwargs.get("task", "general")
 
         # Load model if not already loaded
@@ -351,9 +353,19 @@ class LLMProcessor(LLMBackend):
                     metadata={"task": task, "error": "Missing template_id"},
                 )
             
+            # CRITICAL DEBUG - Log to logger at the very beginning
+            logger.info(f"=== CRITICAL DEBUG - LLM Processor Execute Method ===")
+            logger.info(f"Template ID: {template_id}")
+            logger.info(f"Text length: {len(text)}")
+            logger.info(f"Text is empty: {len(text.strip()) == 0}")
+            logger.info(f"First 200 chars of text: {text[:200]}")
+            logger.info(f"=== END CRITICAL DEBUG ===")
+            
             # Load schema for guided decoding
+            logger.info(f"About to load schema for template {template_id}")
             try:
                 schema = load_template_schema(template_id, settings.templates_dir)
+                logger.info(f"Schema loaded successfully for template {template_id}")
                 logger.debug(f"Loaded schema for template {template_id}")
             except Exception as e:
                 logger.error(f"Failed to load schema for template {template_id}: {e}")
@@ -366,28 +378,94 @@ class LLMProcessor(LLMBackend):
             
             # Build OpenAI-format messages using chat API approach
             try:
+                logger.info(f"About to render system prompt for template {template_id}")
                 # Render system prompt (contains instructions + schema)
                 system_prompt = self.prompt_renderer.render(
                     template_id,
                     schema=json.dumps(schema, ensure_ascii=False, indent=2)
                 )
+                logger.info(f"System prompt rendered successfully, length: {len(system_prompt)}")
+                
+                # Build user message with transcript
+                logger.info(f"About to build user message, text length: {len(text)}")
+                user_message_content = f"Transcript to analyze:\n{text}"
+                logger.info(f"User message content built, length: {len(user_message_content)}")
+                logger.info(f"First 500 chars of user message: {user_message_content[:500]}")
+        
                 
                 # Build messages in OpenAI format
+                logger.info(f"About to build messages array")
                 messages = [
                     {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Transcript to analyze:\n{text}"}
+                    {"role": "user", "content": user_message_content}
                 ]
+                logger.info(f"Messages array built, count: {len(messages)}")
+                logger.info(f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})")
+                logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
+                # CRITICAL DEBUG - Log to logger
+                logger.info(f"=== CRITICAL DEBUG - LLM Input Check ===")
+                logger.info(f"Text length: {len(text)}")
+                logger.info(f"Text is empty: {len(text.strip()) == 0}")
+                logger.info(f"First 200 chars of text: {text[:200]}")
+                logger.info(f"User message length: {len(user_message_content)}")
+                logger.info(f"First 200 chars of user message: {user_message_content[:200]}")
+                logger.info(f"System prompt length: {len(system_prompt)}")
+                logger.info(f"First 200 chars of system prompt: {system_prompt[:200]}")
+                logger.info(f"Messages count: {len(messages)}")
+                logger.info(f"Message 1 role: {messages[0]['role']}")
+                logger.info(f"Message 1 length: {len(messages[0]['content'])}")
+                logger.info(f"Message 2 role: {messages[1]['role']}")
+                logger.info(f"Message 2 length: {len(messages[1]['content'])}")
+                logger.info(f"Message 2 first 500 chars: {messages[1]['content'][:500]}")
+                logger.info(f"Message 2 last 500 chars: {messages[1]['content'][-500:]}")
+                logger.info(f"Full message 2 content length: {len(messages[1]['content'])}")
+                logger.info(f"Full message 2 content: {messages[1]['content']}")
+                logger.info(f"System prompt first 500 chars: {messages[0]['content'][:500]}")
+                logger.info(f"System prompt last 500 chars: {messages[0]['content'][-500:]}")
+                logger.info(f"=== END CRITICAL DEBUG ===")
                 logger.debug(f"Built messages for chat API with template {template_id}")
+                
+                # DEBUG: Write to file to avoid log truncation
+                from pathlib import Path
+                import time
+                debug_file = Path("/tmp") / f"llm_debug_{template_id}_{int(time.time())}.txt"
+                try:
+                    with open(debug_file, "w", encoding="utf-8") as f:
+                        f.write(f"=== CHAT API DEBUG ===\n")
+                        f.write(f"Template: {template_id}\n")
+                        f.write(f"Transcript length: {len(text)} chars\n")
+                        f.write(f"Transcript empty: {len(text.strip()) == 0}\n")
+                        f.write(f"User message length: {len(user_message_content)} chars\n")
+                        f.write(f"\n=== SYSTEM PROMPT (first 1000 chars) ===\n")
+                        f.write(system_prompt[:1000])
+                        f.write(f"\n\n=== TRANSCRIPT (first 1000 chars) ===\n")
+                        f.write(text[:1000])
+                        f.write(f"\n\n=== USER MESSAGE (first 1000 chars) ===\n")
+                        f.write(user_message_content[:1000])
+                        f.write(f"\n\n=== FULL MESSAGES ===\n")
+                        # Only write message structure, not full content to keep file size reasonable
+                        f.write(f"Message 1 (system): {len(system_prompt)} chars\n")
+                        f.write(f"Message 2 (user): {len(user_message_content)} chars\n")
+                    logger.info(f"=== LLM DEBUG WRITTEN TO: {debug_file} ===")
+                except Exception as e:
+                    logger.error(f"Failed to write LLM debug file: {e}")
                 use_chat_api = True
             except Exception as e:
+                logger.error(f"Exception in chat API message building: {e}")
+                logger.error(f"Exception type: {type(e)}")
                 # Fallback to old template rendering if new templates don't exist yet
                 logger.warning(f"Failed to build messages for chat API: {e}. Falling back to old template.")
                 try:
+                    logger.info(f"Using old template rendering approach for template {template_id}")
+                    logger.info(f"Text length: {len(text)}")
+                    logger.info(f"First 200 chars of text: {text[:200]}")
                     final_prompt = self.prompt_renderer.render(
                         template_id,
                         transcript=text,
                         schema=json.dumps(schema, ensure_ascii=False, indent=2)
                     )
+                    logger.info(f"Rendered prompt length: {len(final_prompt)}")
+                    logger.info(f"First 200 chars of rendered prompt: {final_prompt[:200]}")
                     logger.debug(f"Rendered prompt for template {template_id} (fallback)")
                     use_chat_api = False
                 except Exception as render_error:
@@ -403,7 +481,7 @@ class LLMProcessor(LLMBackend):
             if "guided_decoding" not in kwargs:
                 try:
                     from vllm.sampling_params import GuidedDecodingParams
-                    kwargs["guided_decoding"] = GuidedDecodingParams(json=schema)
+                    kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
                     logger.debug("Set up guided JSON decoding")
                 except Exception as e:
                     logger.warning(f"Failed to set up guided decoding: {e}")
@@ -872,7 +950,7 @@ class LLMProcessor(LLMBackend):
         # Create guided decoding parameters for JSON schema constraint
         from vllm.sampling_params import GuidedDecodingParams
 
-        guided_decoding = GuidedDecodingParams(json=schema)
+        guided_decoding = GuidedDecodingParams(json=json.dumps(schema))
 
         # Log schema details for debugging
         logger.info(

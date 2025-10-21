@@ -342,8 +342,10 @@ def execute_asr_transcription(
             model_name = asr_metadata.get("model_variant") or asr_metadata.get("backend")
         asr_metadata["model_name"] = model_name or "unknown"
 
+        # Ensure checkpoint_hash is always a string, never None
         if not asr_metadata.get("checkpoint_hash"):
-            asr_metadata["checkpoint_hash"] = getattr(result, "checkpoint_hash", None)
+            checkpoint_hash = getattr(result, "checkpoint_hash", None)
+            asr_metadata["checkpoint_hash"] = checkpoint_hash if checkpoint_hash else ""
 
         # Calculate character and word counts for visibility
         char_count = len(result.text)
@@ -566,6 +568,18 @@ def execute_llm_processing(
                 transcript_char_count = len(clean_transcript)
                 transcript_word_count = len(clean_transcript.split()) if clean_transcript else 0
                 
+                # CRITICAL DEBUG - Print to stdout
+                print(f"\n{'='*80}")
+                print(f"CRITICAL DEBUG - Pipeline LLM Input Check")
+                print(f"{'='*80}")
+                print(f"Original transcription length: {len(transcription)}")
+                print(f"Clean transcript length: {len(clean_transcript)}")
+                print(f"Clean transcript is empty: {len(clean_transcript.strip()) == 0}")
+                print(f"First 200 chars of clean_transcript: {clean_transcript[:200]}")
+                print(f"First 200 chars of original transcription: {transcription[:200]}")
+                print(f"Are they the same? {clean_transcript == transcription}")
+                print(f"{'='*80}\n")
+                
                 logger.info(
                     f"=== LLM INPUT: ASR transcript for summary | {transcript_char_count:,} chars | {transcript_word_count:,} words ===",
                     template_id=template_id,
@@ -679,14 +693,14 @@ def get_version_metadata(
     Returns:
         Complete version metadata dict matching VersionsSchema
     """
-    # Build ASR metadata variants
+    # Build ASR metadata variants - ensure all required fields are strings (not None)
     asr_backend = {
-        "name": asr_result_metadata.get("name", "whisper") if asr_result_metadata else "whisper",
-        "model_variant": asr_result_metadata.get("model_variant", "unknown") if asr_result_metadata else "unknown",
-        "model_path": asr_result_metadata.get("model_path", "") if asr_result_metadata else "",
-        "checkpoint_hash": asr_result_metadata.get("checkpoint_hash", "") if asr_result_metadata else "",
-        "compute_type": asr_result_metadata.get("compute_type", "float16") if asr_result_metadata else "float16",
-        "decoding_params": asr_result_metadata.get("decoding_params", {}) if asr_result_metadata else {},
+        "name": (asr_result_metadata.get("name") or "whisper") if asr_result_metadata else "unknown",
+        "model_variant": (asr_result_metadata.get("model_variant") or "unknown") if asr_result_metadata else "unknown",
+        "model_path": str(asr_result_metadata.get("model_path") or "") if asr_result_metadata else "",
+        "checkpoint_hash": str(asr_result_metadata.get("checkpoint_hash") or "") if asr_result_metadata else "",
+        "compute_type": (asr_result_metadata.get("compute_type") or "float16") if asr_result_metadata else "float16",
+        "decoding_params": asr_result_metadata.get("decoding_params") or {} if asr_result_metadata else {},
     }
 
     # Preserve raw ASR metadata for legacy tests expecting `versions['asr']`
@@ -725,11 +739,11 @@ def get_version_metadata(
         _llm = llm_info_raw or {}
         llm_block = {
             "model_name": _llm.get("model_name") or _llm.get("name", "unknown"),
-            "checkpoint_hash": _llm.get("checkpoint_hash", ""),
+            "checkpoint_hash": _llm.get("checkpoint_hash") or "",
             "backend": _llm.get("backend") or _llm.get("provider"),
             # API schema compatible
             "name": _llm.get("name") or _llm.get("model_name", "unknown"),
-            "quantization": _llm.get("quantization", ""),
+            "quantization": _llm.get("quantization") or "",
             "thinking": _llm.get("thinking", False),
             "reasoning_parser": _llm.get("reasoning_parser"),
             "structured_output": _llm.get("structured_output", {}),
@@ -1103,6 +1117,25 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 rtf=asr_rtf,
                 confidence=confidence,
             )
+            
+            # DEBUG: Log ASR transcript content for troubleshooting
+            # Write to file to avoid log truncation
+            debug_file = Path("/tmp") / f"asr_debug_{job_id}.txt"
+            try:
+                with open(debug_file, "w", encoding="utf-8") as f:
+                    f.write(f"=== ASR TRANSCRIPT DEBUG ===\n")
+                    f.write(f"Task ID: {job_id}\n")
+                    f.write(f"Type: {type(transcription).__name__}\n")
+                    f.write(f"Length: {len(transcription) if transcription else 0} chars\n")
+                    f.write(f"Words: {len(transcription.split()) if transcription else 0}\n")
+                    f.write(f"Empty: {not transcription or len(transcription.strip()) == 0}\n")
+                    f.write(f"\n=== FIRST 1000 CHARACTERS ===\n")
+                    f.write(transcription[:1000] if transcription else "(None)")
+                    f.write(f"\n\n=== FULL TRANSCRIPT ===\n")
+                    f.write(transcription if transcription else "(None)")
+                logger.info(f"=== ASR DEBUG WRITTEN TO: {debug_file} ===", task_id=job_id)
+            except Exception as e:
+                logger.error(f"Failed to write ASR debug file: {e}", task_id=job_id)
         finally:
             # Step 2c: CRITICAL - Always unload ASR model to free GPU memory
             if asr_model is not None:

@@ -471,8 +471,9 @@ class ChunkFormerBackend(ASRBackend):
 
         # Checkpoint hash (if available from model)
         try:
-            info["checkpoint_hash"] = getattr(self.model, "checkpoint_hash", None)
+            checkpoint_hash = getattr(self.model, "checkpoint_hash", None)
+            info["checkpoint_hash"] = checkpoint_hash if checkpoint_hash else ""
         except Exception:
-            pass
+            info["checkpoint_hash"] = ""
 
         return info
