@@ -167,15 +167,13 @@ class TestEnhancedLoggingIntegration:
             with open(error_log_file, "r") as f:
                 log_content = f.read()
                 
-                # Each problematic output may generate multiple error log entries
-                # (e.g., parse error + validation error), so we check for at least as many
+                # Should contain multiple error entries
                 error_count = log_content.count("integration-test-raw-output")
-                assert error_count >= len(problematic_outputs), \
-                    f"Expected at least {len(problematic_outputs)} errors, got {error_count}"
+                assert error_count == len(problematic_outputs)
                 
                 # Should contain structured data for each error
                 structured_count = log_content.count("STRUCTURED:")
-                assert structured_count >= len(problematic_outputs)
+                assert structured_count == len(problematic_outputs)
                 
                 # Should contain raw_output field in structured data for each error
                 # The data is serialized as Python dict string, so look for 'raw_output'
