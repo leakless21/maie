@@ -202,14 +202,17 @@ class MockWhisperModel:
         self.transcribe_call_count += 1
         self.last_transcribe_kwargs = kwargs
 
-        # Create mock segment
+        # Create mock segment with proper attributes
         class MockSegment:
             def __init__(self):
                 self.start = 0.0
                 self.end = 1.5
                 self.text = "hello world from mock"
+                self.confidence = 0.95
+                self.no_speech_prob = 0.05
 
         def segments_generator():
+            """Generator that yields mock segments."""
             yield MockSegment()
 
         # Create mock info
@@ -265,8 +268,16 @@ class MockChunkFormerModel:
             **kwargs,
         }
 
-        # Single mock segment
-        segments = [{"start": 0.0, "end": 1.5, "text": "chunkformer mock transcript"}]
+        # Return REAL list of dicts, not Mock objects
+        # This is critical - some code calls len() on segments
+        segments = [
+            {
+                "start": 0.0,
+                "end": 1.5,
+                "text": "chunkformer mock transcript",
+                "confidence": 0.92
+            }
+        ]
         return {"segments": segments, "language": "en", "confidence": 0.92}
 
     # Backwards-compatible alias
@@ -274,7 +285,15 @@ class MockChunkFormerModel:
         """Fallback transcribe that accepts raw audio and returns similar shape."""
         self.decode_call_count += 1
         self.last_decode_kwargs = kwargs
-        segments = [{"start": 0.0, "end": 1.5, "text": "chunkformer mock transcript"}]
+        # Return REAL list, not Mock
+        segments = [
+            {
+                "start": 0.0,
+                "end": 1.5,
+                "text": "chunkformer mock transcript",
+                "confidence": 0.92
+            }
+        ]
         return segments, {"language": "en", "confidence": 0.92}
 
     def close(self):

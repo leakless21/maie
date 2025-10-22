@@ -56,43 +56,45 @@ class TestLogFileFunctionality:
                 configure_logging()  # Reconfigure with original settings
 
     def test_log_file_serialization_format(self, tmp_path):
-        """Test that log files use the correct serialization format."""
+        """Test that log files use the correct plain text format."""
         original_log_dir = settings.log_dir
-        original_log_file_serialize = settings.logging.log_file_serialize
         log_dir = tmp_path / "test_logs"
 
         try:
-            # Configure logging with JSON serialization
+            # Configure logging with logging to file
             with patch.object(settings, "log_dir", log_dir):
-                with patch.object(settings.logging, "log_file_serialize", True):
-                    logger = configure_logging()
+                logger = configure_logging()
 
-                    # Log a test message
-                    logger.info("Test serialized message")
-                    logger.complete()
+                # Log a test message
+                logger.info("Test serialized message")
+                logger.complete()
 
-                    # Check that the log file contains JSON
-                    app_log = log_dir / "app.log"
-                    assert app_log.exists()
+                # Check that the log file contains plain text
+                app_log = log_dir / "app.log"
+                assert app_log.exists()
 
-                    content = app_log.read_text().strip()
-                    lines = content.split("\n")
+                content = app_log.read_text().strip()
+                lines = content.split("\n")
 
-                    # Each line should be valid JSON
-                    for line in lines:
-                        if line.strip():
-                            try:
-                                log_entry = json.loads(line)
-                                assert "text" in log_entry
-                                assert "record" in log_entry
-                                assert "Test serialized message" in log_entry["text"]
-                            except json.JSONDecodeError:
-                                pytest.fail(f"Log entry is not valid JSON: {line}")
+                # Each line should be plain text log format
+                # Format: "YYYY-MM-DD HH:MM:SS.mmm | LEVEL | module:function:line | correlation_id | message"
+                for line in lines:
+                    if line.strip():
+                        # Should contain pipe separators
+                        assert " | " in line, f"Log line doesn't match expected plain text format: {line}"
+                        # Should contain a log level
+                        assert any(
+                            level in line for level in ["INFO", "ERROR", "DEBUG", "WARNING"]
+                        ), f"Log line doesn't contain log level: {line}"
+                        # Should contain our test message
+                        if "Test serialized message" in line:
+                            break
+                else:
+                    pytest.fail("Test message not found in any log line")
         finally:
             # Restore original settings
             with patch.object(settings, "log_dir", original_log_dir):
-                with patch.object(settings.logging, "log_file_serialize", original_log_file_serialize):
-                    configure_logging()  # Reconfigure with original settings
+                configure_logging()  # Reconfigure with original settings
 
     def test_log_file_rotation_and_retention_settings(self, tmp_path):
         """Test that log file rotation and retention settings are applied."""

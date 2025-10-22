@@ -174,10 +174,14 @@ class TestExecute:
         processor = LLMProcessor()
         processor._model_loaded = True
 
-        # Mock model and outputs
+        # Mock model and outputs - token_ids MUST be a real list
+        mock_inner_output = Mock()
+        mock_inner_output.text = "generated text"
+        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list, not Mock!
+        mock_inner_output.finish_reason = "stop"
+
         mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
+        mock_output.outputs = [mock_inner_output]
 
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
@@ -245,10 +249,14 @@ class TestEnhanceText:
         processor = LLMProcessor()
         processor._model_loaded = True
 
-        # Mock model and outputs
+        # Mock model and outputs - token_ids MUST be a real list
+        mock_inner_output = Mock()
+        mock_inner_output.text = "Enhanced text with punctuation."
+        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list!
+        mock_inner_output.finish_reason = "stop"
+
         mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "Enhanced text with punctuation."
+        mock_output.outputs = [mock_inner_output]
 
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()

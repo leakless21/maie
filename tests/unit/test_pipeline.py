@@ -347,6 +347,10 @@ class TestExecuteASRTranscription:
         mock_result.confidence = 0.95
         mock_result.model_name = "test-model"
         mock_result.checkpoint_hash = "abc123"
+        mock_result.segments = [  # Add real list for segments!
+            {"text": "Hello", "start": 0.0, "end": 0.5},
+            {"text": "world", "start": 0.5, "end": 1.0}
+        ]
         mock_model.execute.return_value = mock_result
 
         # Mock time to control processing time

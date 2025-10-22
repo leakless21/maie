@@ -33,11 +33,11 @@ DEVELOPMENT_PROFILE: ProfileData = {
     },
     "llm_enhance": {
         "gpu_memory_utilization": 0.9,
-        "max_model_len": 25000,
+        "max_model_len": 32768,
     },
     "llm_sum": {
         "gpu_memory_utilization": 0.9,
-        "max_model_len": 25000,
+        "max_model_len": 32768,
     },
     "features": {
         "enable_enhancement": False,
@@ -77,11 +77,11 @@ PRODUCTION_PROFILE: ProfileData = {
     },
     "llm_enhance": {
         "gpu_memory_utilization": 0.9,
-        "max_model_len": 25000,
+        "max_model_len": 32768,
     },
     "llm_sum": {
         "gpu_memory_utilization": 0.9,
-        "max_model_len": 25000,
+        "max_model_len": 32768,
     },
     "features": {
         "enable_enhancement": True,

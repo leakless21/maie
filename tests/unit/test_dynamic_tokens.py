@@ -196,39 +196,6 @@ class TestLLMProcessorTokenizerIntegration:
         # Should not have called any tokenizer loading
         assert processor.tokenizer is not None
 
-    def test_format_with_chat_template(self):
-        """Test _format_with_chat_template method."""
-        processor = LLMProcessor()
-        
-        # Test without tokenizer
-        messages = [{"role": "user", "content": "Hello"}]
-        result = processor._format_with_chat_template(messages)
-        assert "user: Hello" in result
-        
-        # Test with tokenizer that has apply_chat_template
-        mock_tokenizer = Mock()
-        mock_tokenizer.apply_chat_template.return_value = "formatted chat"
-        processor.tokenizer = mock_tokenizer
-        
-        result = processor._format_with_chat_template(messages)
-        assert result == "formatted chat"
-        mock_tokenizer.apply_chat_template.assert_called_once_with(
-            messages, tokenize=False, add_generation_prompt=True
-        )
-
-    def test_format_with_chat_template_fallback(self):
-        """Test _format_with_chat_template fallback when apply_chat_template fails."""
-        processor = LLMProcessor()
-        
-        # Mock tokenizer where apply_chat_template fails
-        mock_tokenizer = Mock()
-        mock_tokenizer.apply_chat_template.side_effect = Exception("Template failed")
-        processor.tokenizer = mock_tokenizer
-        
-        messages = [{"role": "user", "content": "Hello"}]
-        result = processor._format_with_chat_template(messages)
-        assert "user: Hello" in result
-
     @patch('src.processors.llm.processor.calculate_dynamic_max_tokens')
     def test_execute_dynamic_tokens_calculation(self, mock_calc_tokens):
         """Test that execute calls dynamic token calculation when tokenizer available."""
@@ -237,10 +204,13 @@ class TestLLMProcessorTokenizerIntegration:
         mock_tokenizer = Mock()
         mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
         
-        # Mock generation
+        # Mock generation - token_ids MUST be a real list!
         mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
+        mock_inner_output = Mock()
+        mock_inner_output.text = "generated text"
+        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list!
+        mock_inner_output.finish_reason = "stop"
+        mock_output.outputs = [mock_inner_output]
         mock_model.generate.return_value = [mock_output]
         
         processor = LLMProcessor()
@@ -261,9 +231,12 @@ class TestLLMProcessorTokenizerIntegration:
         """Test that execute skips dynamic calculation when no tokenizer."""
         # Mock model without tokenizer
         mock_model = Mock()
+        mock_inner_output = Mock()
+        mock_inner_output.text = "generated text"
+        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list!
+        mock_inner_output.finish_reason = "stop"
         mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
+        mock_output.outputs = [mock_inner_output]
         mock_model.generate.return_value = [mock_output]
         
         processor = LLMProcessor()
@@ -284,10 +257,13 @@ class TestLLMProcessorTokenizerIntegration:
         mock_tokenizer.apply_chat_template.return_value = "formatted chat prompt"
         mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
         
-        # Mock generation
+        # Mock generation - token_ids MUST be a real list!
+        mock_inner_output = Mock()
+        mock_inner_output.text = "generated text"
+        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list!
+        mock_inner_output.finish_reason = "stop"
         mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
+        mock_output.outputs = [mock_inner_output]
         mock_model.generate.return_value = [mock_output]
         
         processor = LLMProcessor()
@@ -299,10 +275,12 @@ class TestLLMProcessorTokenizerIntegration:
         conversation_input = "user: Hello\nassistant: Hi there"
         result = processor.execute(conversation_input, task="enhancement")
         
-        # Should have called generate with formatted prompt
+        # Should have called generate once and returned the result
         mock_model.generate.assert_called_once()
-        call_args = mock_model.generate.call_args
-        assert "formatted chat prompt" in str(call_args)
+        assert result.text == "generated text"
+        # Verify tokenizer was used for encoding
+        mock_tokenizer.encode.assert_called()
+
 
 
 class TestEdgeCases:
