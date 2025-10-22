@@ -53,7 +53,6 @@ class TestEnvironmentProfiles:
         assert settings.worker.job_timeout == 600
 
 
-
 class TestEnvironmentFallbacks:
     def test_unknown_environment_falls_back_to_development(self):
         with patch.dict(os.environ, {"ENVIRONMENT": "staging"}, clear=True):

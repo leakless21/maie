@@ -70,7 +70,7 @@ def main() -> int:
     # Generate summary
     try:
         logger.info(f"Generating summary with template: {args.template}")
-        
+
         # Override max_tokens if provided
         runtime_overrides = {}
         if args.max_tokens:
@@ -92,13 +92,13 @@ def main() -> int:
                 f"=== OUTPUT SUMMARY === | {summary_char_count:,} chars | {summary_word_count:,} words"
             )
             logger.info(f"Retry count: {result.get('retry_count', 0)}")
-            
-            print("\n" + "="*80)
+
+            print("\n" + "=" * 80)
             print("SUMMARY OUTPUT:")
-            print("="*80)
+            print("=" * 80)
             print(summary_str)
-            print("="*80 + "\n")
-            
+            print("=" * 80 + "\n")
+
             return 0
         else:
             error_msg = result.get("error", "Unknown error")

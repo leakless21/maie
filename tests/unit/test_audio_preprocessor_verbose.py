@@ -42,10 +42,13 @@ class TestAudioPreprocessorVerbose:
         preprocessor = AudioPreprocessor()
 
         with patch("subprocess.run") as mock_run:
-            with patch(
-                "src.processors.audio.preprocessor.settings.verbose_components",
-                True,
-            ), patch("src.processors.audio.preprocessor.logger") as mock_logger:
+            with (
+                patch(
+                    "src.processors.audio.preprocessor.settings.verbose_components",
+                    True,
+                ),
+                patch("src.processors.audio.preprocessor.logger") as mock_logger,
+            ):
                 mock_run.return_value = MagicMock(
                     returncode=0,
                     stdout='{"streams": [{"codec_type": "audio", "sample_rate": "16000", "channels": 1}], "format": {"duration": "5.0"}}',
@@ -70,11 +73,16 @@ class TestAudioPreprocessorVerbose:
         metadata = {"sample_rate": 48000, "channels": 2, "format": "mp3"}
 
         with patch("subprocess.run") as mock_run:
-            with patch(
-                "src.processors.audio.preprocessor.settings.verbose_components",
-                True,
-            ), patch("src.processors.audio.preprocessor.logger") as mock_logger:
-                mock_run.return_value = MagicMock(returncode=0, stdout="normalized", stderr="")
+            with (
+                patch(
+                    "src.processors.audio.preprocessor.settings.verbose_components",
+                    True,
+                ),
+                patch("src.processors.audio.preprocessor.logger") as mock_logger,
+            ):
+                mock_run.return_value = MagicMock(
+                    returncode=0, stdout="normalized", stderr=""
+                )
 
                 preprocessor._normalize_audio(test_file, metadata)
 

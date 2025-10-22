@@ -44,18 +44,15 @@ class Feature(str, Enum):
 class ProcessRequestSchema(BaseModel):
     """
     Request schema for the /v1/process endpoint.
-    
+
     This schema defines the multipart form data structure for audio processing requests.
     All parameters except 'file' are optional and have sensible defaults.
     """
 
     file: Any = Field(
-        ..., 
+        ...,
         description="The audio file to process (multipart file upload). Supported formats: WAV, MP3, M4A, FLAC. Maximum size: 100MB.",
-        json_schema_extra={
-            "format": "binary",
-            "type": "string"
-        }
+        json_schema_extra={"format": "binary", "type": "string"},
     )
     features: List[Feature] = Field(
         default=[Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY],
@@ -64,24 +61,27 @@ class ProcessRequestSchema(BaseModel):
             "examples": [
                 ["clean_transcript", "summary"],
                 ["raw_transcript"],
-                ["raw_transcript", "clean_transcript", "summary", "enhancement_metrics"]
+                [
+                    "raw_transcript",
+                    "clean_transcript",
+                    "summary",
+                    "enhancement_metrics",
+                ],
             ]
-        }
+        },
     )
     template_id: Optional[str] = Field(
-        None, 
+        None,
         description="The summary format template ID. Required if 'summary' is in features. Use /v1/templates to get available templates.",
-        json_schema_extra={
-            "examples": ["meeting_notes_v1", "interview_summary_v1"]
-        }
+        json_schema_extra={"examples": ["meeting_notes_v1", "interview_summary_v1"]},
     )
     asr_backend: Optional[str] = Field(
         default="chunkformer",
         description="ASR backend selection. Available options: 'whisper', 'chunkformer'(default). Use /v1/models to get available backends.",
         json_schema_extra={
             "examples": ["whisper", "chunkformer"],
-            "enum": ["whisper", "chunkformer"]
-        }
+            "enum": ["whisper", "chunkformer"],
+        },
     )
 
     @field_validator("features", mode="before")
@@ -90,7 +90,7 @@ class ProcessRequestSchema(BaseModel):
         """Convert features from various input formats to List[Feature]."""
         if isinstance(value, str):
             # Handle JSON string format
-            if value.startswith('[') and value.endswith(']'):
+            if value.startswith("[") and value.endswith("]"):
                 try:
                     parsed = json.loads(value)
                     if isinstance(parsed, list):
@@ -111,12 +111,18 @@ class ProcessRequestSchema(BaseModel):
             return value
         if isinstance(value, (str, Path)):
             filename = Path(value).name if isinstance(value, Path) else value
-            content_type = mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
+            content_type = (
+                mimetypes.guess_type(str(filename))[0] or "application/octet-stream"
+            )
             return UploadFile(content_type=content_type, filename=str(filename))
         if isinstance(value, Mapping):
             payload = dict(value)
             filename = payload.get("filename") or "upload"
-            content_type = payload.get("content_type") or mimetypes.guess_type(filename)[0] or "application/octet-stream"
+            content_type = (
+                payload.get("content_type")
+                or mimetypes.guess_type(filename)[0]
+                or "application/octet-stream"
+            )
             file_data = payload.get("file_data") or payload.get("data")
             if isinstance(file_data, str):
                 file_data = file_data.encode()
@@ -140,26 +146,28 @@ class ProcessRequestSchema(BaseModel):
                     "value": {
                         "features": ["clean_transcript", "summary"],
                         "template_id": "meeting_notes_v1",
-                        "asr_backend": "whisper"
-                    }
+                        "asr_backend": "whisper",
+                    },
                 },
                 {
                     "description": "Raw transcript only",
-                    "value": {
-                        "features": ["raw_transcript"],
-                        "asr_backend": "whisper"
-                    }
+                    "value": {"features": ["raw_transcript"], "asr_backend": "whisper"},
                 },
                 {
                     "description": "All features with ChunkFormer backend",
                     "value": {
-                        "features": ["raw_transcript", "clean_transcript", "summary", "enhancement_metrics"],
+                        "features": [
+                            "raw_transcript",
+                            "clean_transcript",
+                            "summary",
+                            "enhancement_metrics",
+                        ],
                         "template_id": "meeting_notes_v1",
-                        "asr_backend": "chunkformer"
-                    }
-                }
+                        "asr_backend": "chunkformer",
+                    },
+                },
             ]
-        }
+        },
     )
 
     @model_validator(mode="after")
@@ -193,7 +201,10 @@ class ProcessResponse(BaseModel):
 
     model_config = ConfigDict(
         json_schema_extra={
-            "example": {"task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b", "status": "PENDING"}
+            "example": {
+                "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+                "status": "PENDING",
+            }
         }
     )
 
@@ -269,8 +280,14 @@ class StatusResponseSchema(BaseModel):
         description="Current status of the task (pending, processing, completed, failed)",
     )
     error: Optional[str] = Field(None, description="Error message if the task failed")
-    error_code: Optional[str] = Field(None, description="Error code for categorizing the failure (e.g., ASR_PROCESSING_ERROR, MODEL_LOAD_ERROR)")
-    stage: Optional[str] = Field(None, description="Processing stage where the error occurred (e.g., preprocessing, asr, llm)")
+    error_code: Optional[str] = Field(
+        None,
+        description="Error code for categorizing the failure (e.g., ASR_PROCESSING_ERROR, MODEL_LOAD_ERROR)",
+    )
+    stage: Optional[str] = Field(
+        None,
+        description="Processing stage where the error occurred (e.g., preprocessing, asr, llm)",
+    )
     submitted_at: datetime | None = None
     completed_at: datetime | None = None
     versions: Optional[VersionsSchema] = Field(
@@ -326,7 +343,7 @@ class StatusResponseSchema(BaseModel):
                                 "tags": ["Finance", "Budget"],
                             },
                         },
-                    }
+                    },
                 },
                 {
                     "description": "Failed with ASR error",
@@ -337,9 +354,9 @@ class StatusResponseSchema(BaseModel):
                         "error_code": "ASR_PROCESSING_ERROR",
                         "stage": "asr",
                         "submitted_at": "2025-10-20T07:43:53Z",
-                        "completed_at": "2025-10-20T07:45:20Z"
-                    }
-                }
+                        "completed_at": "2025-10-20T07:45:20Z",
+                    },
+                },
             ]
         }
     )
@@ -374,8 +391,12 @@ class TemplateInfoSchema(BaseModel):
     parameters: dict = Field(
         default_factory=dict, description="Default parameters for the template"
     )
-    example: Optional[Dict[str, Any]] = Field(None, description="Example of the template output")
-    example: Optional[Dict[str, Any]] = Field(None, description="Example of the template output")
+    example: Optional[Dict[str, Any]] = Field(
+        None, description="Example of the template output"
+    )
+    example: Optional[Dict[str, Any]] = Field(
+        None, description="Example of the template output"
+    )
 
 
 class TemplatesResponseSchema(BaseModel):

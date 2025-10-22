@@ -275,7 +275,7 @@ class MockChunkFormerModel:
                 "start": 0.0,
                 "end": 1.5,
                 "text": "chunkformer mock transcript",
-                "confidence": 0.92
+                "confidence": 0.92,
             }
         ]
         return {"segments": segments, "language": "en", "confidence": 0.92}
@@ -291,7 +291,7 @@ class MockChunkFormerModel:
                 "start": 0.0,
                 "end": 1.5,
                 "text": "chunkformer mock transcript",
-                "confidence": 0.92
+                "confidence": 0.92,
             }
         ]
         return segments, {"language": "en", "confidence": 0.92}
@@ -548,7 +548,9 @@ def mock_config(monkeypatch):
             monkeypatch.setattr(config.settings.asr, "whisper_vad_filter", True)
             monkeypatch.setattr(config.settings.asr, "whisper_vad_min_silence_ms", 500)
             monkeypatch.setattr(config.settings.asr, "whisper_vad_speech_pad_ms", 400)
-            monkeypatch.setattr(config.settings.asr, "whisper_condition_on_previous_text", True)
+            monkeypatch.setattr(
+                config.settings.asr, "whisper_condition_on_previous_text", True
+            )
             monkeypatch.setattr(config.settings.asr, "whisper_language", None)
             monkeypatch.setattr(config.settings.asr, "whisper_cpu_fallback", False)
 

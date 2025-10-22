@@ -64,6 +64,7 @@ def main() -> int:
         # Transcribe
         logger.info("Transcribing audio...")
         import time
+
         start_time = time.time()
         asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
         processing_time = time.time() - start_time

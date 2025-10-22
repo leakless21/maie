@@ -575,11 +575,15 @@ class WhisperBackend(ASRBackend):
 
         info: VersionInfo = {
             "backend": "whisper",
-            "model_variant": getattr(cfg.settings.asr, "whisper_model_variant", "unknown"),
+            "model_variant": getattr(
+                cfg.settings.asr, "whisper_model_variant", "unknown"
+            ),
             "model_path": str(self.model_path) if self.model_path else "unknown",
             "checkpoint_hash": checkpoint_hash,
             "device": getattr(cfg.settings.asr, "whisper_device", "unknown"),
-            "compute_type": getattr(cfg.settings.asr, "whisper_compute_type", "unknown"),
+            "compute_type": getattr(
+                cfg.settings.asr, "whisper_compute_type", "unknown"
+            ),
             "vad_filter": getattr(cfg.settings.asr, "whisper_vad_filter", False),
             "condition_on_previous_text": getattr(
                 cfg.settings.asr, "whisper_condition_on_previous_text", True

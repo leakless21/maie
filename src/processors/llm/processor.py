@@ -17,7 +17,11 @@ from src.config.logging import get_module_logger
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
 from src.processors.base import LLMBackend, LLMResult
-from src.processors.llm.config import GenerationConfig, build_generation_config, calculate_dynamic_max_tokens
+from src.processors.llm.config import (
+    GenerationConfig,
+    build_generation_config,
+    calculate_dynamic_max_tokens,
+)
 from src.processors.prompt.renderer import PromptRenderer
 from src.processors.prompt.template_loader import TemplateLoader
 from src.tooling.vllm_utils import (
@@ -137,8 +141,10 @@ class LLMProcessor(LLMBackend):
             # Enforce GPU-only usage in all environments for vLLM
             try:
                 import torch as _torch  # type: ignore
+
                 if not _torch.cuda.is_available():
                     from os import getenv as _getenv
+
                     raise RuntimeError(
                         "CUDA is not available. GPU is required for vLLM. "
                         f"CUDA_VISIBLE_DEVICES={_getenv('CUDA_VISIBLE_DEVICES')!r}"
@@ -196,13 +202,13 @@ class LLMProcessor(LLMBackend):
             if settings.llm_enhance.max_num_seqs is not None:
                 llm_args["max_num_seqs"] = settings.llm_enhance.max_num_seqs
             if settings.llm_enhance.max_num_batched_tokens is not None:
-                llm_args[
-                    "max_num_batched_tokens"
-                ] = settings.llm_enhance.max_num_batched_tokens
+                llm_args["max_num_batched_tokens"] = (
+                    settings.llm_enhance.max_num_batched_tokens
+                )
             if settings.llm_enhance.max_num_partial_prefills is not None:
-                llm_args[
-                    "max_num_partial_prefills"
-                ] = settings.llm_enhance.max_num_partial_prefills
+                llm_args["max_num_partial_prefills"] = (
+                    settings.llm_enhance.max_num_partial_prefills
+                )
 
             logger.debug(f"Calling LLM() constructor with args: {llm_args}")
             self.model = LLM(**llm_args)
@@ -231,7 +237,7 @@ class LLMProcessor(LLMBackend):
 
             self._model_loaded = True
             logger.info(f"LLM model loaded successfully: {model_name}")
-            
+
             # NOTE: Tokenizer initialization is deferred to avoid blocking issues
             # with vLLM V1 engine's get_tokenizer() in multi-process mode.
             # The tokenizer will be initialized lazily when first needed.
@@ -271,7 +277,7 @@ class LLMProcessor(LLMBackend):
         Preference order:
         1) vLLM-provided tokenizer via model.get_tokenizer()
         2) Hugging Face AutoTokenizer.from_pretrained(model_name)
-        
+
         Note: This is called lazily (not during model load) to avoid blocking issues
         with vLLM V1 engine's get_tokenizer() in multi-process mode.
         """
@@ -297,14 +303,18 @@ class LLMProcessor(LLMBackend):
         # Fallback to Hugging Face tokenizer
         try:
             logger.debug(f"Falling back to Hugging Face tokenizer for {model_name}")
-            from transformers import AutoTokenizer  # local import to avoid hard dep when unused
+            from transformers import (
+                AutoTokenizer,
+            )  # local import to avoid hard dep when unused
 
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, trust_remote_code=True
             )
             logger.debug(f"Successfully loaded Hugging Face tokenizer for {model_name}")
         except Exception as e:
-            logger.warning(f"Failed to load Hugging Face tokenizer for {model_name}: {e}")
+            logger.warning(
+                f"Failed to load Hugging Face tokenizer for {model_name}: {e}"
+            )
             self.tokenizer = None
 
     def execute(self, text: str, **kwargs) -> LLMResult:
@@ -318,7 +328,9 @@ class LLMProcessor(LLMBackend):
         Returns:
             LLMResult with processed text and metadata
         """
-        logger.info(f"execute() method called with text length: {len(text)}, task: {kwargs.get('task', 'general')}")
+        logger.info(
+            f"execute() method called with text length: {len(text)}, task: {kwargs.get('task', 'general')}"
+        )
         logger.info(f"First 200 chars of text: {text[:200]}")
         task = kwargs.get("task", "general")
 
@@ -352,8 +364,7 @@ class LLMProcessor(LLMBackend):
                     model_info=self.model_info or {"model_name": "unknown"},
                     metadata={"task": task, "error": "Missing template_id"},
                 )
-            
-            
+
             # Load schema for guided decoding
             logger.info(f"About to load schema for template {template_id}")
             try:
@@ -368,41 +379,50 @@ class LLMProcessor(LLMBackend):
                     model_info=self.model_info or {"model_name": "unknown"},
                     metadata={"task": task, "error": f"Schema load failed: {e}"},
                 )
-            
+
             # Build OpenAI-format messages using chat API approach
             logger.info(f"About to render system prompt for template {template_id}")
             # Render system prompt (contains instructions + schema)
             system_prompt = self.prompt_renderer.render(
-                template_id,
-                schema=json.dumps(schema, ensure_ascii=False, indent=2)
+                template_id, schema=json.dumps(schema, ensure_ascii=False, indent=2)
             )
-            logger.info(f"System prompt rendered successfully, length: {len(system_prompt)}")
-            
+            logger.info(
+                f"System prompt rendered successfully, length: {len(system_prompt)}"
+            )
+
             # Build user message with transcript
             logger.info(f"About to build user message, text length: {len(text)}")
             user_message_content = f"Transcript to analyze:\n{text}"
-            logger.info(f"User message content built, length: {len(user_message_content)}")
-            logger.info(f"First 500 chars of user message: {user_message_content[:500]}")
+            logger.info(
+                f"User message content built, length: {len(user_message_content)}"
+            )
+            logger.info(
+                f"First 500 chars of user message: {user_message_content[:500]}"
+            )
 
-            
             # Build messages in OpenAI format
-            logger.info(f"About to build messages array")
+            logger.info("About to build messages array")
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message_content}
+                {"role": "user", "content": user_message_content},
             ]
             logger.info(f"Messages array built, count: {len(messages)}")
-            logger.info(f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})")
+            logger.info(
+                f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})"
+            )
             logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
             logger.debug(f"Built messages for chat API with template {template_id}")
-            
+
             use_chat_api = True
-            
+
             # Set up guided decoding if not already provided
             if "guided_decoding" not in kwargs:
                 try:
                     from vllm.sampling_params import GuidedDecodingParams
-                    kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
+
+                    kwargs["guided_decoding"] = GuidedDecodingParams(
+                        json=json.dumps(schema)
+                    )
                     logger.debug("Set up guided JSON decoding")
                 except Exception as e:
                     logger.warning(f"Failed to set up guided decoding: {e}")
@@ -450,9 +470,12 @@ class LLMProcessor(LLMBackend):
             "prompt_logprobs",
         }
         runtime_overrides_dict = {k: kwargs[k] for k in candidate_keys if k in kwargs}
-        
+
         # Calculate dynamic max_tokens if not explicitly provided
-        if "max_tokens" not in runtime_overrides_dict and "max_new_tokens" not in runtime_overrides_dict:
+        if (
+            "max_tokens" not in runtime_overrides_dict
+            and "max_new_tokens" not in runtime_overrides_dict
+        ):
             # Ensure tokenizer is ready
             if self.tokenizer is None:
                 try:
@@ -465,48 +488,66 @@ class LLMProcessor(LLMBackend):
             input_text_for_calc = None
             if use_chat_api and messages is not None:
                 # Concatenate message contents for rough token estimate
-                input_text_for_calc = "\n".join([msg.get("content", "") for msg in messages])
+                input_text_for_calc = "\n".join(
+                    [msg.get("content", "") for msg in messages]
+                )
             elif final_prompt is not None:
                 input_text_for_calc = final_prompt
 
             if self.tokenizer is not None and input_text_for_calc is not None:
                 try:
                     # Normalize task name for settings lookup (summary -> sum)
-                    task_key = "sum" if task == "summary" else task.replace("enhancement", "enhance")
-                    
+                    task_key = (
+                        "sum"
+                        if task == "summary"
+                        else task.replace("enhancement", "enhance")
+                    )
+
                     # Get model's max_model_len from settings
-                    max_model_len = getattr(settings, f"llm_{task_key}_max_model_len", 32768)
+                    max_model_len = getattr(
+                        settings, f"llm_{task_key}_max_model_len", 32768
+                    )
                     if hasattr(settings, f"llm_{task_key}_max_model_len"):
-                        max_model_len = getattr(settings, f"llm_{task_key}_max_model_len")
+                        max_model_len = getattr(
+                            settings, f"llm_{task_key}_max_model_len"
+                        )
                     elif hasattr(settings, "llm_enhance_max_model_len"):
                         max_model_len = getattr(settings, "llm_enhance_max_model_len")
                     else:
                         max_model_len = 32768  # fallback
-                    
+
                     # Calculate dynamic max_tokens using input text
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
                         input_text=input_text_for_calc,
                         tokenizer=self.tokenizer,
                         task=task,
                         max_model_len=max_model_len,
-                        user_override=runtime_overrides_dict.get("max_tokens")
+                        user_override=runtime_overrides_dict.get("max_tokens"),
                     )
                     runtime_overrides_dict["max_tokens"] = dynamic_max_tokens
-                    logger.debug(f"Calculated dynamic max_tokens for {task}: {dynamic_max_tokens}")
+                    logger.debug(
+                        f"Calculated dynamic max_tokens for {task}: {dynamic_max_tokens}"
+                    )
                 except Exception as e:
-                    logger.warning(f"Failed to calculate dynamic max_tokens, using defaults: {e}")
+                    logger.warning(
+                        f"Failed to calculate dynamic max_tokens, using defaults: {e}"
+                    )
             else:
-                logger.debug("Tokenizer or input text not available, skipping dynamic max_tokens calculation")
-        
+                logger.debug(
+                    "Tokenizer or input text not available, skipping dynamic max_tokens calculation"
+                )
+
         # Safety fallback: ensure max_tokens is always set for summary tasks
         if task == "summary" and "max_tokens" not in runtime_overrides_dict:
-            fallback_max_tokens = 8192  # Increased from 4096 to handle complete JSON generation
+            fallback_max_tokens = (
+                8192  # Increased from 4096 to handle complete JSON generation
+            )
             runtime_overrides_dict["max_tokens"] = fallback_max_tokens
             logger.warning(
                 f"max_tokens not set for {task} task, using fallback: {fallback_max_tokens}. "
                 "Consider setting --max-tokens explicitly for better control."
             )
-        
+
         runtime_config = GenerationConfig(**runtime_overrides_dict)
 
         # Extract guided_decoding if present
@@ -519,7 +560,6 @@ class LLMProcessor(LLMBackend):
             env_overrides=env_config,
             runtime_overrides=runtime_config,
         )
-
 
         # Convert to SamplingParams
         sampling_params_dict = final_config.to_sampling_params()
@@ -539,15 +579,19 @@ class LLMProcessor(LLMBackend):
                 try:
                     mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)
                     mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)
-                    mem_free = (torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)) / (1024**3)
-                    fragmentation = mem_free / mem_reserved * 100 if mem_reserved > 0 else 0
-                    
+                    mem_free = (
+                        torch.cuda.memory_reserved(0) - torch.cuda.memory_allocated(0)
+                    ) / (1024**3)
+                    fragmentation = (
+                        mem_free / mem_reserved * 100 if mem_reserved > 0 else 0
+                    )
+
                     logger.debug(
                         f"GPU memory before inference: allocated={mem_allocated:.2f}GB, "
                         f"reserved={mem_reserved:.2f}GB, free_in_reserved={mem_free:.2f}GB, "
                         f"fragmentation={fragmentation:.1f}%"
                     )
-                    
+
                     # Warn if fragmentation is high
                     if mem_free > 0.2 and fragmentation < 50:
                         logger.warning(
@@ -556,7 +600,7 @@ class LLMProcessor(LLMBackend):
                         )
                 except Exception as mem_check_error:
                     logger.debug(f"Could not check GPU memory: {mem_check_error}")
-            
+
             base_sampling = None
             if hasattr(self.model, "get_default_sampling_params"):
                 try:
@@ -573,67 +617,97 @@ class LLMProcessor(LLMBackend):
 
             # Use chat() API for summary with messages, or generate() for others
             if task == "summary" and use_chat_api and messages is not None:
-                logger.debug("Using chat() API for summary", extra={
-                    "messages_count": len(messages),
-                    "sampling_params": str(sampling),
-                    "model_type": type(self.model).__name__
-                })
-                
+                logger.debug(
+                    "Using chat() API for summary",
+                    extra={
+                        "messages_count": len(messages),
+                        "sampling_params": str(sampling),
+                        "model_type": type(self.model).__name__,
+                    },
+                )
+
                 inference_start = time.time()
                 logger.debug("About to call model.chat()")
                 # Type ignore: our dict[str, str] format is compatible with vLLM's expected message format
                 outputs = self.model.chat(messages=[messages], sampling_params=sampling)  # type: ignore
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
-                
+
                 # Extract detailed output info for debugging
                 output_info = {}
                 if outputs and len(outputs) > 0 and outputs[0].outputs:
                     first_output = outputs[0].outputs[0]
                     output_info = {
-                        "finish_reason": getattr(first_output, 'finish_reason', 'unknown'),
-                        "generated_tokens": len(first_output.token_ids) if hasattr(first_output, 'token_ids') else 'unknown',
-                        "text_length": len(first_output.text) if hasattr(first_output, 'text') else 0,
+                        "finish_reason": getattr(
+                            first_output, "finish_reason", "unknown"
+                        ),
+                        "generated_tokens": len(first_output.token_ids)
+                        if hasattr(first_output, "token_ids")
+                        else "unknown",
+                        "text_length": len(first_output.text)
+                        if hasattr(first_output, "text")
+                        else 0,
                     }
-                
-                logger.debug("model.chat() completed", extra={
-                    "inference_duration": inference_end - inference_start,
-                    "outputs_count": len(outputs) if outputs else 0,
-                    **output_info
-                })
-                
+
+                logger.debug(
+                    "model.chat() completed",
+                    extra={
+                        "inference_duration": inference_end - inference_start,
+                        "outputs_count": len(outputs) if outputs else 0,
+                        **output_info,
+                    },
+                )
+
                 generated_text = outputs[0].outputs[0].text if outputs else ""
-                tokens_used = len(outputs[0].prompt_token_ids) if outputs and hasattr(outputs[0], 'prompt_token_ids') and outputs[0].prompt_token_ids else None
+                tokens_used = (
+                    len(outputs[0].prompt_token_ids)
+                    if outputs
+                    and hasattr(outputs[0], "prompt_token_ids")
+                    and outputs[0].prompt_token_ids
+                    else None
+                )
             elif final_prompt is not None:
-                logger.debug("Using generate() API", extra={
-                    "prompt_length": len(final_prompt),
-                    "sampling_params": str(sampling),
-                    "model_type": type(self.model).__name__
-                })
-                
+                logger.debug(
+                    "Using generate() API",
+                    extra={
+                        "prompt_length": len(final_prompt),
+                        "sampling_params": str(sampling),
+                        "model_type": type(self.model).__name__,
+                    },
+                )
+
                 inference_start = time.time()
                 logger.debug("About to call model.generate()")
                 # Use traditional generate() API
                 outputs = self.model.generate([final_prompt], sampling)
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
-                
+
                 # Extract detailed output info for debugging
                 output_info = {}
                 if outputs and len(outputs) > 0 and outputs[0].outputs:
                     first_output = outputs[0].outputs[0]
                     output_info = {
-                        "finish_reason": getattr(first_output, 'finish_reason', 'unknown'),
-                        "generated_tokens": len(first_output.token_ids) if hasattr(first_output, 'token_ids') else 'unknown',
-                        "text_length": len(first_output.text) if hasattr(first_output, 'text') else 0,
+                        "finish_reason": getattr(
+                            first_output, "finish_reason", "unknown"
+                        ),
+                        "generated_tokens": len(first_output.token_ids)
+                        if hasattr(first_output, "token_ids")
+                        else "unknown",
+                        "text_length": len(first_output.text)
+                        if hasattr(first_output, "text")
+                        else 0,
                     }
-                
-                logger.debug("model.generate() completed", extra={
-                    "inference_duration": inference_end - inference_start,
-                    "outputs_count": len(outputs) if outputs else 0,
-                    **output_info
-                })
-                
+
+                logger.debug(
+                    "model.generate() completed",
+                    extra={
+                        "inference_duration": inference_end - inference_start,
+                        "outputs_count": len(outputs) if outputs else 0,
+                        **output_info,
+                    },
+                )
+
                 generated_text = outputs[0].outputs[0].text if outputs else ""
                 tokens_used = None
             else:
@@ -645,7 +719,10 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             # Check if this is a CUDA OOM error and provide actionable guidance
             error_msg = str(e)
-            if "CUDA out of memory" in error_msg or "OutOfMemoryError" in type(e).__name__:
+            if (
+                "CUDA out of memory" in error_msg
+                or "OutOfMemoryError" in type(e).__name__
+            ):
                 # Extract memory info if available
                 if "reserved but unallocated" in error_msg:
                     logger.error(
@@ -666,25 +743,27 @@ class LLMProcessor(LLMBackend):
 
         # For summary tasks, validate and parse JSON output
         result_metadata = {"task": task, "config": sampling_params_dict}
-        
+
         # Store vLLM output metadata if available
         if vllm_outputs and len(vllm_outputs) > 0 and vllm_outputs[0].outputs:
             first_output = vllm_outputs[0].outputs[0]
             # Handle token_ids that might be a Mock object in tests
-            token_ids = getattr(first_output, 'token_ids', None)
+            token_ids = getattr(first_output, "token_ids", None)
             generated_tokens = None
-            if token_ids is not None and hasattr(token_ids, '__len__'):
+            if token_ids is not None and hasattr(token_ids, "__len__"):
                 try:
                     generated_tokens = len(token_ids)
                 except (TypeError, AttributeError):
                     # token_ids might be a Mock that doesn't support len()
                     generated_tokens = None
-            result_metadata.update({
-                "finish_reason": getattr(first_output, 'finish_reason', 'unknown'),
-                "generated_tokens": generated_tokens,
-                "output_length": len(generated_text),
-            })
-        
+            result_metadata.update(
+                {
+                    "finish_reason": getattr(first_output, "finish_reason", "unknown"),
+                    "generated_tokens": generated_tokens,
+                    "output_length": len(generated_text),
+                }
+            )
+
         if task == "summary" and use_chat_api:
             result_metadata["method"] = "chat_api"
         if task == "summary":
@@ -692,16 +771,17 @@ class LLMProcessor(LLMBackend):
             try:
                 # Parse JSON output
                 structured_output = json.loads(generated_text)
-                
+
                 # Validate against schema
                 if template_id:
-                    schema = load_template_schema(template_id, settings.paths.templates_dir)
+                    schema = load_template_schema(
+                        template_id, settings.paths.templates_dir
+                    )
                     # validate_llm_output returns (validated_output, error_message)
                     validated_output, error_message = validate_llm_output(
-                        json.dumps(structured_output),
-                        schema
+                        json.dumps(structured_output), schema
                     )
-                    
+
                     if validated_output is not None:
                         result_metadata["structured_summary"] = validated_output
                         result_metadata["validation"] = "passed"
@@ -713,7 +793,7 @@ class LLMProcessor(LLMBackend):
                 else:
                     result_metadata["structured_summary"] = structured_output
                     result_metadata["validation"] = "skipped"
-                    
+
             except json.JSONDecodeError as e:
                 logger.error(f"Failed to parse JSON output: {e}")
                 result_metadata["validation"] = "json_parse_error"
@@ -725,7 +805,7 @@ class LLMProcessor(LLMBackend):
 
         return LLMResult(
             text=generated_text or text,
-            tokens_used=tokens_used if 'tokens_used' in locals() else None,
+            tokens_used=tokens_used if "tokens_used" in locals() else None,
             model_info=self.model_info or {"model_name": "unknown"},
             metadata=result_metadata,
         )
@@ -836,13 +916,10 @@ class LLMProcessor(LLMBackend):
 
         # Render summary prompt (template now includes chat formatting)
         try:
-            
             prompt = self.prompt_renderer.render(
-                template_id,
-                transcript=transcript,
-                schema=json.dumps(schema, indent=2)
+                template_id, transcript=transcript, schema=json.dumps(schema, indent=2)
             )
-            
+
         except Exception as e:
             logger.error(f"Failed to render summary prompt: {e}")
             return {
@@ -871,11 +948,11 @@ class LLMProcessor(LLMBackend):
                     "type": schema.get("type"),
                     "properties": list(schema.get("properties", {}).keys()),
                     "required": schema.get("required", []),
-                    "additional_properties": schema.get("additionalProperties", True)
+                    "additional_properties": schema.get("additionalProperties", True),
                 },
                 "transcript_length": len(transcript),
-                "guided_decoding_enabled": True
-            }
+                "guided_decoding_enabled": True,
+            },
         )
 
         for retry_count in range(max_retries + 1):
@@ -888,7 +965,9 @@ class LLMProcessor(LLMBackend):
                         f"{last_error_str}\nPlease ensure the output is valid JSON that strictly matches the provided schema."
                     )
                     prompt_for_attempt = prompt + error_hint
-                    logger.info(f"Retrying with error feedback (attempt {retry_count + 1})")
+                    logger.info(
+                        f"Retrying with error feedback (attempt {retry_count + 1})"
+                    )
                 else:
                     prompt_for_attempt = prompt
 
@@ -899,11 +978,13 @@ class LLMProcessor(LLMBackend):
                     "temperature": current_temperature,
                     "top_p": settings.llm_sum.top_p,
                     "top_k": settings.llm_sum.top_k,
-                    "stop": ["<|im_end|>"],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
+                    "stop": [
+                        "<|im_end|>"
+                    ],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
                     "guided_decoding": guided_decoding,  # Add constrained decoding
                     **kwargs,
                 }
-                
+
                 # Only pass max_tokens if explicitly provided by caller
                 if "max_tokens" in kwargs:
                     sampling_kwargs["max_tokens"] = kwargs["max_tokens"]
@@ -919,9 +1000,9 @@ class LLMProcessor(LLMBackend):
                             "temperature": current_temperature,
                             "top_p": settings.llm_sum.top_p,
                             "top_k": settings.llm_sum.top_k,
-                            "max_tokens": settings.llm_sum.max_tokens
-                        }
-                    }
+                            "max_tokens": settings.llm_sum.max_tokens,
+                        },
+                    },
                 )
 
                 # Generate summary
@@ -933,34 +1014,44 @@ class LLMProcessor(LLMBackend):
                         "sampling_params": {
                             "temperature": current_temperature,
                             "max_tokens": sampling_kwargs.get("max_tokens"),
-                            "guided_decoding": sampling_kwargs.get("guided_decoding") is not None
-                        }
-                    }
+                            "guided_decoding": sampling_kwargs.get("guided_decoding")
+                            is not None,
+                        },
+                    },
                 )
-                
+
                 inference_start_time = time.time()
                 result = self.execute(
-                    transcript, task="summary", template_id=template_id, **sampling_kwargs
+                    transcript,
+                    task="summary",
+                    template_id=template_id,
+                    **sampling_kwargs,
                 )
                 inference_end_time = time.time()
                 inference_duration = inference_end_time - inference_start_time
-                
+
                 logger.debug(
                     f"LLM inference completed (attempt {retry_count + 1})",
                     extra={
                         "attempt": retry_count + 1,
                         "inference_duration_seconds": inference_duration,
-                        "inference_duration_minutes": inference_duration / 60
-                    }
+                        "inference_duration_minutes": inference_duration / 60,
+                    },
                 )
-                
+
                 raw_output = result.text.strip()
-                
+
                 # Extract finish_reason from metadata for debugging
-                finish_reason = result.metadata.get("finish_reason", "unknown") if result.metadata else "unknown"
+                finish_reason = (
+                    result.metadata.get("finish_reason", "unknown")
+                    if result.metadata
+                    else "unknown"
+                )
 
                 # Log the raw output for debugging
-                output_preview = raw_output[:200] + ("..." if len(raw_output) > 200 else "")
+                output_preview = raw_output[:200] + (
+                    "..." if len(raw_output) > 200 else ""
+                )
                 logger.debug(
                     f"LLM generated output (attempt {retry_count + 1})",
                     extra={
@@ -971,10 +1062,10 @@ class LLMProcessor(LLMBackend):
                         "stop_reason": finish_reason,
                         "is_empty": len(raw_output.strip()) == 0,
                         "starts_with_brace": raw_output.strip().startswith("{"),
-                        "ends_with_brace": raw_output.strip().endswith("}")
-                    }
+                        "ends_with_brace": raw_output.strip().endswith("}"),
+                    },
                 )
-                
+
                 # Check if output was truncated due to generation limit
                 if finish_reason == "length":
                     max_output = settings.llm_sum.max_tokens
@@ -990,10 +1081,12 @@ class LLMProcessor(LLMBackend):
                 if parsed_data is not None:
                     # Post-process to reduce hallucinations for certain templates
                     try:
-                        parsed_data = self._postprocess_summary(template_id, transcript, parsed_data)
+                        parsed_data = self._postprocess_summary(
+                            template_id, transcript, parsed_data
+                        )
                     except Exception:
                         pass
-                    
+
                     # Success - return structured summary
                     logger.info(
                         f"Summary generated successfully on attempt {retry_count + 1}",
@@ -1002,8 +1095,8 @@ class LLMProcessor(LLMBackend):
                             "attempt": retry_count + 1,
                             "final_temperature": current_temperature,
                             "parsed_keys": list(parsed_data.keys()),
-                            "validation_passed": True
-                        }
+                            "validation_passed": True,
+                        },
                     )
                     return {
                         "summary": parsed_data,
@@ -1022,8 +1115,8 @@ class LLMProcessor(LLMBackend):
                             "error_message": error_message,
                             "raw_output": raw_output,
                             "output_preview": output_preview,
-                            "will_retry": retry_count < max_retries
-                        }
+                            "will_retry": retry_count < max_retries,
+                        },
                     )
 
                     if retry_count < max_retries:
@@ -1037,8 +1130,8 @@ class LLMProcessor(LLMBackend):
                                 "template_id": template_id,
                                 "attempt": retry_count + 1,
                                 "new_temperature": current_temperature,
-                                "previous_temperature": settings.llm_sum.temperature
-                            }
+                                "previous_temperature": settings.llm_sum.temperature,
+                            },
                         )
                     else:
                         # Final attempt failed - comprehensive error logging
@@ -1051,15 +1144,18 @@ class LLMProcessor(LLMBackend):
                                 "final_raw_output": raw_output,
                                 "final_output_preview": output_preview,
                                 "temperature_history": [
-                                    settings.llm_sum.temperature * (0.5 ** i) for i in range(max_retries + 1)
+                                    settings.llm_sum.temperature * (0.5**i)
+                                    for i in range(max_retries + 1)
                                 ],
                                 "schema_summary": {
                                     "type": schema.get("type"),
-                                    "properties": list(schema.get("properties", {}).keys()),
-                                    "required": schema.get("required", [])
+                                    "properties": list(
+                                        schema.get("properties", {}).keys()
+                                    ),
+                                    "required": schema.get("required", []),
                                 },
-                                "generation_failure_type": "validation_error"
-                            }
+                                "generation_failure_type": "validation_error",
+                            },
                         )
                         return {
                             "summary": None,
@@ -1077,8 +1173,8 @@ class LLMProcessor(LLMBackend):
                         "attempt": retry_count + 1,
                         "exception_type": type(e).__name__,
                         "exception_message": str(e),
-                        "will_retry": retry_count < max_retries
-                    }
+                        "will_retry": retry_count < max_retries,
+                    },
                 )
                 if retry_count >= max_retries:
                     logger.error(
@@ -1087,8 +1183,8 @@ class LLMProcessor(LLMBackend):
                             "template_id": template_id,
                             "total_attempts": max_retries + 1,
                             "final_exception": str(e),
-                            "generation_failure_type": "generation_error"
-                        }
+                            "generation_failure_type": "generation_error",
+                        },
                     )
                     return {
                         "summary": None,
@@ -1168,7 +1264,9 @@ class LLMProcessor(LLMBackend):
         }
 
     # Internal helpers
-    def _postprocess_summary(self, template_id: str, transcript: str, data: Dict[str, Any]) -> Dict[str, Any]:
+    def _postprocess_summary(
+        self, template_id: str, transcript: str, data: Dict[str, Any]
+    ) -> Dict[str, Any]:
         """Lightweight guardrails to curb hallucinated names/dates.
 
         - For meeting_notes_v1: ensure meeting_date appears in transcript; else null.

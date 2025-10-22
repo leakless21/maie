@@ -1,11 +1,5 @@
 """Unit tests for worker pipeline error handling."""
 
-import tempfile
-from pathlib import Path
-from unittest.mock import Mock, patch
-
-import pytest
-
 from src.worker.pipeline import process_audio_task
 
 

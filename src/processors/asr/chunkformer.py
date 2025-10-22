@@ -73,7 +73,9 @@ class ChunkFormerBackend(ASRBackend):
             # ensure we attempt to load it even when heuristics above decided not to.
             # Tests rely on being able to set cfg.settings.chunkformer_model_path via monkeypatch.
             try:
-                cfg_model_check = getattr(cfg.settings.chunkformer, "chunkformer_model_path", None)
+                cfg_model_check = getattr(
+                    cfg.settings.chunkformer, "chunkformer_model_path", None
+                )
             except Exception:
                 cfg_model_check = None
             if not self._explicit_model_arg and cfg_model_check is not None:
@@ -193,13 +195,16 @@ class ChunkFormerBackend(ASRBackend):
                     # User kwargs override config defaults
                     params = {
                         "chunk_size": kwargs.pop(
-                            "chunk_size", cfg.settings.chunkformer.chunkformer_chunk_size
+                            "chunk_size",
+                            cfg.settings.chunkformer.chunkformer_chunk_size,
                         ),
                         "left_context_size": kwargs.pop(
-                            "left_context", cfg.settings.chunkformer.chunkformer_left_context_size
+                            "left_context",
+                            cfg.settings.chunkformer.chunkformer_left_context_size,
                         ),
                         "right_context_size": kwargs.pop(
-                            "right_context", cfg.settings.chunkformer.chunkformer_right_context_size
+                            "right_context",
+                            cfg.settings.chunkformer.chunkformer_right_context_size,
                         ),
                         "total_batch_duration": kwargs.pop(
                             "total_batch_duration",
@@ -212,16 +217,17 @@ class ChunkFormerBackend(ASRBackend):
                     }
                     # Add any additional kwargs
                     params.update(kwargs)
-                    
+
                     from src.config.logging import get_module_logger
+
                     logger = get_module_logger(__name__)
-                    
+
                     result = self.model.endless_decode(audio_path, **params)
-                    
+
                     # Debug log: See what ChunkFormer actually returns
                     logger.debug(
                         "ChunkFormer endless_decode result type: {}",
-                        type(result).__name__
+                        type(result).__name__,
                     )
 
                     # ChunkFormer's endless_decode returns a list of segments directly
@@ -229,70 +235,87 @@ class ChunkFormerBackend(ASRBackend):
                     if isinstance(result, list):
                         # Direct list of segments from ChunkFormer
                         segments = result
-                        language = None  # ChunkFormer doesn't provide language detection
-                        confidence = None  # ChunkFormer doesn't provide confidence scores
-                        
-                        logger.debug(
-                            "ChunkFormer returned {} segments",
-                            len(segments)
+                        language = (
+                            None  # ChunkFormer doesn't provide language detection
                         )
-                        
+                        confidence = (
+                            None  # ChunkFormer doesn't provide confidence scores
+                        )
+
+                        logger.debug("ChunkFormer returned {} segments", len(segments))
+
                         # Normalize segments: ChunkFormer uses "decode" field, we need "text" for API consistency
                         normalized_segments = []
                         for seg in segments:
                             if isinstance(seg, dict):
                                 # Extract text from "decode" field (ChunkFormer's output format)
                                 text = seg.get("decode", seg.get("text", ""))
-                                normalized_segments.append({
-                                    "start": seg.get("start"),  # ChunkFormer format: "[HH:MM:SS.mmm]"
-                                    "end": seg.get("end"),      # ChunkFormer format: "[HH:MM:SS.mmm]"
-                                    "text": text.strip() if text else ""
-                                })
+                                normalized_segments.append(
+                                    {
+                                        "start": seg.get(
+                                            "start"
+                                        ),  # ChunkFormer format: "[HH:MM:SS.mmm]"
+                                        "end": seg.get(
+                                            "end"
+                                        ),  # ChunkFormer format: "[HH:MM:SS.mmm]"
+                                        "text": text.strip() if text else "",
+                                    }
+                                )
                             else:
                                 # Handle object-like segments (fallback)
-                                text = getattr(seg, "decode", None) or getattr(seg, "text", "")
-                                normalized_segments.append({
-                                    "start": getattr(seg, "start", None),
-                                    "end": getattr(seg, "end", None),
-                                    "text": text.strip() if text else ""
-                                })
-                        
+                                text = getattr(seg, "decode", None) or getattr(
+                                    seg, "text", ""
+                                )
+                                normalized_segments.append(
+                                    {
+                                        "start": getattr(seg, "start", None),
+                                        "end": getattr(seg, "end", None),
+                                        "text": text.strip() if text else "",
+                                    }
+                                )
+
                         segments = normalized_segments
-                        
+
                         if segments:
                             logger.debug(
                                 "First segment sample - start: {} end: {} text: {}",
                                 segments[0].get("start"),
                                 segments[0].get("end"),
-                                segments[0].get("text", "")[:50]
+                                segments[0].get("text", "")[:50],
                             )
                     elif isinstance(result, dict):
                         # Fallback for dict response (shouldn't happen with endless_decode)
                         segments = result.get("segments", [])
                         language = result.get("language", None)
                         confidence = result.get("confidence", None)
-                        
+
                         # Normalize dict segments as well
                         normalized_segments = []
                         for seg in segments:
                             if isinstance(seg, dict):
                                 text = seg.get("decode", seg.get("text", ""))
-                                normalized_segments.append({
-                                    "start": seg.get("start"),
-                                    "end": seg.get("end"),
-                                    "text": text.strip() if text else ""
-                                })
+                                normalized_segments.append(
+                                    {
+                                        "start": seg.get("start"),
+                                        "end": seg.get("end"),
+                                        "text": text.strip() if text else "",
+                                    }
+                                )
                         segments = normalized_segments
                     else:
                         # Treat as plain text (fallback for unexpected return type)
                         text_str = str(result).strip()
-                        segments = [{"start": None, "end": None, "text": text_str}] if text_str else []
+                        segments = (
+                            [{"start": None, "end": None, "text": text_str}]
+                            if text_str
+                            else []
+                        )
                         language = None
                         confidence = None
-                        
+
                         logger.warning(
                             "ChunkFormer returned unexpected type: {}, treating as plain text",
-                            type(result).__name__
+                            type(result).__name__,
                         )
                 elif hasattr(self.model, "decode") and callable(
                     getattr(self.model, "decode")
@@ -301,16 +324,19 @@ class ChunkFormerBackend(ASRBackend):
                     # User kwargs override config defaults
                     params = {
                         "left_context": kwargs.pop(
-                            "left_context", cfg.settings.chunkformer.chunkformer_left_context_size
+                            "left_context",
+                            cfg.settings.chunkformer.chunkformer_left_context_size,
                         ),
                         "right_context": kwargs.pop(
-                            "right_context", cfg.settings.chunkformer.chunkformer_right_context_size
+                            "right_context",
+                            cfg.settings.chunkformer.chunkformer_right_context_size,
                         ),
                     }
                     # Add any additional kwargs
                     params.update(kwargs)
 
                     from src.config.logging import get_module_logger
+
                     logger = get_module_logger(__name__)
 
                     # Model.decode may accept an iterator/list of chunks or a file path;
@@ -318,8 +344,7 @@ class ChunkFormerBackend(ASRBackend):
                     result = self.model.decode(audio_path, **params)
 
                     logger.debug(
-                        "ChunkFormer decode result type: {}",
-                        type(result).__name__
+                        "ChunkFormer decode result type: {}", type(result).__name__
                     )
 
                     if not isinstance(result, dict):
@@ -330,35 +355,41 @@ class ChunkFormerBackend(ASRBackend):
                     segments = result.get("segments", [])
                     language = result.get("language", None)
                     confidence = result.get("confidence", None)
-                    
+
                     # Normalize segments: ChunkFormer uses "decode" field
                     normalized_segments = []
                     for seg in segments:
                         if isinstance(seg, dict):
                             # Extract text from "decode" field (ChunkFormer's output format)
                             text = seg.get("decode", seg.get("text", ""))
-                            normalized_segments.append({
-                                "start": seg.get("start"),
-                                "end": seg.get("end"),
-                                "text": text.strip() if text else ""
-                            })
+                            normalized_segments.append(
+                                {
+                                    "start": seg.get("start"),
+                                    "end": seg.get("end"),
+                                    "text": text.strip() if text else "",
+                                }
+                            )
                         else:
                             # Handle object-like segments
-                            text = getattr(seg, "decode", None) or getattr(seg, "text", "")
-                            normalized_segments.append({
-                                "start": getattr(seg, "start", None),
-                                "end": getattr(seg, "end", None),
-                                "text": text.strip() if text else ""
-                            })
-                    
+                            text = getattr(seg, "decode", None) or getattr(
+                                seg, "text", ""
+                            )
+                            normalized_segments.append(
+                                {
+                                    "start": getattr(seg, "start", None),
+                                    "end": getattr(seg, "end", None),
+                                    "text": text.strip() if text else "",
+                                }
+                            )
+
                     segments = normalized_segments
-                    
+
                     if segments:
                         logger.debug(
                             "First segment from decode - start: {} end: {} text: {}",
                             segments[0].get("start"),
                             segments[0].get("end"),
-                            segments[0].get("text", "")[:50]
+                            segments[0].get("text", "")[:50],
                         )
                 else:
                     # Fallback to transcribe-like API
@@ -366,8 +397,9 @@ class ChunkFormerBackend(ASRBackend):
                         getattr(self.model, "transcribe")
                     ):
                         from src.config.logging import get_module_logger
+
                         logger = get_module_logger(__name__)
-                        
+
                         segs, info = self.model.transcribe(audio_path, **kwargs)
 
                         # Normalize segments to list of dicts
@@ -376,22 +408,28 @@ class ChunkFormerBackend(ASRBackend):
                             if isinstance(s, dict):
                                 # Extract text from "decode" or "text" field
                                 text = s.get("decode", s.get("text", ""))
-                                normalized_segments.append({
-                                    "start": s.get("start", None),
-                                    "end": s.get("end", None),
-                                    "text": text.strip() if text else ""
-                                })
+                                normalized_segments.append(
+                                    {
+                                        "start": s.get("start", None),
+                                        "end": s.get("end", None),
+                                        "text": text.strip() if text else "",
+                                    }
+                                )
                             else:
                                 # Handle object-like segments
-                                text = getattr(s, "decode", None) or getattr(s, "text", "")
-                                normalized_segments.append({
-                                    "start": getattr(s, "start", None),
-                                    "end": getattr(s, "end", None),
-                                    "text": text.strip() if text else ""
-                                })
+                                text = getattr(s, "decode", None) or getattr(
+                                    s, "text", ""
+                                )
+                                normalized_segments.append(
+                                    {
+                                        "start": getattr(s, "start", None),
+                                        "end": getattr(s, "end", None),
+                                        "text": text.strip() if text else "",
+                                    }
+                                )
 
                         segments = normalized_segments
-                        
+
                         language = (
                             getattr(info, "language", None)
                             if info is not None
@@ -402,11 +440,10 @@ class ChunkFormerBackend(ASRBackend):
                             if info is not None
                             else None
                         )
-                        
+
                         if segments:
                             logger.debug(
-                                "Transcribe returned {} segments",
-                                len(segments)
+                                "Transcribe returned {} segments", len(segments)
                             )
                     else:
                         raise RuntimeError(
@@ -415,7 +452,9 @@ class ChunkFormerBackend(ASRBackend):
 
             # Extract full text by joining all segment texts
             # All segments should now have normalized "text" field
-            text_parts = [seg.get("text", "") for seg in segments if seg.get("text", "").strip()]
+            text_parts = [
+                seg.get("text", "") for seg in segments if seg.get("text", "").strip()
+            ]
             text = " ".join(text_parts).strip()
             return ASRResult(
                 text=text, segments=segments, language=language, confidence=confidence

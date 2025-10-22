@@ -547,7 +547,7 @@ class TestIntegration:
             # Stop tokens should be present from library defaults (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
             assert "stop" in sampling_params
             assert "<|im_end|>" in sampling_params["stop"]
-            
+
             # Should not include None values
             assert "min_p" not in sampling_params
 
@@ -613,314 +613,330 @@ class TestCalculateDynamicMaxTokens:
 
     def test_user_override_takes_priority(self):
         """User override should always be used when provided."""
+
         # Mock tokenizer
         class MockTokenizer:
             def encode(self, text):
                 return [1, 2, 3, 4, 5]  # 5 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=999
+            user_override=999,
         )
-        
+
         assert result == 999
 
     def test_enhancement_task_calculation(self):
         """Enhancement should use 1:1 ratio + 10% buffer + 64, but respect minimum."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 100  # 100 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(256, 100 * 1.1 + 64) = max(256, 174) = 256
         assert result == 256
 
     def test_enhancement_task_calculation_large_input(self):
         """Enhancement should use 1:1 ratio + 10% buffer + 64 for large inputs."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 500  # 500 tokens (above minimum)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: 500 * 1.1 + 64 = 614
         assert result == 614
 
     def test_summarization_task_calculation(self):
         """Summarization should use 30% compression ratio."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 1000  # 1000 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="summary",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: 1000 * 0.3 = 300
         assert result == 300
 
     def test_enhancement_minimum_bound(self):
         """Enhancement should respect minimum 256 tokens."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 10  # 10 tokens (very short)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(256, 10 * 1.1 + 64) = max(256, 75) = 256
         assert result == 256
 
     def test_summarization_minimum_bound(self):
         """Summarization should respect minimum 128 tokens."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 10  # 10 tokens (very short)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test",
             tokenizer=tokenizer,
             task="summary",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(128, 10 * 0.3) = max(128, 3) = 128
         assert result == 128
 
     def test_enhancement_maximum_bound(self):
         """Enhancement should respect dynamic maximum based on available context."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 10000  # 10000 tokens (very long)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
-        # Expected: max(256, min(32768 - 10000 - 128, 10000 * 1.1 + 64)) 
+
+        # Expected: max(256, min(32768 - 10000 - 128, 10000 * 1.1 + 64))
         # = max(256, min(22640, 11064)) = max(256, 11064) = 11064
         assert result == 11064
 
     def test_summarization_maximum_bound(self):
         """Summarization should respect dynamic maximum based on model context."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 10000  # 10000 tokens (very long)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="summary",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: min(32768 * 0.5, 10000 * 0.3) = min(16384, 3000) = 3000
         # But then constrained by context: min(3000, 32768 - 10000 - 128) = min(3000, 22640) = 3000
         assert result == 3000
 
     def test_context_window_safety_margin(self):
         """Should respect model context window with 128 token safety margin."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 30000  # 30000 tokens (near context limit)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: min(8192, 32768 - 30000 - 128) = min(8192, 2640) = 2640
         assert result == 2640
 
     def test_context_window_exceeds_available(self):
         """Should fall back to minimum when context window is too small."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 32000  # 32000 tokens (very close to context limit)
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(256, min(8192, 32768 - 32000 - 128)) = max(256, 640) = 640
         assert result == 640
 
     def test_invalid_task_defaults_to_summarization(self):
         """Invalid task should default to summarization behavior."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 1000  # 1000 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="invalid_task",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: 1000 * 0.3 = 300 (summarization behavior)
         assert result == 300
 
     def test_empty_input_text(self):
         """Empty input should still return minimum tokens."""
+
         class MockTokenizer:
             def encode(self, text):
                 return []  # 0 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         result = calculate_dynamic_max_tokens(
             input_text="",
             tokenizer=tokenizer,
             task="summary",
             max_model_len=32768,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(128, 0 * 0.3) = 128
         assert result == 128
 
     def test_enhancement_respects_smaller_context_window(self):
         """Enhancement with input near context limit should be heavily constrained."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 2000  # 2000 tokens (relatively large input)
-        
+
         tokenizer = MockTokenizer()
-        
+
         # Small model with 4096 token context
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=4096,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(256, min(4096 - 2000 - 128, 2000 * 1.1 + 64))
         # = max(256, min(1968, 2264)) = max(256, 1968) = 1968
         assert result == 1968
 
     def test_summarization_less_constrained_by_context(self):
         """Summarization with large input should still get reasonable output budget."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 2000  # 2000 tokens (relatively large input)
-        
+
         tokenizer = MockTokenizer()
-        
+
         # Same 4096 context limit
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="summary",
             max_model_len=4096,
-            user_override=None
+            user_override=None,
         )
-        
-        # Expected: min(1024, 2000 * 0.3, 4096 - 2000 - 128) 
+
+        # Expected: min(1024, 2000 * 0.3, 4096 - 2000 - 128)
         # = min(1024, 600, 1968) = 600
         assert result == 600
 
     def test_dynamic_max_tokens_small_model(self):
         """Test dynamic max_tokens with a small model context."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 100  # 100 tokens
-        
+
         tokenizer = MockTokenizer()
-        
+
         # Small model with 1024 token context
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=1024,
-            user_override=None
+            user_override=None,
         )
-        
+
         # Expected: max(256, min(1024 * 0.75, 100 * 1.1 + 64)) = max(256, min(768, 174)) = max(256, 174) = 256
         # But then constrained by context: min(256, 1024 - 100 - 128) = min(256, 796) = 256
         assert result == 256
 
     def test_dynamic_max_tokens_large_input_small_model(self):
         """Test dynamic max_tokens with large input on small model."""
+
         class MockTokenizer:
             def encode(self, text):
                 return [1] * 500  # 500 tokens (large input)
-        
+
         tokenizer = MockTokenizer()
-        
+
         # Small model with 1024 token context
         result = calculate_dynamic_max_tokens(
             input_text="test text",
             tokenizer=tokenizer,
             task="enhancement",
             max_model_len=1024,
-            user_override=None
+            user_override=None,
         )
-        
-        # Expected: max(256, min(1024 - 500 - 128, 500 * 1.1 + 64)) 
+
+        # Expected: max(256, min(1024 - 500 - 128, 500 * 1.1 + 64))
         # = max(256, min(396, 614)) = max(256, 396) = 396
         assert result == 396

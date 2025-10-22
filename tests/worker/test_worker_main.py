@@ -205,7 +205,7 @@ class TestMultiprocessingStartMethod:
     def test_spawn_start_method_logic(self):
         """Test the spawn start method logic directly."""
         import multiprocessing as mp
-        
+
         # Test the logic from the main block
         try:
             if mp.get_start_method(allow_none=True) != "spawn":
@@ -220,13 +220,13 @@ class TestMultiprocessingStartMethod:
     def test_spawn_start_method_skips_when_already_set(self):
         """Test that spawn is not set if already configured."""
         import multiprocessing as mp
-        
+
         # Set to spawn first
         try:
             mp.set_start_method("spawn", force=True)
         except RuntimeError:
             pass
-        
+
         # Test the logic - should not call set_start_method again
         original_method = mp.get_start_method()
         try:
@@ -235,6 +235,6 @@ class TestMultiprocessingStartMethod:
         except RuntimeError:
             # Start method already set, ignore
             pass
-        
+
         # Should still be spawn
         assert mp.get_start_method() == original_method

@@ -47,9 +47,7 @@ async def test_status_endpoint_exposes_asr_error_code(redis_client):
     from src.api.routes import get_task_from_redis
 
     # Mock the get_results_redis to return our fake client
-    with patch(
-        "src.api.dependencies.get_results_redis", return_value=redis_client
-    ):
+    with patch("src.api.dependencies.get_results_redis", return_value=redis_client):
         # Retrieve task data
         task_data = await get_task_from_redis(task_id)
 
@@ -89,9 +87,7 @@ async def test_status_endpoint_exposes_llm_error_code(redis_client):
     from src.api.routes import get_task_from_redis
 
     # Mock the get_results_redis to return our fake client
-    with patch(
-        "src.api.dependencies.get_results_redis", return_value=redis_client
-    ):
+    with patch("src.api.dependencies.get_results_redis", return_value=redis_client):
         # Retrieve task data
         task_data = await get_task_from_redis(task_id)
 
@@ -129,9 +125,7 @@ async def test_status_endpoint_exposes_preprocessing_error_code(redis_client):
     from src.api.routes import get_task_from_redis
 
     # Mock the get_results_redis to return our fake client
-    with patch(
-        "src.api.dependencies.get_results_redis", return_value=redis_client
-    ):
+    with patch("src.api.dependencies.get_results_redis", return_value=redis_client):
         # Retrieve task data
         task_data = await get_task_from_redis(task_id)
 

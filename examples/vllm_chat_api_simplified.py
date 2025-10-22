@@ -25,9 +25,9 @@ def example_old_approach():
     print("\n" + "=" * 60)
     print("❌ OLD APPROACH (Maintenance Burden)")
     print("=" * 60)
-    
+
     llm = LLM(model="data/models/qwen3-4b-instruct-2507-awq")
-    
+
     # Manual chat markers - brittle and model-specific!
     manual_template = Template("""<|im_start|>system
 You are an expert Vietnamese content analyst.<|im_end|>
@@ -35,20 +35,20 @@ You are an expert Vietnamese content analyst.<|im_end|>
 {{ transcript }}<|im_end|>
 <|im_start|>assistant
 """)
-    
+
     prompt = manual_template.render(
         transcript="Hôm nay chúng ta họp về kế hoạch dự án Q4."
     )
-    
+
     sampling_params = SamplingParams(
         temperature=0.7,
         max_tokens=200,
-        stop=["<|im_end|>"]  # Must remember to add this!
+        stop=["<|im_end|>"],  # Must remember to add this!
     )
-    
+
     outputs = llm.generate([prompt], sampling_params)
     result = outputs[0].outputs[0].text
-    
+
     print("\n⚠️  Problems:")
     print("  - Chat markers hardcoded (<|im_start|>, <|im_end|>)")
     print("  - Must manually specify stop tokens")
@@ -62,9 +62,9 @@ def example_simplified_inline():
     print("\n" + "=" * 60)
     print("✅ SIMPLIFIED APPROACH (Production)")
     print("=" * 60)
-    
+
     llm = LLM(model="data/models/qwen3-4b-instruct-2507-awq")
-    
+
     # 1. System prompt template (ONE file, no chat markers!)
     system_template = Template("""You are an expert Vietnamese content analyst.
 
@@ -79,23 +79,25 @@ Output valid JSON matching this schema:
   "summary": "string",
   "action_items": ["array", "of", "strings"]
 }""")
-    
+
     # 2. Render system prompt
     system_prompt = system_template.render()
-    
+
     # 3. Build messages inline (6 lines!)
-    transcript = "Hôm nay chúng ta họp về kế hoạch dự án Q4. Cần hoàn thành trước ngày 31/12."
+    transcript = (
+        "Hôm nay chúng ta họp về kế hoạch dự án Q4. Cần hoàn thành trước ngày 31/12."
+    )
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Transcript to analyze:\n{transcript}"}
+        {"role": "user", "content": f"Transcript to analyze:\n{transcript}"},
     ]
-    
+
     # 4. Call chat API
     sampling_params = SamplingParams(temperature=0.7, max_tokens=200)
     outputs = llm.chat(messages=messages, sampling_params=sampling_params)
-    
+
     result = outputs[0].outputs[0].text
-    
+
     print("\n📝 Complete Implementation (6 lines):")
     print("```python")
     print("system_prompt = template.render()")
@@ -105,12 +107,12 @@ Output valid JSON matching this schema:
     print("]")
     print("outputs = llm.chat(messages=messages, sampling_params=sampling)")
     print("```")
-    
+
     print("\n📂 Template Structure:")
     print("  templates/prompts/")
     print("    └── generic_summary_v2.jinja  (system prompt only)")
     print("  User message: Inlined in code")
-    
+
     print("\n✅ Benefits:")
     print("  - Only 6 lines of code")
     print("  - ONE template file")
@@ -118,7 +120,7 @@ Output valid JSON matching this schema:
     print("  - Automatic stop tokens")
     print("  - Works with ANY chat model")
     print("  - 80+ lines of code deleted!")
-    
+
     print(f"\n📊 Result:\n{result}")
 
 
@@ -127,9 +129,9 @@ def example_with_template_variables():
     print("\n" + "=" * 60)
     print("✅ WITH TEMPLATE VARIABLES")
     print("=" * 60)
-    
+
     llm = LLM(model="data/models/qwen3-4b-instruct-2507-awq")
-    
+
     # Template with variables
     system_template = Template("""You are an expert {{ language }} content analyst.
 
@@ -140,33 +142,33 @@ Analyze the transcript and provide:
 
 Output valid JSON matching this schema:
 {{ schema }}""")
-    
+
     # Render with context
     system_prompt = system_template.render(
         language="Vietnamese",
         focus_area="business meetings",
         instructions="- Concise title\n- Key decisions\n- Next steps",
-        schema='{\n  "title": "string",\n  "decisions": ["array"],\n  "next_steps": ["array"]\n}'
+        schema='{\n  "title": "string",\n  "decisions": ["array"],\n  "next_steps": ["array"]\n}',
     )
-    
+
     # Same inline message building
     transcript = "Quyết định: Triển khai hệ thống mới vào Q1 2024."
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Transcript to analyze:\n{transcript}"}
+        {"role": "user", "content": f"Transcript to analyze:\n{transcript}"},
     ]
-    
+
     sampling_params = SamplingParams(temperature=0.7, max_tokens=200)
     outputs = llm.chat(messages=messages, sampling_params=sampling_params)
-    
+
     result = outputs[0].outputs[0].text
-    
+
     print("\n📝 Template Variables Used:")
     print("  - language: Vietnamese")
     print("  - focus_area: business meetings")
     print("  - instructions: (custom)")
     print("  - schema: (custom)")
-    
+
     print(f"\n📊 Result:\n{result}")
 
 
@@ -175,60 +177,55 @@ def example_with_guided_decoding():
     print("\n" + "=" * 60)
     print("✅ ADVANCED: Guided Decoding (Production Best)")
     print("=" * 60)
-    
+
     from vllm.sampling_params import GuidedDecodingParams
-    
+
     llm = LLM(model="data/models/qwen3-4b-instruct-2507-awq")
-    
+
     # Define JSON schema
     schema = {
         "type": "object",
         "properties": {
             "title": {"type": "string"},
             "summary": {"type": "string"},
-            "tags": {
-                "type": "array",
-                "items": {"type": "string"}
-            }
+            "tags": {"type": "array", "items": {"type": "string"}},
         },
-        "required": ["title", "summary", "tags"]
+        "required": ["title", "summary", "tags"],
     }
-    
+
     # Simple system prompt
     system_template = Template("""You are an expert Vietnamese content analyst.
 Analyze the transcript and output JSON only.""")
-    
+
     system_prompt = system_template.render()
-    
+
     # Build messages
     transcript = "Hôm nay họp về marketing. Quyết định tăng ngân sách 20%."
     messages = [
         {"role": "system", "content": system_prompt},
-        {"role": "user", "content": f"Transcript:\n{transcript}"}
+        {"role": "user", "content": f"Transcript:\n{transcript}"},
     ]
-    
+
     # Guided decoding ensures valid JSON
     guided_decoding = GuidedDecodingParams(json=schema)
     sampling_params = SamplingParams(
-        temperature=0.7,
-        max_tokens=200,
-        guided_decoding=guided_decoding
+        temperature=0.7, max_tokens=200, guided_decoding=guided_decoding
     )
-    
+
     outputs = llm.chat(messages=messages, sampling_params=sampling_params)
     result = outputs[0].outputs[0].text
-    
+
     print("\n📝 Schema Enforced:")
     print("  - title (required)")
     print("  - summary (required)")
     print("  - tags (required array)")
-    
+
     print("\n✅ Guarantees:")
     print("  - Valid JSON syntax")
     print("  - All required fields present")
     print("  - Correct data types")
     print("  - No validation errors")
-    
+
     print(f"\n📊 Result:\n{result}")
 
 
@@ -237,14 +234,14 @@ def main():
     print("\n" + "=" * 60)
     print("vLLM Chat API: The Simplified Approach")
     print("=" * 60)
-    
+
     examples = [
         ("Old Approach (Manual)", example_old_approach),
         ("Simplified Inline (Recommended)", example_simplified_inline),
         ("With Template Variables", example_with_template_variables),
         ("With Guided Decoding (Best)", example_with_guided_decoding),
     ]
-    
+
     for i, (name, func) in enumerate(examples, 1):
         print(f"\n[{i}/{len(examples)}] {name}...")
         try:
@@ -252,8 +249,9 @@ def main():
         except Exception as e:
             print(f"❌ Error: {e}")
             import traceback
+
             traceback.print_exc()
-    
+
     print("\n" + "=" * 60)
     print("Summary & Recommendations")
     print("=" * 60)

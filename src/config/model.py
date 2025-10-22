@@ -132,14 +132,22 @@ class AsrSettings(BaseModel):
 
 
 class ChunkformerSettings(BaseModel):
-    chunkformer_model_path: str = Field(default="data/models/chunkformer-rnnt-large-vie")
+    chunkformer_model_path: str = Field(
+        default="data/models/chunkformer-rnnt-large-vie"
+    )
     chunkformer_model_variant: str = Field(
         default="khanhld/chunkformer-rnnt-large-vie",
     )
     chunkformer_chunk_size: int = Field(default=64, description="Chunk size in frames")
-    chunkformer_left_context_size: int = Field(default=128, description="Left context size in frames")
-    chunkformer_right_context_size: int = Field(default=128, description="Right context size in frames")
-    chunkformer_total_batch_duration: int = Field(default=14400, description="Total batch duration in seconds")
+    chunkformer_left_context_size: int = Field(
+        default=128, description="Left context size in frames"
+    )
+    chunkformer_right_context_size: int = Field(
+        default=128, description="Right context size in frames"
+    )
+    chunkformer_total_batch_duration: int = Field(
+        default=14400, description="Total batch duration in seconds"
+    )
     chunkformer_return_timestamps: bool = Field(default=True)
     chunkformer_device: str = Field(default="cuda")
     chunkformer_batch_size: int | None = Field(default=None)
@@ -268,9 +276,7 @@ class FeatureFlags(BaseModel):
 
 class AppSettings(BaseSettings):
     pipeline_version: str = Field(default="1.0.0")
-    environment: Literal["development", "production"] = Field(
-        default="development"
-    )
+    environment: Literal["development", "production"] = Field(default="development")
     debug: bool = Field(default=False)
     verbose_components: bool = Field(default=False)
 
@@ -323,7 +329,6 @@ class AppSettings(BaseSettings):
     def get_template_path(self, template_id: str) -> Path:
         return self.paths.templates_dir / f"{template_id}.json"
 
-
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
         Apply a profile to the settings instance, respecting fields set via environment variables.
@@ -355,4 +360,3 @@ class AppSettings(BaseSettings):
 
         updated = _apply(self, profile)
         return cast(AppSettings, updated)
-

@@ -16,11 +16,6 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from src.api.errors import (
-    ASRProcessingError,
-    LLMProcessingError,
-    ModelLoadError,
-)
 from src.api.schemas import TaskStatus
 from src.worker.pipeline import (
     _calculate_edit_rate,
@@ -293,10 +288,12 @@ class TestProcessAudioTask:
             mock_asr_factory = Mock()
             mock_asr_factory.create.return_value = mock_asr_model
             mocker.patch("src.processors.asr.factory.ASRFactory", mock_asr_factory)
-            
+
             mock_llm_processor_class = Mock()
             mock_llm_processor_class.return_value = mock_llm_model
-            mocker.patch("src.processors.llm.processor.LLMProcessor", mock_llm_processor_class)
+            mocker.patch(
+                "src.processors.llm.processor.LLMProcessor", mock_llm_processor_class
+            )
 
             # Mock RQ job
             mock_job = Mock()
@@ -418,7 +415,8 @@ class TestProcessAudioTask:
             mock_asr_model = Mock()
             mock_asr_model.execute.side_effect = Exception("ASR failed")
             mocker.patch(
-                "src.processors.asr.factory.ASRFactory.create", return_value=mock_asr_model
+                "src.processors.asr.factory.ASRFactory.create",
+                return_value=mock_asr_model,
             )
 
             mock_job = Mock()
@@ -522,11 +520,10 @@ class TestProcessAudioTask:
 
             # Mock the loading functions
             mocker.patch(
-                "src.processors.asr.factory.ASRFactory.create", return_value=mock_asr_model
+                "src.processors.asr.factory.ASRFactory.create",
+                return_value=mock_asr_model,
             )
-            mocker.patch(
-                "src.processors.llm.LLMProcessor", return_value=mock_llm_model
-            )
+            mocker.patch("src.processors.llm.LLMProcessor", return_value=mock_llm_model)
 
             # No Redis/job mocking - should work without Redis
             mocker.patch("src.worker.pipeline.get_current_job", return_value=None)

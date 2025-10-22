@@ -77,7 +77,7 @@ class AudioPreprocessor:
 
         # Always capture output so we can parse it
         result = subprocess.run(cmd, capture_output=True, text=True)
-        
+
         if getattr(result, "returncode", 0) != 0:
             stderr = getattr(result, "stderr", "")
             logger.error("ffprobe failed: {}", stderr)
@@ -89,11 +89,11 @@ class AudioPreprocessor:
             )
 
         stdout_data = getattr(result, "stdout", None)
-        
+
         # Log output in verbose mode
         if settings.verbose_components and stdout_data:
             logger.debug("ffprobe output: {}", stdout_data)
-        
+
         data = json.loads(stdout_data or "{}")
         streams = data.get("streams", [])
         audio_stream = next(

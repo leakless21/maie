@@ -102,9 +102,10 @@ class TestLoadModel:
             mock_settings.llm_enhance_max_num_partial_prefills = 2
             mock_settings.verbose_components = False
 
-            with patch(
-                "src.processors.llm.processor.TemplateLoader"
-            ), patch("src.processors.llm.processor.PromptRenderer"):
+            with (
+                patch("src.processors.llm.processor.TemplateLoader"),
+                patch("src.processors.llm.processor.PromptRenderer"),
+            ):
                 processor = LLMProcessor()
 
             mock_model = Mock()
@@ -288,7 +289,9 @@ class TestEnhanceText:
 
             # When template rendering fails in execute(), it returns an error in metadata
             # The result should fall back gracefully
-            assert "enhanced_text" in result or result.get("enhancement_applied") is False
+            assert (
+                "enhanced_text" in result or result.get("enhancement_applied") is False
+            )
 
     def test_enhance_text_loads_model_lazily(self):
         """Test that model is loaded on first enhancement."""

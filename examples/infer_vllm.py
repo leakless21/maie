@@ -5,10 +5,10 @@ CLI: vLLM-based LLM inference using MAIE's LLMProcessor with Chat API.
 Usage examples:
   # Text enhancement (uses generate API)
   python examples/infer_vllm.py --task enhancement --text "hello world"
-  
+
   # Summary with chat API (new approach)
   python examples/infer_vllm.py --task summary --text "...transcript..." --template-id generic_summary_v2
-  
+
   # Legacy summary (old templates with fallback)
   python examples/infer_vllm.py --task summary --text "...transcript..." --template-id generic_summary_v1
 
@@ -67,9 +67,7 @@ def main() -> int:
         import torch  # type: ignore
 
         if not torch.cuda.is_available():
-            logger.error(
-                "CUDA is not available. GPU is required for vLLM."
-            )
+            logger.error("CUDA is not available. GPU is required for vLLM.")
             print(
                 json.dumps(
                     {
@@ -80,9 +78,7 @@ def main() -> int:
             )
             return 2
     except ImportError:
-        logger.error(
-            "PyTorch is not installed. GPU is required for vLLM."
-        )
+        logger.error("PyTorch is not installed. GPU is required for vLLM.")
         print(
             json.dumps(
                 {
@@ -121,14 +117,18 @@ def main() -> int:
                 template_id=args.template_id,
                 **overrides,
             )
-            
+
             # Check if chat API was used
-            method = getattr(result, "metadata", {}).get("method") if hasattr(result, "metadata") else None
+            method = (
+                getattr(result, "metadata", {}).get("method")
+                if hasattr(result, "metadata")
+                else None
+            )
             if method == "chat_api":
                 logger.info("✓ Used vLLM chat() API with OpenAI-format messages")
             else:
                 logger.info("↻ Used fallback generate() API with old template")
-            
+
             # Expect LLMResult.text to carry rendered/serialized summary; if metadata has structured JSON, prefer that
             structured = (
                 getattr(result, "metadata", {}).get("structured_summary")

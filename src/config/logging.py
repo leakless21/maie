@@ -23,9 +23,11 @@ correlation_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
     "correlation_id", default=None
 )
 
+
 def generate_correlation_id(prefix: str = "") -> str:
     """Generate a UUID-based correlation id for request tracing."""
     return f"{prefix}-{uuid.uuid4().hex[:8]}" if prefix else uuid.uuid4().hex[:8]
+
 
 def bind_correlation_id(value: Optional[str] = None) -> None:
     """Bind a correlation id to the current context."""
@@ -33,12 +35,15 @@ def bind_correlation_id(value: Optional[str] = None) -> None:
         value = generate_correlation_id()
     correlation_id.set(value)
 
+
 def clear_correlation_id() -> None:
     """Clear the correlation id from the current context."""
     correlation_id.set(None)
 
+
 class InterceptHandler(logging.Handler):
     """Handler to intercept standard logging and forward to loguru."""
+
     def emit(self, record: logging.LogRecord) -> None:
         # Get corresponding Loguru level
         try:
@@ -56,16 +61,25 @@ class InterceptHandler(logging.Handler):
             level, record.getMessage()
         )
 
+
 def intercept_stdlib_logging(level: int | str = logging.INFO) -> None:
     """Intercept standard library loggers to use loguru."""
     logging.root.handlers = [InterceptHandler()]
     logging.root.setLevel(
-        level if isinstance(level, int)
+        level
+        if isinstance(level, int)
         else getattr(logging, str(level).upper(), logging.INFO)
     )
-    
+
     # Intercept common third-party loggers
-    for name in ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio", "watchfiles"]:
+    for name in [
+        "uvicorn",
+        "uvicorn.error",
+        "uvicorn.access",
+        "vLLM",
+        "asyncio",
+        "watchfiles",
+    ]:
         logger = logging.getLogger(name)
         logger.handlers = []
         logger.propagate = True
@@ -73,14 +87,16 @@ def intercept_stdlib_logging(level: int | str = logging.INFO) -> None:
         if name.startswith("uvicorn"):
             logger.setLevel(logging.WARNING)
 
+
 def get_logger():
     """Return the configured Loguru logger."""
     return _loguru_logger
 
+
 def configure_logging() -> Any:
     """
     Apply a simplified logging configuration using Loguru.
-    
+
     This configuration focuses on:
     - Clean, human-readable console output
     - UTC timestamps for consistency
@@ -96,7 +112,7 @@ def configure_logging() -> Any:
     # Get settings
     level = settings.logging.log_level.upper()
     log_dir = Path(settings.logging.log_dir)
-    
+
     # Ensure log directory exists
     log_dir.mkdir(parents=True, exist_ok=True)
 
@@ -117,7 +133,7 @@ def configure_logging() -> Any:
         colorize=True,
         backtrace=settings.logging.loguru_backtrace,
         diagnose=settings.logging.loguru_diagnose,
-        filter=lambda record: _inject_context(record)
+        filter=lambda record: _inject_context(record),
     )
 
     # Add file handler for all logs with rotation
@@ -133,7 +149,7 @@ def configure_logging() -> Any:
         compression=settings.logging.log_compression,
         backtrace=settings.logging.loguru_backtrace,
         diagnose=False,
-        filter=lambda record: _inject_context(record)
+        filter=lambda record: _inject_context(record),
     )
 
     # Add file handler for errors only with extended retention and structured data
@@ -150,7 +166,7 @@ def configure_logging() -> Any:
         compression=settings.logging.log_compression,
         backtrace=True,
         diagnose=False,
-        filter=lambda record: _inject_context(record)
+        filter=lambda record: _inject_context(record),
     )
 
     # Intercept standard library loggers
@@ -162,14 +178,14 @@ def configure_logging() -> Any:
 def _inject_context(record):
     """
     Inject context information into log records.
-    
+
     This function is used as a filter to add correlation IDs and module info
     to each log record.
     """
     # Inject correlation ID
     cid = correlation_id.get()
     record["extra"]["correlation_id"] = cid or "no-correlation-id"
-    
+
     # Inject module info
     module_name = record["name"]
     if module_name.startswith("src."):
@@ -177,7 +193,7 @@ def _inject_context(record):
     elif module_name.startswith("tests."):
         module_name = module_name[6:]  # Remove 'tests.' prefix
     record["extra"]["module"] = module_name
-    
+
     # Add basic ML context fields if available in the record
     # These would typically be added via logger.bind() in ML operations
     ml_context_fields = [
@@ -186,20 +202,22 @@ def _inject_context(record):
         "audio_duration_sec",
         "tokens_processed",
         "gpu_memory_mb",
-        "task_id"
+        "task_id",
     ]
-    
+
     # Check if any ML context fields are already bound to the logger
     for field in ml_context_fields:
         if field not in record["extra"]:
             # Set default values for missing ML context fields to ensure consistency
             record["extra"][field] = record["extra"].get(field, None)
-    
+
     return True
+
+
 def get_module_logger(module_name: str) -> Any:
     """
     Get a logger with module context for better debugging.
-    
+
     Usage:
         logger = get_module_logger(__name__)
         logger.info("Processing started")
@@ -209,8 +227,9 @@ def get_module_logger(module_name: str) -> Any:
         module_name = module_name[4:]  # Remove 'src.' prefix
     elif module_name.startswith("tests."):
         module_name = module_name[6:]  # Remove 'tests.' prefix
-    
+
     return _loguru_logger.bind(module=module_name)
+
 
 __all__ = [
     "get_logger",

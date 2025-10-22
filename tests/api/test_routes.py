@@ -11,7 +11,6 @@ from litestar.status_codes import (
     HTTP_200_OK,
     HTTP_202_ACCEPTED,
     HTTP_404_NOT_FOUND,
-    HTTP_413_REQUEST_ENTITY_TOO_LARGE,
     HTTP_415_UNSUPPORTED_MEDIA_TYPE,
     HTTP_422_UNPROCESSABLE_ENTITY,
     HTTP_429_TOO_MANY_REQUESTS,
@@ -65,7 +64,10 @@ class TestProcessController:
                     response = client.post(
                         "/v1/process",
                         files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                        data={"features": ["clean_transcript", "summary"], "template_id": "meeting_notes_v1"},
+                        data={
+                            "features": ["clean_transcript", "summary"],
+                            "template_id": "meeting_notes_v1",
+                        },
                         headers={"X-API-Key": "dev_api_key_change_in_production"},
                     )
 
@@ -103,23 +105,20 @@ class TestProcessController:
     def test_process_audio_file_too_large(self, app, valid_audio_file):
         """Test request with file exceeding size limit."""
         with TestClient(app=app) as client:
-            with patch(
-                "src.api.routes.save_audio_file_streaming"
-            ) as mock_save:
+            with patch("src.api.routes.save_audio_file_streaming") as mock_save:
                 # Mock save_audio_file_streaming to raise HTTPException with 413 status
                 from litestar.status_codes import HTTP_413_REQUEST_ENTITY_TOO_LARGE
                 from litestar.exceptions import HTTPException
                 from src.api.errors import AudioValidationError
-                
+
                 error = AudioValidationError(
-                    message="File too large",
-                    details={"max_size_mb": 0.001}
+                    message="File too large", details={"max_size_mb": 0.001}
                 )
                 mock_save.side_effect = HTTPException(
                     status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                     detail=error.message,
                 )
-                
+
                 response = client.post(
                     "/v1/process",
                     files={"file": ("test.wav", valid_audio_file, "audio/wav")},
@@ -181,13 +180,18 @@ class TestProcessController:
                     response = client.post(
                         "/v1/process",
                         files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                        data={"features": ["clean_transcript", "summary"], "template_id": "meeting_notes_v1"},
+                        data={
+                            "features": ["clean_transcript", "summary"],
+                            "template_id": "meeting_notes_v1",
+                        },
                         headers={"X-API-Key": "dev_api_key_change_in_production"},
                     )
 
                     assert response.status_code == HTTP_202_ACCEPTED
 
-    def test_process_audio_defaults_asr_backend_when_omitted(self, app, valid_audio_file):
+    def test_process_audio_defaults_asr_backend_when_omitted(
+        self, app, valid_audio_file
+    ):
         """Should default asr_backend to 'chunkformer' when not provided."""
         with TestClient(app=app) as client:
             with patch("src.api.routes.create_task_in_redis") as mock_create:
@@ -200,7 +204,7 @@ class TestProcessController:
                     )
 
                     assert response.status_code == HTTP_202_ACCEPTED
-                    
+
                     # Verify enqueue_job was called with default asr_backend
                     call_args = mock_enqueue.call_args
                     task_params = call_args[0][2]  # request_params
@@ -212,7 +216,10 @@ class TestProcessController:
             response = client.post(
                 "/v1/process",
                 files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                data={"features": ["clean_transcript"], "asr_backend": "invalid_backend"},
+                data={
+                    "features": ["clean_transcript"],
+                    "asr_backend": "invalid_backend",
+                },
                 headers={"X-API-Key": "dev_api_key_change_in_production"},
             )
 
@@ -227,12 +234,15 @@ class TestProcessController:
                     response = client.post(
                         "/v1/process",
                         files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                        data={"features": ["clean_transcript"], "asr_backend": "chunkformer"},
+                        data={
+                            "features": ["clean_transcript"],
+                            "asr_backend": "chunkformer",
+                        },
                         headers={"X-API-Key": "dev_api_key_change_in_production"},
                     )
 
                     assert response.status_code == HTTP_202_ACCEPTED
-                    
+
                     # Verify enqueue_job was called with provided asr_backend
                     call_args = mock_enqueue.call_args
                     task_params = call_args[0][2]  # request_params

@@ -195,9 +195,7 @@ async def validate_request_data(data: Any) -> bool:
     if isinstance(file_obj, UploadFile):
         headers = file_obj.headers or {}
         size_value = (
-            data.get("size")
-            or data.get("file_size")
-            or headers.get("content-length")
+            data.get("size") or data.get("file_size") or headers.get("content-length")
         )
         file_metadata = {
             "filename": file_obj.filename or "",

@@ -65,7 +65,11 @@ def main() -> int:
         if args.json:
             print(
                 json.dumps(
-                    {"error": "preprocessing_failed", "message": str(e), "path": str(audio_path)}
+                    {
+                        "error": "preprocessing_failed",
+                        "message": str(e),
+                        "path": str(audio_path),
+                    }
                 )
             )
         return 3
@@ -93,16 +97,17 @@ def main() -> int:
     try:
         asr = ASRFactory.create("whisper", **config)
         logger.info("ASR model loaded", backend="whisper")
-        
+
         # Execute ASR transcription
         import time
+
         start_time = time.time()
         asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
         processing_time = time.time() - start_time
-        
+
         # Calculate RTF (Real-Time Factor)
         rtf = processing_time / audio_duration if audio_duration > 0 else 0.0
-        
+
         if args.json:
             result_dict = {
                 "transcript": asr_result.text,

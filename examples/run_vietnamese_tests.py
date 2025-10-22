@@ -138,7 +138,9 @@ def validate_configuration():
     if not enhance_model_path and (not api_key):
         issues.append("Cần cấu hình model path hoặc API key")
     if not settings.paths.templates_dir.exists():
-        warnings.append(f"Templates directory không tồn tại: {settings.paths.templates_dir}")
+        warnings.append(
+            f"Templates directory không tồn tại: {settings.paths.templates_dir}"
+        )
     if not settings.paths.models_dir.exists():
         warnings.append(f"Models directory không tồn tại: {settings.paths.models_dir}")
     if settings.llm_enhance_temperature < 0 or settings.llm_enhance_temperature > 2:

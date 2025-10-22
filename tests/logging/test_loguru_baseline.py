@@ -3,7 +3,6 @@ import builtins
 import json
 from types import SimpleNamespace
 
-import loguru
 
 import src.processors.llm.config as llm_config
 import src.processors.llm.processor as llm_processor

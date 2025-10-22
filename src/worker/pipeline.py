@@ -12,10 +12,9 @@ import json
 import subprocess
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict, Optional
 
 # Optional torch import (may not be available in test environment)
 try:
@@ -39,15 +38,9 @@ from src.api.errors import (
     ASRProcessingError,
     AudioPreprocessingError,
     AudioValidationError,
-    FileSystemError,
     LLMProcessingError,
     ModelLoadError,
-    ModelMemoryError,
-    NetworkError,
-    ProcessingError,
-    handle_maie_error,
 )
-from src.core.error_handler import leverage_native_error
 from src.api.schemas import TaskStatus
 from src.config import settings
 
@@ -225,12 +218,6 @@ def _calculate_edit_rate(original: str, enhanced: str) -> float:
     return edit_rate
 
 
-
-
-
-
-
-
 def get_version_metadata(
     asr_result_metadata: Dict[str, Any], llm_model: Any = None
 ) -> Dict[str, Any]:
@@ -246,12 +233,24 @@ def get_version_metadata(
     """
     # Build ASR metadata variants - ensure all required fields are strings (not None)
     asr_backend = {
-        "name": (asr_result_metadata.get("name") or "whisper") if asr_result_metadata else "unknown",
-        "model_variant": (asr_result_metadata.get("model_variant") or "unknown") if asr_result_metadata else "unknown",
-        "model_path": str(asr_result_metadata.get("model_path") or "") if asr_result_metadata else "",
-        "checkpoint_hash": str(asr_result_metadata.get("checkpoint_hash") or "") if asr_result_metadata else "",
-        "compute_type": (asr_result_metadata.get("compute_type") or "float16") if asr_result_metadata else "float16",
-        "decoding_params": asr_result_metadata.get("decoding_params") or {} if asr_result_metadata else {},
+        "name": (asr_result_metadata.get("name") or "whisper")
+        if asr_result_metadata
+        else "unknown",
+        "model_variant": (asr_result_metadata.get("model_variant") or "unknown")
+        if asr_result_metadata
+        else "unknown",
+        "model_path": str(asr_result_metadata.get("model_path") or "")
+        if asr_result_metadata
+        else "",
+        "checkpoint_hash": str(asr_result_metadata.get("checkpoint_hash") or "")
+        if asr_result_metadata
+        else "",
+        "compute_type": (asr_result_metadata.get("compute_type") or "float16")
+        if asr_result_metadata
+        else "float16",
+        "decoding_params": asr_result_metadata.get("decoding_params") or {}
+        if asr_result_metadata
+        else {},
     }
 
     # Build LLM info; support multiple expectations across tests
@@ -338,9 +337,13 @@ def calculate_metrics(
     total_rtf = total_processing_time / audio_duration if audio_duration > 0 else 0
 
     # Coerce inputs to strings for robust metrics
-    original_text = transcription if isinstance(transcription, str) else str(transcription)
+    original_text = (
+        transcription if isinstance(transcription, str) else str(transcription)
+    )
     enhanced_text = (
-        clean_transcript if (isinstance(clean_transcript, str) or clean_transcript is None) else str(clean_transcript)
+        clean_transcript
+        if (isinstance(clean_transcript, str) or clean_transcript is None)
+        else str(clean_transcript)
     )
 
     try:
@@ -480,7 +483,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
                 redis_conn.hset(task_key, mapping=error_details)
-                
+
                 # Log the error
                 logger.error(
                     f"Task {task_key} failed at stage 'preprocessing': {error}",
@@ -559,7 +562,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
                 redis_conn.hset(task_key, mapping=error_details)
-                
+
                 # Log the error
                 logger.error(
                     f"Task {task_key} failed at stage 'preprocessing': {error}",
@@ -612,7 +615,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
                 redis_conn.hset(task_key, mapping=error_details)
-                
+
                 # Log the error
                 logger.error(
                     f"Task {task_key} failed at stage 'preprocessing': {error}",
@@ -659,7 +662,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                 }
                 redis_conn.hset(task_key, mapping=error_details)
-                
+
                 # Log the error
                 logger.error(
                     f"Task {task_key} failed at stage 'preprocessing': {error}",
@@ -691,12 +694,15 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Step 2a: Load ASR model based on backend using ASRFactory directly
             from src.processors.asr.factory import ASRFactory
+
             asr_model = ASRFactory.create(backend_type=asr_backend, **config)
 
             # Step 2b: Execute ASR transcription with actual duration
             # Phase 1: Now returns full ASResult object with segments/timestamps
             try:
-                logger.info("Executing ASR transcription", audio_path=processing_audio_path)
+                logger.info(
+                    "Executing ASR transcription", audio_path=processing_audio_path
+                )
 
                 start_time = time.time()
 
@@ -717,25 +723,33 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         if isinstance(backend_info, dict):
                             asr_metadata.update(backend_info)
                     except Exception as exc:
-                        logger.warning("Failed to collect ASR version info", error=str(exc))
+                        logger.warning(
+                            "Failed to collect ASR version info", error=str(exc)
+                        )
 
                 asr_metadata["language"] = result.language
 
-                model_name = asr_metadata.get("model_name") or getattr(result, "model_name", None)
+                model_name = asr_metadata.get("model_name") or getattr(
+                    result, "model_name", None
+                )
                 if not model_name:
-                    model_name = asr_metadata.get("model_variant") or asr_metadata.get("backend")
+                    model_name = asr_metadata.get("model_variant") or asr_metadata.get(
+                        "backend"
+                    )
                 asr_metadata["model_name"] = model_name or "unknown"
 
                 # Ensure checkpoint_hash is always a string, never None
                 if not asr_metadata.get("checkpoint_hash"):
                     checkpoint_hash = getattr(result, "checkpoint_hash", None)
-                    asr_metadata["checkpoint_hash"] = checkpoint_hash if checkpoint_hash else ""
+                    asr_metadata["checkpoint_hash"] = (
+                        checkpoint_hash if checkpoint_hash else ""
+                    )
 
                 # Calculate character and word counts for visibility
                 char_count = len(result.text)
                 word_count = len(result.text.split()) if result.text else 0
                 segment_count = len(result.segments) if result.segments else 0
-                
+
                 logger.info(
                     f"ASR transcription complete | {char_count:,} chars | {word_count:,} words | {segment_count} segment(s) | RTF: {asr_rtf:.3f}",
                     transcript_length=char_count,
@@ -750,18 +764,27 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 # Backends (ChunkFormer, Whisper) already return proper ASRResult with segments
                 asr_result = result
             except FileNotFoundError as e:
-                logger.error("Audio file not found", audio_path=processing_audio_path, error=str(e))
+                logger.error(
+                    "Audio file not found",
+                    audio_path=processing_audio_path,
+                    error=str(e),
+                )
                 raise ASRProcessingError(
                     message=f"Audio file not found: {processing_audio_path}",
                     details={"audio_path": processing_audio_path},
                 ) from e
             except (RuntimeError, OSError, ValueError, TypeError) as e:
                 logger.error(
-                    "ASR transcription failed", error=str(e), traceback=traceback.format_exc()
+                    "ASR transcription failed",
+                    error=str(e),
+                    traceback=traceback.format_exc(),
                 )
                 raise ASRProcessingError(
                     message=f"ASR transcription failed: {str(e)}",
-                    details={"error_type": type(e).__name__, "audio_path": processing_audio_path},
+                    details={
+                        "error_type": type(e).__name__,
+                        "audio_path": processing_audio_path,
+                    },
                 ) from e
 
             except Exception as e:
@@ -772,7 +795,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 )
                 raise ASRProcessingError(
                     message=f"ASR transcription failed: {str(e)}",
-                    details={"error_type": type(e).__name__, "audio_path": processing_audio_path},
+                    details={
+                        "error_type": type(e).__name__,
+                        "audio_path": processing_audio_path,
+                    },
                 ) from e
 
             # Extract text and confidence directly from ASRResult
@@ -786,7 +812,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 rtf=asr_rtf,
                 confidence=confidence,
             )
-            
+
         finally:
             # Step 2c: CRITICAL - Always unload ASR model to free GPU memory
             if asr_model is not None:
@@ -796,7 +822,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         asr_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+                    if (
+                        TORCH_AVAILABLE
+                        and torch is not None
+                        and torch.cuda.is_available()
+                    ):
                         torch.cuda.empty_cache()
                         logger.info("ASR model unloaded and GPU cache cleared")
                     else:
@@ -804,7 +834,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 except (AttributeError, RuntimeError, OSError) as e:
                     logger.warning("Error during ASR model unload", error=str(e))
                 except Exception as e:
-                    logger.warning("Unexpected error during ASR model unload", error=str(e))
+                    logger.warning(
+                        "Unexpected error during ASR model unload", error=str(e)
+                    )
                 asr_model = None
 
         # =====================================================================
@@ -840,6 +872,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Step 3a: Load LLM model using LLMProcessor directly
             from src.processors.llm import LLMProcessor
+
             llm_model = LLMProcessor()
             # Trigger lazy loading
             llm_model._load_model()
@@ -856,21 +889,25 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             if needs_enhancement:
                 try:
                     input_char_count = len(transcription)
-                    input_word_count = len(transcription.split()) if transcription else 0
-                    
+                    input_word_count = (
+                        len(transcription.split()) if transcription else 0
+                    )
+
                     logger.info(
                         f"=== LLM INPUT: Text enhancement | {input_char_count:,} chars | {input_word_count:,} words ===",
                         char_count=input_char_count,
                         word_count=input_word_count,
                     )
-                    
+
                     enhanced_result = llm_model.enhance_text(transcription)
                     if enhanced_result.get("enhancement_applied", False):
                         clean_transcript = enhanced_result["enhanced_text"]
                         logger.info(
                             f"=== LLM OUTPUT: Text enhanced | {len(clean_transcript):,} chars | {len(clean_transcript.split()) if clean_transcript else 0:,} words | Edit rate: {enhanced_result.get('edit_rate', 0):.2%} ===",
                             char_count=len(clean_transcript),
-                            word_count=len(clean_transcript.split()) if clean_transcript else 0,
+                            word_count=len(clean_transcript.split())
+                            if clean_transcript
+                            else 0,
                             edit_rate=enhanced_result.get("edit_rate", 0),
                             edit_distance=enhanced_result.get("edit_distance", 0),
                         )
@@ -906,21 +943,25 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                 try:
-                    logger.info("Generating structured summary", template_id=template_id)
-                    
+                    logger.info(
+                        "Generating structured summary", template_id=template_id
+                    )
+
                     # Log the ASR transcript being passed to LLM
                     transcript_char_count = len(clean_transcript)
-                    transcript_word_count = len(clean_transcript.split()) if clean_transcript else 0
-                    
-                    
+                    transcript_word_count = (
+                        len(clean_transcript.split()) if clean_transcript else 0
+                    )
+
                     logger.info(
                         f"=== LLM INPUT: ASR transcript for summary | {transcript_char_count:,} chars | {transcript_word_count:,} words ===",
                         template_id=template_id,
                         char_count=transcript_char_count,
                         word_count=transcript_word_count,
-                        preview=clean_transcript[:200] + ("..." if len(clean_transcript) > 200 else ""),
+                        preview=clean_transcript[:200]
+                        + ("..." if len(clean_transcript) > 200 else ""),
                     )
-                    
+
                     summary_result = llm_model.generate_summary(
                         transcript=clean_transcript, template_id=template_id
                     )
@@ -949,7 +990,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         },
                     )
                 except Exception as e:
-                    logger.error("Unexpected summary generation exception", error=str(e))
+                    logger.error(
+                        "Unexpected summary generation exception", error=str(e)
+                    )
                     raise LLMProcessingError(
                         message=f"Unexpected summary generation exception: {str(e)}",
                         details={
@@ -987,7 +1030,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         llm_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if TORCH_AVAILABLE and torch is not None and torch.cuda.is_available():
+                    if (
+                        TORCH_AVAILABLE
+                        and torch is not None
+                        and torch.cuda.is_available()
+                    ):
                         torch.cuda.empty_cache()
                         logger.info("LLM model unloaded and GPU cache cleared")
                     else:
@@ -995,7 +1042,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 except (AttributeError, RuntimeError, OSError) as e:
                     logger.warning("Error during LLM model unload", error=str(e))
                 except Exception as e:
-                    logger.warning("Unexpected error during LLM model unload", error=str(e))
+                    logger.warning(
+                        "Unexpected error during LLM model unload", error=str(e)
+                    )
                 llm_model = None
 
         # =====================================================================
@@ -1086,7 +1135,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 "completed_at": datetime.now(timezone.utc).isoformat(),
             }
             redis_conn.hset(task_key, mapping=error_details)
-            
+
             # Log the error
             logger.error(
                 f"Task {task_key} failed at stage 'pipeline_execution': {e}",
@@ -1110,16 +1159,24 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         }
     except (ConnectionError, TimeoutError, OSError) as e:
         # Network and I/O related errors - return structured response
-        error_code = "NETWORK_ERROR" if isinstance(e, (ConnectionError, TimeoutError)) else "FILE_SYSTEM_ERROR"
-        error_type = "NetworkError" if isinstance(e, (ConnectionError, TimeoutError)) else "FileSystemError"
-        
+        error_code = (
+            "NETWORK_ERROR"
+            if isinstance(e, (ConnectionError, TimeoutError))
+            else "FILE_SYSTEM_ERROR"
+        )
+        error_type = (
+            "NetworkError"
+            if isinstance(e, (ConnectionError, TimeoutError))
+            else "FileSystemError"
+        )
+
         logger.error(
             f"Network/IO error during audio processing: {str(e)}",
             task_id=job_id,
             error_code=error_code,
             error=str(e),
         )
-        
+
         return {
             "status": "error",
             "error": {
@@ -1132,16 +1189,20 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
     except (MemoryError, RuntimeError) as e:
         # System resource errors - return structured response
-        error_code = "MODEL_MEMORY_ERROR" if isinstance(e, MemoryError) else "PROCESSING_ERROR"
-        error_type = "ModelMemoryError" if isinstance(e, MemoryError) else "ProcessingError"
-        
+        error_code = (
+            "MODEL_MEMORY_ERROR" if isinstance(e, MemoryError) else "PROCESSING_ERROR"
+        )
+        error_type = (
+            "ModelMemoryError" if isinstance(e, MemoryError) else "ProcessingError"
+        )
+
         logger.error(
             f"System resource error during audio processing: {str(e)}",
             task_id=job_id,
             error_code=error_code,
             error=str(e),
         )
-        
+
         return {
             "status": "error",
             "error": {
@@ -1160,7 +1221,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error_code="PROCESSING_ERROR",
             error=str(e),
         )
-        
+
         return {
             "status": "error",
             "error": {
@@ -1179,6 +1240,3 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         "status": "error",
         "error": {"message": "Unexpected error path taken"},
     }
-
-
-

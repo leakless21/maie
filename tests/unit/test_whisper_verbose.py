@@ -12,9 +12,7 @@ class TestWhisperVerbose:
 
     def _test_whisper_verbose_setting(self, verbose_components, expected_verbose):
         """Helper method to test Whisper verbose setting."""
-        with patch(
-            "src.config.loader.settings.verbose_components", verbose_components
-        ):
+        with patch("src.config.loader.settings.verbose_components", verbose_components):
             with patch("os.path.exists", return_value=True):  # Mock path exists
                 # Mock the faster_whisper module
                 mock_fw = MagicMock()

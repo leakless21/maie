@@ -1,6 +1,5 @@
 """Tests for log file functionality and configuration."""
 
-import json
 from unittest.mock import patch
 
 import pytest
@@ -81,10 +80,13 @@ class TestLogFileFunctionality:
                 for line in lines:
                     if line.strip():
                         # Should contain pipe separators
-                        assert " | " in line, f"Log line doesn't match expected plain text format: {line}"
+                        assert " | " in line, (
+                            f"Log line doesn't match expected plain text format: {line}"
+                        )
                         # Should contain a log level
                         assert any(
-                            level in line for level in ["INFO", "ERROR", "DEBUG", "WARNING"]
+                            level in line
+                            for level in ["INFO", "ERROR", "DEBUG", "WARNING"]
                         ), f"Log line doesn't contain log level: {line}"
                         # Should contain our test message
                         if "Test serialized message" in line:
@@ -106,7 +108,9 @@ class TestLogFileFunctionality:
         try:
             # Configure logging with custom rotation and retention
             with patch.object(settings, "log_dir", log_dir):
-                with patch.object(settings.logging, "log_rotation", "1 KB"):  # Small rotation for testing
+                with patch.object(
+                    settings.logging, "log_rotation", "1 KB"
+                ):  # Small rotation for testing
                     with patch.object(settings.logging, "log_retention", "1 day"):
                         with patch.object(settings, "log_dir", log_dir):
                             logger = configure_logging()
@@ -125,12 +129,18 @@ class TestLogFileFunctionality:
 
                             # With small rotation size, we might have multiple log files
                             log_files = list(log_dir.glob("app.log*"))
-                            assert len(log_files) >= 1, "At least one log file should exist"
+                            assert len(log_files) >= 1, (
+                                "At least one log file should exist"
+                            )
         finally:
             # Restore original settings
             with patch.object(settings, "log_dir", original_log_dir):
-                with patch.object(settings.logging, "log_rotation", original_log_rotation):
-                    with patch.object(settings.logging, "log_retention", original_log_retention):
+                with patch.object(
+                    settings.logging, "log_rotation", original_log_rotation
+                ):
+                    with patch.object(
+                        settings.logging, "log_retention", original_log_retention
+                    ):
                         configure_logging()  # Reconfigure with original settings
 
     def test_log_directory_creation(self, tmp_path):
@@ -183,7 +193,9 @@ class TestLogFileFunctionality:
 
                 # Files should be readable by owner (at minimum)
                 assert app_stat.st_mode & 0o400, "app.log should be readable by owner"
-                assert errors_stat.st_mode & 0o400, "errors.log should be readable by owner"
+                assert errors_stat.st_mode & 0o400, (
+                    "errors.log should be readable by owner"
+                )
         finally:
             # Restore original log directory
             with patch.object(settings, "log_dir", original_log_dir):
@@ -260,7 +272,9 @@ class TestLogFileFunctionality:
             # Configure logging with Loguru disabled but force=True
             # Note: The original test was incorrect as configure_logging doesn't accept a force parameter
             # We'll test the actual behavior by temporarily changing settings
-            with patch.object(settings, "enable_loguru", True):  # Force it to be enabled
+            with patch.object(
+                settings, "enable_loguru", True
+            ):  # Force it to be enabled
                 with patch.object(settings, "log_dir", log_dir):
                     logger = configure_logging()
 
@@ -281,13 +295,14 @@ class TestLogFileFunctionality:
             # Restore original log directory
             with patch.object(settings, "log_dir", original_log_dir):
                 configure_logging()  # Reconfigure with original settings
+
     def test_error_log_uses_configured_rotation_and_retention(self, tmp_path):
         """Test that error log uses rotation and retention settings from config instead of hardcoded values."""
         original_log_dir = settings.log_dir
         original_log_rotation = settings.logging.log_rotation
         original_log_retention = settings.logging.log_retention
         log_dir = tmp_path / "test_logs"
-        
+
         try:
             # Mock settings to use specific rotation/retention values
             with patch.object(settings, "log_dir", log_dir):
@@ -295,27 +310,30 @@ class TestLogFileFunctionality:
                     with patch.object(settings.logging, "log_retention", "2 days"):
                         # Configure logging
                         logger = configure_logging()
-                        
+
                         # Log an error message
                         logger.error("Test error message for rotation test")
                         logger.complete()
-                        
+
                         # Check that error log was created
                         errors_log = log_dir / "errors.log"
                         assert errors_log.exists(), "errors.log should be created"
-                        
+
                         # Verify the error log contains the test message
                         errors_content = errors_log.read_text()
                         assert "Test error message for rotation test" in errors_content
         finally:
             # Restore original settings
             with patch.object(settings, "log_dir", original_log_dir):
-                with patch.object(settings.logging, "log_rotation", original_log_rotation):
-                    with patch.object(settings.logging, "log_retention", original_log_retention):
+                with patch.object(
+                    settings.logging, "log_rotation", original_log_rotation
+                ):
+                    with patch.object(
+                        settings.logging, "log_retention", original_log_retention
+                    ):
                         configure_logging()  # Reconfigure with original settings
-        
+
         # Additional verification that the settings were properly applied
         # would require more complex mocking of the loguru internals
         # For now, we verify that the configuration method was called with the correct parameters
         # by ensuring the error log exists and contains the expected content
-

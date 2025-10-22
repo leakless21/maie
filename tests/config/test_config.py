@@ -42,7 +42,6 @@ class TestAppSettingsStructure:
         assert settings.asr.whisper_beam_size == 7
 
 
-
 class TestDirectoryManagement:
     def test_directories_created_on_demand(self):
         with tempfile.TemporaryDirectory() as tmp_dir:

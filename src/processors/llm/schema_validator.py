@@ -97,11 +97,13 @@ def validate_llm_output(
     # Log the raw output for debugging (truncated if too long)
     output_preview = output.strip()[:200] + ("..." if len(output.strip()) > 200 else "")
     logger.debug(f"Validating LLM output: {output_preview!r}")
-    
+
     # First, try to parse as JSON
     try:
         parsed_data = json.loads(output.strip())
-        logger.debug(f"Successfully parsed JSON with {len(parsed_data)} top-level keys: {list(parsed_data.keys())}")
+        logger.debug(
+            f"Successfully parsed JSON with {len(parsed_data)} top-level keys: {list(parsed_data.keys())}"
+        )
     except json.JSONDecodeError as e:
         # Enhanced logging for JSON parse failures
         logger.error(
@@ -112,10 +114,10 @@ def validate_llm_output(
                 "raw_output": output.strip(),
                 "output_length": len(output.strip()),
                 "output_preview": output_preview,
-                "line": getattr(e, 'lineno', 'unknown'),
-                "column": getattr(e, 'colno', 'unknown'),
-                "position": getattr(e, 'pos', 'unknown')
-            }
+                "line": getattr(e, "lineno", "unknown"),
+                "column": getattr(e, "colno", "unknown"),
+                "position": getattr(e, "pos", "unknown"),
+            },
         )
         return None, f"Invalid JSON format: {e}"
 
@@ -130,7 +132,7 @@ def validate_llm_output(
         error_msg = f"Schema validation failed: {e.message}"
         if e.path:
             error_msg += f" (at path: {' -> '.join(str(p) for p in e.path)})"
-        
+
         logger.error(
             "Schema validation failed",
             extra={
@@ -148,9 +150,9 @@ def validate_llm_output(
                 "schema_summary": {
                     "type": schema.get("type"),
                     "properties": list(schema.get("properties", {}).keys()),
-                    "required": schema.get("required", [])
-                }
-            }
+                    "required": schema.get("required", []),
+                },
+            },
         )
         return None, error_msg
     except Exception as e:
@@ -162,8 +164,8 @@ def validate_llm_output(
                 "error_message": str(e),
                 "raw_output": output.strip(),
                 "output_preview": output_preview,
-                "parsed_data": parsed_data if 'parsed_data' in locals() else None
-            }
+                "parsed_data": parsed_data if "parsed_data" in locals() else None,
+            },
         )
         return None, error_msg
 

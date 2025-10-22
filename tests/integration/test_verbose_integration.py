@@ -68,4 +68,3 @@ class TestVerboseIntegration:
         except (subprocess.CalledProcessError, FileNotFoundError):
             # Expected if FFmpeg not available
             pytest.skip("FFmpeg not available for integration test")
-

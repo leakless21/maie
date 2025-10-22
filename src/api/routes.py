@@ -60,7 +60,9 @@ def _patch_logging_queue_listener() -> None:
         for handler in handlers.values():
             listener = handler.get("listener")
             if listener == "litestar.logging.standard.LoggingQueueListener":
-                handler["listener"] = "ext://litestar.logging.standard.LoggingQueueListener"
+                handler["listener"] = (
+                    "ext://litestar.logging.standard.LoggingQueueListener"
+                )
         return original_dict_config(config, *args, **kwargs)
 
     logging.config.dictConfig = dict_config_patched  # type: ignore[assignment]
@@ -333,9 +335,10 @@ class ProcessController(Controller):
         features_value = prepared_data.get("features")
         if isinstance(features_value, str):
             # Handle JSON string format
-            if features_value.startswith('[') and features_value.endswith(']'):
+            if features_value.startswith("[") and features_value.endswith("]"):
                 try:
                     import json
+
                     parsed = json.loads(features_value)
                     if isinstance(parsed, list):
                         prepared_data["features"] = parsed
@@ -345,10 +348,16 @@ class ProcessController(Controller):
                     prepared_data["features"] = [features_value]
             else:
                 prepared_data["features"] = [features_value]
-        elif isinstance(features_value, list) and len(features_value) == 1 and isinstance(features_value[0], str) and features_value[0].startswith('['):
+        elif (
+            isinstance(features_value, list)
+            and len(features_value) == 1
+            and isinstance(features_value[0], str)
+            and features_value[0].startswith("[")
+        ):
             # Handle case where multipart parser wraps JSON string in a list
             try:
                 import json
+
                 parsed = json.loads(features_value[0])
                 if isinstance(parsed, list):
                     prepared_data["features"] = parsed
@@ -370,6 +379,7 @@ class ProcessController(Controller):
 
         # Normalize and validate asr_backend
         from src.processors.asr.factory import ASRFactory
+
         if isinstance(asr_backend, str):
             asr_backend = asr_backend.strip().lower()
         else:
@@ -385,22 +395,26 @@ class ProcessController(Controller):
                 status_code=HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=error.message,
             )
-        
+
         # Normalize features to list - support both JSON array and repeated fields
-        if isinstance(features_raw, str) and features_raw.startswith('[') and features_raw.endswith(']'):
+        if (
+            isinstance(features_raw, str)
+            and features_raw.startswith("[")
+            and features_raw.endswith("]")
+        ):
             try:
                 features_raw = json.loads(features_raw)
             except json.JSONDecodeError:
                 features_raw = [features_raw]
         elif not isinstance(features_raw, list):
             features_raw = [features_raw] if features_raw else []
-        
+
         # Parse features into Feature enum
         if features_raw:
             features = [Feature(f) if isinstance(f, str) else f for f in features_raw]
         else:
             features = [Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY]
-        
+
         # Validate file present and type
         if not file or not isinstance(file, UploadFile):
             error = APIValidationError(
@@ -475,10 +489,15 @@ class ProcessController(Controller):
             )
 
         # Normalize features to string values for downstream checks
-        normalized_features = [f.value if isinstance(f, Feature) else f for f in features]
+        normalized_features = [
+            f.value if isinstance(f, Feature) else f for f in features
+        ]
 
         # Validate template_id if summary is requested
-        if "summary" in normalized_features or Feature.SUMMARY.value in normalized_features:
+        if (
+            "summary" in normalized_features
+            or Feature.SUMMARY.value in normalized_features
+        ):
             if not template_id:
                 error = APIValidationError(
                     message="template_id is required when summary is in features",
@@ -586,56 +605,63 @@ def scan_templates_directory() -> TemplatesResponseSchema:
             "name": "Bản tóm tắt chung (v1)",
             "description": "Mẫu này cung cấp một cái nhìn tổng quan ngắn gọn về một văn bản. Nó bao gồm một bản tóm tắt ngắn, một tiêu đề và danh sách các điểm chính.",
             "example": {
-              "title": "Tác động của AI lên năng suất làm việc",
-              "summary": "Bài nói trình bày cách các công cụ trí tuệ nhân tạo hỗ trợ tự động hóa tác vụ lặp lại, gợi ý nội dung và cải thiện tốc độ xử lý công việc. Diễn giả nhấn mạnh tầm quan trọng của việc thiết lập quy trình kiểm duyệt để đảm bảo chất lượng và đạo đức khi áp dụng AI vào môi trường doanh nghiệp.",
-              "key_topics": [
-                "Tự động hóa tác vụ",
-                "Gợi ý nội dung",
-                "Quy trình kiểm duyệt",
-                "Đạo đức trong AI"
-              ],
-              "tags": ["ai", "năng suất", "doanh nghiệp"]
-            }
+                "title": "Tác động của AI lên năng suất làm việc",
+                "summary": "Bài nói trình bày cách các công cụ trí tuệ nhân tạo hỗ trợ tự động hóa tác vụ lặp lại, gợi ý nội dung và cải thiện tốc độ xử lý công việc. Diễn giả nhấn mạnh tầm quan trọng của việc thiết lập quy trình kiểm duyệt để đảm bảo chất lượng và đạo đức khi áp dụng AI vào môi trường doanh nghiệp.",
+                "key_topics": [
+                    "Tự động hóa tác vụ",
+                    "Gợi ý nội dung",
+                    "Quy trình kiểm duyệt",
+                    "Đạo đức trong AI",
+                ],
+                "tags": ["ai", "năng suất", "doanh nghiệp"],
+            },
         },
         {
             "id": "interview_transcript_v1",
             "name": "Bản ghi phỏng vấn (v1)",
             "description": "Mẫu này được thiết kế để tóm tắt các cuộc phỏng vấn. Nó bao gồm một tiêu đề, một bản tóm tắt ngắn gọn của cuộc trò chuyện và danh sách các câu hỏi và câu trả lời.",
             "example": {
-              "interview_summary": "Cuộc phỏng vấn với chị An, trưởng nhóm sản phẩm, xoay quanh kinh nghiệm triển khai quy trình phát hành nhanh. Chị chia sẻ về việc rút ngắn chu kỳ phát hành bằng cách tăng tự động hóa kiểm thử, chuẩn hóa tiêu chí chấp nhận và cải thiện giao tiếp giữa nhóm phát triển và vận hành.",
-              "key_insights": [
-                "Tự động hóa kiểm thử giúp rút ngắn chu kỳ phát hành",
-                "Tiêu chí chấp nhận rõ ràng hạn chế lỗi phát sinh",
-                "Tăng cường giao tiếp giữa Dev và Ops"
-              ],
-              "participant_sentiment": "positive",
-              "tags": ["sản phẩm", "quy trình", "phỏng vấn"]
-            }
+                "interview_summary": "Cuộc phỏng vấn với chị An, trưởng nhóm sản phẩm, xoay quanh kinh nghiệm triển khai quy trình phát hành nhanh. Chị chia sẻ về việc rút ngắn chu kỳ phát hành bằng cách tăng tự động hóa kiểm thử, chuẩn hóa tiêu chí chấp nhận và cải thiện giao tiếp giữa nhóm phát triển và vận hành.",
+                "key_insights": [
+                    "Tự động hóa kiểm thử giúp rút ngắn chu kỳ phát hành",
+                    "Tiêu chí chấp nhận rõ ràng hạn chế lỗi phát sinh",
+                    "Tăng cường giao tiếp giữa Dev và Ops",
+                ],
+                "participant_sentiment": "positive",
+                "tags": ["sản phẩm", "quy trình", "phỏng vấn"],
+            },
         },
         {
             "id": "meeting_notes_v1",
             "name": "Ghi chú cuộc họp (v1)",
             "description": "Mẫu này dùng để tóm tắt các cuộc họp. Nó bao gồm tiêu đề cuộc họp, bản tóm tắt cuộc thảo luận, danh sách các mục hành động và các quyết định chính đã được đưa ra.",
             "example": {
-              "title": "Họp dự án X – rà soát tiến độ và phân công",
-              "participants": ["Minh", "Lan", "Hùng"],
-              "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
-              "agenda": [
-                "Cập nhật tiến độ sprint",
-                "Phạm vi phát hành",
-                "Phân công công việc"
-              ],
-              "decisions": [
-                "Ưu tiên xử lý lỗi còn tồn đọng",
-                "Giữ nguyên phạm vi tính năng hiện tại"
-              ],
-              "action_items": [
-                {"description": "Lan tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "assignee": "Lan", "due_date": "2025-10-23"},
-                {"description": "Hùng cập nhật test cases cho tính năng thanh toán", "assignee": "Hùng"}
-              ],
-              "tags": ["họp nhóm", "dự án", "kế hoạch"]
-            }
-        }
+                "title": "Họp dự án X – rà soát tiến độ và phân công",
+                "participants": ["Minh", "Lan", "Hùng"],
+                "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
+                "agenda": [
+                    "Cập nhật tiến độ sprint",
+                    "Phạm vi phát hành",
+                    "Phân công công việc",
+                ],
+                "decisions": [
+                    "Ưu tiên xử lý lỗi còn tồn đọng",
+                    "Giữ nguyên phạm vi tính năng hiện tại",
+                ],
+                "action_items": [
+                    {
+                        "description": "Lan tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm",
+                        "assignee": "Lan",
+                        "due_date": "2025-10-23",
+                    },
+                    {
+                        "description": "Hùng cập nhật test cases cho tính năng thanh toán",
+                        "assignee": "Hùng",
+                    },
+                ],
+                "tags": ["họp nhóm", "dự án", "kế hoạch"],
+            },
+        },
     ]
 
     templates = []

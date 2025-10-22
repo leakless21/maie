@@ -88,7 +88,10 @@ def start_worker() -> None:
 
     # Create RQ worker with connection - use settings for worker name
     worker = Worker(
-        listen, connection=redis_conn, name=settings.worker.worker_name, exception_handlers=[]
+        listen,
+        connection=redis_conn,
+        name=settings.worker.worker_name,
+        exception_handlers=[],
     )
 
     get_logger().info("Starting worker {}", worker.name)
@@ -101,17 +104,19 @@ if __name__ == "__main__":
     # when vLLM is loaded from within an RQ worker process (not __main__).
     # See: https://docs.vllm.ai/en/latest/design/multiprocessing.html
     import os
+
     os.environ["VLLM_ENABLE_V1_MULTIPROCESSING"] = "0"
-    
+
     # Enforce spawn start method for CUDA compatibility with vLLM
     import multiprocessing as mp
+
     try:
         if mp.get_start_method(allow_none=True) != "spawn":
             mp.set_start_method("spawn", force=True)
     except RuntimeError:
         # Start method already set, ignore
         pass
-    
+
     # Apply opt-in Loguru configuration at worker startup.
     # Always configure Loguru at startup.
     logger = configure_logging()
@@ -120,6 +125,7 @@ if __name__ == "__main__":
     logger.info("Loguru configuration active (phase1) - worker")
     try:
         from src.config import settings as _settings_for_log
+
         logger.info(
             "verbose_components={} debug={}",
             _settings_for_log.verbose_components,

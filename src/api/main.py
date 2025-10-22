@@ -16,7 +16,11 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from litestar import Litestar, Response, get
-from litestar.exceptions import HTTPException, NotAuthorizedException, ValidationException
+from litestar.exceptions import (
+    HTTPException,
+    NotAuthorizedException,
+    ValidationException,
+)
 from litestar.openapi import OpenAPIConfig
 from litestar.status_codes import HTTP_422_UNPROCESSABLE_ENTITY
 
@@ -40,7 +44,12 @@ logger = get_module_logger(__name__)
 logger.info("Loguru configuration active (phase1) - api")
 try:
     from src.config import settings as _settings_for_log
-    logger.info("verbose_components={} debug={}", _settings_for_log.verbose_components, _settings_for_log.debug)
+
+    logger.info(
+        "verbose_components={} debug={}",
+        _settings_for_log.verbose_components,
+        _settings_for_log.debug,
+    )
 except Exception:
     pass
 openapi_config = OpenAPIConfig(
@@ -57,7 +66,9 @@ def _handle_not_authorized(_: Any, exc: Exception) -> Response:
 def _handle_generic(_: Any, exc: Exception) -> Response:
     # Log full exception details server-side; keep generic client response
     try:
-        logger.opt(exception=exc).error("Unhandled exception during request: {}", str(exc))
+        logger.opt(exception=exc).error(
+            "Unhandled exception during request: {}", str(exc)
+        )
     except Exception:
         pass
     return Response({"detail": "Internal Server Error"}, status_code=500)
@@ -66,10 +77,17 @@ def _handle_generic(_: Any, exc: Exception) -> Response:
 def _handle_http_exception(_: Any, exc: HTTPException) -> Response:
     # Preserve HTTPException semantics (status + detail)
     try:
-        logger.warning("HTTPException {}: {}", getattr(exc, "status_code", 500), getattr(exc, "detail", ""))
+        logger.warning(
+            "HTTPException {}: {}",
+            getattr(exc, "status_code", 500),
+            getattr(exc, "detail", ""),
+        )
     except Exception:
         pass
-    return Response({"detail": getattr(exc, "detail", "")}, status_code=getattr(exc, "status_code", 500))
+    return Response(
+        {"detail": getattr(exc, "detail", "")},
+        status_code=getattr(exc, "status_code", 500),
+    )
 
 
 def _handle_validation_exception(_: Any, exc: ValidationException) -> Response:
@@ -85,7 +103,7 @@ async def health() -> HealthResponse:
     """Return a comprehensive health response suitable for orchestration checks."""
     from src.api.dependencies import get_results_redis, get_rq_queue
     from rq import Worker
-    
+
     # Check Redis connection
     redis_connected = False
     try:
@@ -95,7 +113,7 @@ async def health() -> HealthResponse:
         await redis_client.aclose()
     except Exception:
         pass
-    
+
     # Get queue depth
     queue_depth = 0
     try:
@@ -103,20 +121,21 @@ async def health() -> HealthResponse:
         queue_depth = queue.count
     except Exception:
         pass
-    
+
     # Check for active workers
     worker_active = False
     try:
         from src.api.dependencies import get_sync_redis
+
         sync_redis = get_sync_redis()
         worker_count = Worker.count(connection=sync_redis)
         worker_active = worker_count > 0
     except Exception:
         pass
-    
+
     # Determine overall status
     status = "healthy" if redis_connected and worker_active else "unhealthy"
-    
+
     return HealthResponse(
         status=status,
         version=getattr(settings, "pipeline_version", "unknown"),
@@ -154,17 +173,17 @@ if not getattr(app, "cors_config", None):
 if __name__ == "__main__":
     import uvicorn
     import logging
-    
+
     # Configure uvicorn to use our logging system
     uvicorn_logger = logging.getLogger("uvicorn")
     uvicorn_logger.handlers = []
     uvicorn_logger.propagate = True
-    
+
     # Suppress uvicorn's default logging to avoid duplicate messages
     uvicorn.run(
-        app, 
+        app,
         host=settings.api.host,
         port=settings.api.port,
         log_config=None,  # Disable uvicorn's default logging config
-        access_log=False  # Disable access logs to reduce noise
+        access_log=False,  # Disable access logs to reduce noise
     )

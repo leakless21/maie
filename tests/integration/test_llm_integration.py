@@ -533,55 +533,60 @@ class TestLLMCUDAMultiprocessingIntegration:
 
     @patch("torch.cuda.is_available")
     @patch("torch.cuda.device_count")
-    def test_llm_loads_after_cuda_initialization(self, mock_device_count, mock_cuda_available):
+    def test_llm_loads_after_cuda_initialization(
+        self, mock_device_count, mock_cuda_available
+    ):
         """Test that vLLM loads successfully after CUDA has been initialized."""
         # Setup - simulate CUDA being available and initialized
         mock_cuda_available.return_value = True
         mock_device_count.return_value = 1
-        
+
         # Simulate prior CUDA usage by calling torch.cuda operations
         try:
             import torch
+
             # This simulates the ASR model loading that happens before LLM
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
         except ImportError:
             # Skip if torch not available
             pytest.skip("PyTorch not available")
-        
+
         # Mock vLLM components
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
         mock_model.generate.return_value = [Mock(outputs=[Mock(text="test output")])]
-        
+
         with patch("vllm.LLM") as mock_llm_class:
             mock_llm_class.return_value = mock_model
-            
+
             with patch("src.processors.llm.calculate_checkpoint_hash") as mock_hash:
                 mock_hash.return_value = "test-hash"
-                
+
                 with patch("src.processors.llm.get_model_info") as mock_info:
                     mock_info.return_value = {
                         "model_name": "test-model",
                         "checkpoint_hash": "test-hash",
                     }
-                    
-                    with patch("src.processors.llm.processor.settings") as mock_settings:
+
+                    with patch(
+                        "src.processors.llm.processor.settings"
+                    ) as mock_settings:
                         mock_settings.llm_enhance_model = "test-model"
                         mock_settings.llm_enhance_gpu_memory_utilization = 0.9
                         mock_settings.llm_enhance_max_model_len = 16384
                         mock_settings.llm_enhance_quantization = None
                         mock_settings.verbose_components = False
-                        
+
                         # Create processor and load model
                         processor = LLMProcessor()
-                        
+
                         # This should not raise RuntimeError about CUDA initialization
                         processor._load_model()
-                        
+
                         # Verify vLLM was called
                         mock_llm_class.assert_called_once()
-                        
+
                         # Verify model is loaded
                         assert processor._model_loaded is True
                         assert processor.model is not None
