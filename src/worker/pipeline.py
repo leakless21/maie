@@ -568,17 +568,6 @@ def execute_llm_processing(
                 transcript_char_count = len(clean_transcript)
                 transcript_word_count = len(clean_transcript.split()) if clean_transcript else 0
                 
-                # CRITICAL DEBUG - Print to stdout
-                print(f"\n{'='*80}")
-                print(f"CRITICAL DEBUG - Pipeline LLM Input Check")
-                print(f"{'='*80}")
-                print(f"Original transcription length: {len(transcription)}")
-                print(f"Clean transcript length: {len(clean_transcript)}")
-                print(f"Clean transcript is empty: {len(clean_transcript.strip()) == 0}")
-                print(f"First 200 chars of clean_transcript: {clean_transcript[:200]}")
-                print(f"First 200 chars of original transcription: {transcription[:200]}")
-                print(f"Are they the same? {clean_transcript == transcription}")
-                print(f"{'='*80}\n")
                 
                 logger.info(
                     f"=== LLM INPUT: ASR transcript for summary | {transcript_char_count:,} chars | {transcript_word_count:,} words ===",
@@ -1118,24 +1107,6 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 confidence=confidence,
             )
             
-            # DEBUG: Log ASR transcript content for troubleshooting
-            # Write to file to avoid log truncation
-            debug_file = Path("/tmp") / f"asr_debug_{job_id}.txt"
-            try:
-                with open(debug_file, "w", encoding="utf-8") as f:
-                    f.write(f"=== ASR TRANSCRIPT DEBUG ===\n")
-                    f.write(f"Task ID: {job_id}\n")
-                    f.write(f"Type: {type(transcription).__name__}\n")
-                    f.write(f"Length: {len(transcription) if transcription else 0} chars\n")
-                    f.write(f"Words: {len(transcription.split()) if transcription else 0}\n")
-                    f.write(f"Empty: {not transcription or len(transcription.strip()) == 0}\n")
-                    f.write(f"\n=== FIRST 1000 CHARACTERS ===\n")
-                    f.write(transcription[:1000] if transcription else "(None)")
-                    f.write(f"\n\n=== FULL TRANSCRIPT ===\n")
-                    f.write(transcription if transcription else "(None)")
-                logger.info(f"=== ASR DEBUG WRITTEN TO: {debug_file} ===", task_id=job_id)
-            except Exception as e:
-                logger.error(f"Failed to write ASR debug file: {e}", task_id=job_id)
         finally:
             # Step 2c: CRITICAL - Always unload ASR model to free GPU memory
             if asr_model is not None:

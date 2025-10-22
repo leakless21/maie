@@ -353,13 +353,6 @@ class LLMProcessor(LLMBackend):
                     metadata={"task": task, "error": "Missing template_id"},
                 )
             
-            # CRITICAL DEBUG - Log to logger at the very beginning
-            logger.info(f"=== CRITICAL DEBUG - LLM Processor Execute Method ===")
-            logger.info(f"Template ID: {template_id}")
-            logger.info(f"Text length: {len(text)}")
-            logger.info(f"Text is empty: {len(text.strip()) == 0}")
-            logger.info(f"First 200 chars of text: {text[:200]}")
-            logger.info(f"=== END CRITICAL DEBUG ===")
             
             # Load schema for guided decoding
             logger.info(f"About to load schema for template {template_id}")
@@ -402,53 +395,8 @@ class LLMProcessor(LLMBackend):
                 logger.info(f"Messages array built, count: {len(messages)}")
                 logger.info(f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})")
                 logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
-                # CRITICAL DEBUG - Log to logger
-                logger.info(f"=== CRITICAL DEBUG - LLM Input Check ===")
-                logger.info(f"Text length: {len(text)}")
-                logger.info(f"Text is empty: {len(text.strip()) == 0}")
-                logger.info(f"First 200 chars of text: {text[:200]}")
-                logger.info(f"User message length: {len(user_message_content)}")
-                logger.info(f"First 200 chars of user message: {user_message_content[:200]}")
-                logger.info(f"System prompt length: {len(system_prompt)}")
-                logger.info(f"First 200 chars of system prompt: {system_prompt[:200]}")
-                logger.info(f"Messages count: {len(messages)}")
-                logger.info(f"Message 1 role: {messages[0]['role']}")
-                logger.info(f"Message 1 length: {len(messages[0]['content'])}")
-                logger.info(f"Message 2 role: {messages[1]['role']}")
-                logger.info(f"Message 2 length: {len(messages[1]['content'])}")
-                logger.info(f"Message 2 first 500 chars: {messages[1]['content'][:500]}")
-                logger.info(f"Message 2 last 500 chars: {messages[1]['content'][-500:]}")
-                logger.info(f"Full message 2 content length: {len(messages[1]['content'])}")
-                logger.info(f"Full message 2 content: {messages[1]['content']}")
-                logger.info(f"System prompt first 500 chars: {messages[0]['content'][:500]}")
-                logger.info(f"System prompt last 500 chars: {messages[0]['content'][-500:]}")
-                logger.info(f"=== END CRITICAL DEBUG ===")
                 logger.debug(f"Built messages for chat API with template {template_id}")
                 
-                # DEBUG: Write to file to avoid log truncation
-                from pathlib import Path
-                import time
-                debug_file = Path("/tmp") / f"llm_debug_{template_id}_{int(time.time())}.txt"
-                try:
-                    with open(debug_file, "w", encoding="utf-8") as f:
-                        f.write(f"=== CHAT API DEBUG ===\n")
-                        f.write(f"Template: {template_id}\n")
-                        f.write(f"Transcript length: {len(text)} chars\n")
-                        f.write(f"Transcript empty: {len(text.strip()) == 0}\n")
-                        f.write(f"User message length: {len(user_message_content)} chars\n")
-                        f.write(f"\n=== SYSTEM PROMPT (first 1000 chars) ===\n")
-                        f.write(system_prompt[:1000])
-                        f.write(f"\n\n=== TRANSCRIPT (first 1000 chars) ===\n")
-                        f.write(text[:1000])
-                        f.write(f"\n\n=== USER MESSAGE (first 1000 chars) ===\n")
-                        f.write(user_message_content[:1000])
-                        f.write(f"\n\n=== FULL MESSAGES ===\n")
-                        # Only write message structure, not full content to keep file size reasonable
-                        f.write(f"Message 1 (system): {len(system_prompt)} chars\n")
-                        f.write(f"Message 2 (user): {len(user_message_content)} chars\n")
-                    logger.info(f"=== LLM DEBUG WRITTEN TO: {debug_file} ===")
-                except Exception as e:
-                    logger.error(f"Failed to write LLM debug file: {e}")
                 use_chat_api = True
             except Exception as e:
                 logger.error(f"Exception in chat API message building: {e}")
@@ -906,17 +854,6 @@ class LLMProcessor(LLMBackend):
 
         # Render summary prompt (template now includes chat formatting)
         try:
-            # Debug: Log the ASR transcript input
-            logger.info(
-                f"ASR transcript input for summary",
-                extra={
-                    "template_id": template_id,
-                    "transcript_length": len(transcript),
-                    "transcript_preview": transcript[:200] + ("..." if len(transcript) > 200 else ""),
-                    "transcript_is_empty": len(transcript.strip()) == 0,
-                    "transcript_word_count": len(transcript.split()) if transcript else 0
-                }
-            )
             
             prompt = self.prompt_renderer.render(
                 template_id,
@@ -924,17 +861,6 @@ class LLMProcessor(LLMBackend):
                 schema=json.dumps(schema, indent=2)
             )
             
-            # Debug: Log the rendered prompt
-            logger.debug(
-                f"Rendered prompt for LLM",
-                extra={
-                    "template_id": template_id,
-                    "prompt_length": len(prompt),
-                    "prompt_preview": prompt[:500] + ("..." if len(prompt) > 500 else ""),
-                    "schema_included": "schema" in prompt.lower(),
-                    "transcript_included": "transcript" in prompt.lower()
-                }
-            )
         except Exception as e:
             logger.error(f"Failed to render summary prompt: {e}")
             return {
@@ -1021,7 +947,7 @@ class LLMProcessor(LLMBackend):
                     f"About to call LLM inference (attempt {retry_count + 1})",
                     extra={
                         "attempt": retry_count + 1,
-                        "prompt_length": len(prompt_for_attempt),
+                        "transcript_length": len(transcript),
                         "sampling_params": {
                             "temperature": current_temperature,
                             "max_tokens": sampling_kwargs.get("max_tokens"),
@@ -1032,7 +958,7 @@ class LLMProcessor(LLMBackend):
                 
                 inference_start_time = time.time()
                 result = self.execute(
-                    prompt_for_attempt, task="summary", template_id=template_id, **sampling_kwargs
+                    transcript, task="summary", template_id=template_id, **sampling_kwargs
                 )
                 inference_end_time = time.time()
                 inference_duration = inference_end_time - inference_start_time

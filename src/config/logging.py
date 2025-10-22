@@ -65,10 +65,13 @@ def intercept_stdlib_logging(level: int | str = logging.INFO) -> None:
     )
     
     # Intercept common third-party loggers
-    for name in ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio"]:
+    for name in ["uvicorn", "uvicorn.error", "uvicorn.access", "vLLM", "asyncio", "watchfiles"]:
         logger = logging.getLogger(name)
         logger.handlers = []
         logger.propagate = True
+        # Set level to WARNING to reduce noise from uvicorn
+        if name.startswith("uvicorn"):
+            logger.setLevel(logging.WARNING)
 
 def get_logger():
     """Return the configured Loguru logger."""

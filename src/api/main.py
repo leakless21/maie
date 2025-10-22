@@ -153,5 +153,18 @@ if not getattr(app, "cors_config", None):
     app.cors_config = _MinimalCors()
 if __name__ == "__main__":
     import uvicorn
-
-    uvicorn.run(app, host=settings.api_host, port=settings.api_port)
+    import logging
+    
+    # Configure uvicorn to use our logging system
+    uvicorn_logger = logging.getLogger("uvicorn")
+    uvicorn_logger.handlers = []
+    uvicorn_logger.propagate = True
+    
+    # Suppress uvicorn's default logging to avoid duplicate messages
+    uvicorn.run(
+        app, 
+        host=settings.api_host, 
+        port=settings.api_port,
+        log_config=None,  # Disable uvicorn's default logging config
+        access_log=False  # Disable access logs to reduce noise
+    )

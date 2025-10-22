@@ -121,9 +121,9 @@ elif [[ "$API_ONLY" == true ]]; then
   trap cleanup SIGINT SIGTERM
   
   if [[ "$RELOAD" == true ]]; then
-    exec pixi run api --host "$HOST" --port "$PORT" --reload
+    exec pixi run api --host "$HOST" --port "$PORT" --reload 
   else
-    exec pixi run api --host "$HOST" --port "$PORT"
+    exec pixi run api --host "$HOST" --port "$PORT" 
   fi
 elif [[ "$WORKER_ONLY" == true ]]; then
   echo "Starting worker process..."
@@ -166,9 +166,9 @@ else
   
   # Start API server in background
   if [[ "$RELOAD" == true ]]; then
-    pixi run api --host "$HOST" --port "$PORT" --reload &
+    pixi run api --host "$HOST" --port "$PORT" --reload --log-level warning &
   else
-    pixi run api --host "$HOST" --port "$PORT" &
+    pixi run api --host "$HOST" --port "$PORT" --log-level warning &
   fi
   API_PID=$!
   
