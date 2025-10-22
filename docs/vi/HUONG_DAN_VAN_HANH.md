@@ -161,7 +161,13 @@ Hệ thống tương thích với các kiến trúc GPU NVIDIA sau:
 | `REDIS_RESULTS_DB` | Số DB Redis cho kết quả | `1` |
 | `MAX_QUEUE_DEPTH` | Kích thước hàng đợi tối đa | `50` |
 
-#### Cấu hình Mô hình ASR (Whisper)
+#### Cấu hình Mô hình ASR (ChunkFormer - Mặc định)
+
+| Biến | Mô tả | Mặc định |
+|---|---|---|
+| `CHUNKFORMER_MODEL_NAME` | Tên mô hình ChunkFormer | `khanhld/chunkformer-rnnt-large-vie` |
+
+#### Cấu hình Mô hình ASR (Whisper - Thay thế)
 
 | Biến | Mô tả | Mặc định |
 |----------|-------------|---------|

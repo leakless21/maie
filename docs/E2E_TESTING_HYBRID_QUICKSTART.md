@@ -264,7 +264,7 @@ Response:
 ```json
 {
   "task_id": "abc123...",
-  "status": "QUEUED"
+  "status": "PENDING"
 }
 ```
 

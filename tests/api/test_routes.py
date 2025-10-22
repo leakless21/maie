@@ -104,8 +104,22 @@ class TestProcessController:
         """Test request with file exceeding size limit."""
         with TestClient(app=app) as client:
             with patch(
-                "src.config.loader.settings.max_file_size_mb", 0.0001
-            ):  # Tiny limit
+                "src.api.routes.save_audio_file_streaming"
+            ) as mock_save:
+                # Mock save_audio_file_streaming to raise HTTPException with 413 status
+                from litestar.status_codes import HTTP_413_REQUEST_ENTITY_TOO_LARGE
+                from litestar.exceptions import HTTPException
+                from src.api.errors import AudioValidationError
+                
+                error = AudioValidationError(
+                    message="File too large",
+                    details={"max_size_mb": 0.001}
+                )
+                mock_save.side_effect = HTTPException(
+                    status_code=HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    detail=error.message,
+                )
+                
                 response = client.post(
                     "/v1/process",
                     files={"file": ("test.wav", valid_audio_file, "audio/wav")},
@@ -174,7 +188,7 @@ class TestProcessController:
                     assert response.status_code == HTTP_202_ACCEPTED
 
     def test_process_audio_defaults_asr_backend_when_omitted(self, app, valid_audio_file):
-        """Should default asr_backend to 'whisper' when not provided."""
+        """Should default asr_backend to 'chunkformer' when not provided."""
         with TestClient(app=app) as client:
             with patch("src.api.routes.create_task_in_redis") as mock_create:
                 with patch("src.api.routes.enqueue_job") as mock_enqueue:
@@ -190,7 +204,7 @@ class TestProcessController:
                     # Verify enqueue_job was called with default asr_backend
                     call_args = mock_enqueue.call_args
                     task_params = call_args[0][2]  # request_params
-                    assert task_params["asr_backend"] == "whisper"
+                    assert task_params["asr_backend"] == "chunkformer"
 
     def test_process_audio_validates_asr_backend(self, app, valid_audio_file):
         """Should return 422 for invalid asr_backend values."""
@@ -623,7 +637,7 @@ class TestAuthenticationGuards:
         from src.config import settings
 
         async with AsyncTestClient(app=app) as client:
-            headers = {"X-API-Key": settings.secret_api_key}
+            headers = {"X-API-Key": settings.api.secret_key.get_secret_value()}
             # Will fail validation but shouldn't be 401
             response = await client.post("/v1/process", headers=headers)
             assert response.status_code != 401

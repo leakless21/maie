@@ -16,13 +16,13 @@ Architecture Overview: The system uses a three-tier architecture with API server
 
 #### 2. V1.0 Features & Functional Requirements (FR)
 
-- FR-1: Audio Ingestion — The system MUST accept at least `.wav` and `.mp3` audio formats via `multipart/form-data` upload.
+- FR-1: Audio Ingestion — The system MUST accept popular audio formats including `.wav`, `.mp3`, `.m4a`, and `.flac` via `multipart/form-data` upload.
 
 - FR-2: ASR Backend — The system provides two ASR backends for V1.0:
 
-  - whisper: Default backend for V1.0, using Whisper-based models via CTranslate2 runtime. The default model variant is EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), which provides native punctuation and capitalization, optimized for throughput with VAD filtering.
+  - chunkformer: Default backend for V1.0, optimized for long-form audio transcription and single-request latency. The default model variant is `khanhld/chunkformer-rnnt-large-vie`, which provides chunk-wise processing with configurable context windows.
 
-  - chunkformer: Alternative backend for long-form audio transcription, using ChunkFormer models optimized for single-request latency. The default model variant is `khanhld/chunkformer-rnnt-large-vie`, which provides chunk-wise processing with configurable context windows and significantly faster processing for long audio files.
+  - whisper: Alternative backend using Whisper-based models via CTranslate2 runtime. The default model variant is EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), which provides native punctuation and capitalization, optimized for throughput with VAD filtering.
 
   **V1.0 ASR Feature Scope:**
 
@@ -92,7 +92,7 @@ Request Body (`multipart/form-data`)
   - Values: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics`.
   - Default: `["clean_transcript", "summary"]`.
   - Note: `tags` is NO LONGER a separate feature. Tags are embedded in the `summary` output via the template schema.
-- `asr_backend`: Backend selection between `"whisper"` (default) and `"chunkformer"` for different use cases.
+- `asr_backend`: Backend selection between `"chunkformer"` (default) and `"whisper"` for different use cases.
 - `template_id` (str): The summary format. (Required if `summary` is in `features`)
   - Templates should include a `tags` field (array of 1-5 strings) for automatic categorization.
 
@@ -121,7 +121,7 @@ Successful Final Response (JSON Body)
         "vad_filter": true
       }
     },
-    "summarization_llm": {
+    "llm": {
       "name": "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit",
       "checkpoint_hash": "f6g7h8i9j0k1...",
       "quantization": "awq-4bit",

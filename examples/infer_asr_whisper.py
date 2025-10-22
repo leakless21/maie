@@ -27,11 +27,7 @@ if _PROJECT_ROOT not in sys.path:
 from src.config import configure_logging, get_logger
 from src.config.logging import get_module_logger
 from src.processors.audio import AudioPreprocessor
-from src.worker.pipeline import (
-    execute_asr_transcription,
-    load_asr_model,
-    unload_asr_model,
-)
+from src.processors.asr.factory import ASRFactory
 
 
 def main() -> int:
@@ -95,11 +91,17 @@ def main() -> int:
 
     asr = None
     try:
-        asr = load_asr_model("whisper", **config)
-        # Phase 1: execute_asr_transcription now returns (ASRResult, rtf, metadata)
-        asr_result, rtf, _meta = execute_asr_transcription(
-            asr, processing_audio_path, audio_duration
-        )
+        asr = ASRFactory.create("whisper", **config)
+        logger.info("ASR model loaded", backend="whisper")
+        
+        # Execute ASR transcription
+        import time
+        start_time = time.time()
+        asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
+        processing_time = time.time() - start_time
+        
+        # Calculate RTF (Real-Time Factor)
+        rtf = processing_time / audio_duration if audio_duration > 0 else 0.0
         
         if args.json:
             result_dict = {
@@ -107,7 +109,7 @@ def main() -> int:
                 "rtf": rtf,
                 "confidence": asr_result.confidence,
             }
-            # Include segments if available (Phase 1 enhancement)
+            # Include segments if available
             if asr_result.segments:
                 result_dict["segments"] = asr_result.segments
             print(json.dumps(result_dict))
@@ -133,7 +135,8 @@ def main() -> int:
     finally:
         if asr is not None:
             try:
-                unload_asr_model(asr)
+                asr.unload()
+                logger.info("ASR model unloaded")
             except Exception:
                 logger.warning("Failed to unload ASR model cleanly")
 

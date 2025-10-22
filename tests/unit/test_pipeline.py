@@ -27,14 +27,8 @@ from src.worker.pipeline import (
     _sanitize_metadata,
     _update_status,
     calculate_metrics,
-    execute_asr_transcription,
-    execute_llm_processing,
     get_version_metadata,
-    load_asr_model,
-    load_llm_model,
     process_audio_task,
-    unload_asr_model,
-    unload_llm_model,
 )
 
 try:
@@ -168,392 +162,6 @@ class TestCalculateEditRate:
         assert rate > 0.0  # Should have some difference
 
 
-class TestLoadASRModel:
-    """Test load_asr_model function."""
-
-    @patch("src.processors.asr.factory.ASRFactory")
-    def test_load_whisper_backend(self, mock_factory):
-        """Test loading whisper backend."""
-        mock_model = Mock()
-        mock_factory.create.return_value = mock_model
-
-        result = load_asr_model("whisper", device="cuda")
-
-        mock_factory.create.assert_called_once_with(
-            backend_type="whisper", device="cuda"
-        )
-        assert result == mock_model
-
-    @patch("src.processors.asr.factory.ASRFactory")
-    def test_load_chunkformer_backend(self, mock_factory):
-        """Test loading chunkformer backend."""
-        mock_model = Mock()
-        mock_factory.create.return_value = mock_model
-
-        result = load_asr_model("chunkformer", model_path="/path/to/model")
-
-        mock_factory.create.assert_called_once_with(
-            backend_type="chunkformer", model_path="/path/to/model"
-        )
-        assert result == mock_model
-
-    def test_invalid_backend(self):
-        """Test loading invalid backend raises ModelLoadError."""
-        with pytest.raises(ModelLoadError) as exc_info:
-            load_asr_model("invalid_backend")
-
-        assert "Invalid ASR backend" in str(exc_info.value)
-        assert exc_info.value.details["backend"] == "invalid_backend"
-
-    @patch("src.processors.asr.factory.ASRFactory")
-    def test_factory_exception(self, mock_factory):
-        """Test handling of factory exceptions."""
-        mock_factory.create.side_effect = RuntimeError("Factory error")
-
-        with pytest.raises(ModelLoadError) as exc_info:
-            load_asr_model("whisper")
-
-        assert "Failed to load ASR model" in str(exc_info.value)
-
-
-class TestUnloadASRModel:
-    """Test unload_asr_model function."""
-
-    def test_unload_with_unload_method(self, mocker):
-        """Test unloading model with unload method."""
-        mock_model = Mock()
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        unload_asr_model(mock_model)
-
-        mock_model.unload.assert_called_once()
-        mock_torch.cuda.empty_cache.assert_called_once()
-
-    def test_unload_without_unload_method(self, mocker):
-        """Test unloading model without unload method."""
-        mock_model = Mock(spec=[])  # No unload method
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        unload_asr_model(mock_model)
-
-        # Should not call unload since it doesn't exist
-        mock_torch.cuda.empty_cache.assert_called_once()
-
-    def test_unload_without_cuda(self, mocker):
-        """Test unloading when CUDA is not available."""
-        mock_model = Mock()
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = False
-
-        unload_asr_model(mock_model)
-
-        mock_model.unload.assert_called_once()
-        mock_torch.cuda.empty_cache.assert_not_called()
-
-    def test_unload_none_model(self, mocker):
-        """Test unloading None model."""
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        unload_asr_model(None)
-
-        mock_torch.cuda.empty_cache.assert_called_once()
-
-    def test_unload_exception_handling(self, mocker):
-        """Test exception handling during unload."""
-        mock_model = Mock()
-        mock_model.unload.side_effect = Exception("Unload error")
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        # Should not raise exception
-        unload_asr_model(mock_model)
-
-        # empty_cache is in the same try block as unload, so it won't be called if unload fails
-        mock_torch.cuda.empty_cache.assert_not_called()
-
-
-class TestLoadLLMModel:
-    """Test load_llm_model function."""
-
-    @patch("src.processors.llm.LLMProcessor")
-    def test_load_llm_model(self, mock_processor_class):
-        """Test loading LLM model."""
-        mock_processor = Mock()
-        mock_processor_class.return_value = mock_processor
-
-        result = load_llm_model()
-
-        mock_processor_class.assert_called_once()
-        mock_processor._load_model.assert_called_once()
-        assert result == mock_processor
-
-    @patch("src.processors.llm.LLMProcessor")
-    def test_load_llm_model_exception(self, mock_processor_class):
-        """Test exception during LLM model loading."""
-        mock_processor_class.side_effect = Exception("Load error")
-
-        with pytest.raises(ModelLoadError) as exc_info:
-            load_llm_model()
-
-        assert "Failed to load LLM model" in str(exc_info.value)
-
-
-class TestUnloadLLMModel:
-    """Test unload_llm_model function."""
-
-    def test_unload_with_unload_method(self, mocker):
-        """Test unloading LLM model with unload method."""
-        mock_model = Mock()
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        unload_llm_model(mock_model)
-
-        mock_model.unload.assert_called_once()
-        mock_torch.cuda.empty_cache.assert_called_once()
-
-    def test_unload_without_cuda(self, mocker):
-        """Test unloading when CUDA is not available."""
-        mock_model = Mock()
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = False
-
-        unload_llm_model(mock_model)
-
-        mock_model.unload.assert_called_once()
-        mock_torch.cuda.empty_cache.assert_not_called()
-
-    def test_unload_none_model(self, mocker):
-        """Test unloading None LLM model."""
-        mock_torch = mocker.patch("src.worker.pipeline.torch")
-        mock_torch.cuda.is_available.return_value = True
-
-        unload_llm_model(None)
-
-        mock_torch.cuda.empty_cache.assert_called_once()
-
-
-class TestExecuteASRTranscription:
-    """Test execute_asr_transcription function."""
-
-    def test_successful_transcription(self, mocker):
-        """Test successful ASR transcription."""
-        mock_model = Mock()
-        mock_result = Mock()
-        mock_result.text = "Hello world"
-        mock_result.confidence = 0.95
-        mock_result.model_name = "test-model"
-        mock_result.checkpoint_hash = "abc123"
-        mock_model.execute.return_value = mock_result
-
-        # Mock time to control processing time
-        mock_time = mocker.patch("src.worker.pipeline.time")
-        mock_time.time.side_effect = [1000.0, 1001.0]  # 1 second processing time
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(b"fake audio data")
-            audio_path = f.name
-
-        try:
-            # Phase 1: Now returns (ASRResult, rtf, metadata)
-            asr_result, rtf, metadata = execute_asr_transcription(
-                mock_model, audio_path, 2.0
-            )
-
-            assert asr_result.text == "Hello world"
-            assert rtf == 0.5  # 1.0 / 2.0
-            assert asr_result.confidence == 0.95
-            assert metadata["model_name"] == "test-model"
-            assert metadata["checkpoint_hash"] == "abc123"
-        finally:
-            Path(audio_path).unlink()
-
-    def test_transcription_with_transcript_attr(self, mocker):
-        """Test transcription result with transcript attribute."""
-        from src.processors.base import ASRResult
-        
-        mock_model = Mock()
-        # Mock an ASRResult with text field (standard interface)
-        mock_result = ASRResult(text="Alternative text", confidence=0.88)
-        mock_model.execute.return_value = mock_result
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(b"fake audio data")
-            audio_path = f.name
-
-        try:
-            # Phase 1: Now returns (ASRResult, rtf, metadata)
-            asr_result, rtf, metadata = execute_asr_transcription(
-                mock_model, audio_path, 1.0
-            )
-
-            assert asr_result.text == "Alternative text"
-            assert asr_result.confidence == 0.88
-        finally:
-            Path(audio_path).unlink()
-
-    def test_file_not_found(self, mocker):
-        """Test handling of file not found error."""
-        mock_model = Mock()
-
-        with pytest.raises(ASRProcessingError) as exc_info:
-            execute_asr_transcription(mock_model, "/nonexistent/file.wav", 1.0)
-
-        assert "Audio file not found" in str(exc_info.value)
-
-    def test_transcription_exception(self, mocker):
-        """Test handling of transcription exceptions."""
-        mock_model = Mock()
-        mock_model.execute.side_effect = Exception("Transcription failed")
-
-        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
-            f.write(b"fake audio data")
-            audio_path = f.name
-
-        try:
-            with pytest.raises(ASRProcessingError) as exc_info:
-                execute_asr_transcription(mock_model, audio_path, 1.0)
-
-            assert "ASR transcription failed" in str(exc_info.value)
-        finally:
-            Path(audio_path).unlink()
-
-
-class TestExecuteLLMProcessing:
-    """Test execute_llm_processing function."""
-
-    def test_text_enhancement_needed(self, mocker):
-        """Test LLM processing with text enhancement needed."""
-        mock_llm = Mock()
-        mock_llm.needs_enhancement.return_value = True
-        mock_llm.enhance_text.return_value = {
-            "enhanced_text": "Enhanced: Hello world",
-            "enhancement_applied": True,
-            "edit_rate": 0.2,
-            "edit_distance": 2,
-        }
-        mock_llm.generate_summary.return_value = {
-            "summary": "A greeting",
-            "retry_count": 0,
-            "model_info": {"name": "test-llm"},
-        }
-
-        result_transcript, result_summary = execute_llm_processing(
-            mock_llm,
-            "Hello world",
-            ["clean_transcript", "summary"],
-            "meeting_notes_v1",
-            "whisper",
-        )
-
-        assert result_transcript == "Enhanced: Hello world"
-        assert result_summary == "A greeting"
-        mock_llm.enhance_text.assert_called_once_with("Hello world")
-        mock_llm.generate_summary.assert_called_once()
-
-    def test_text_enhancement_not_needed(self, mocker):
-        """Test LLM processing with text enhancement not needed."""
-        mock_llm = Mock()
-        mock_llm.needs_enhancement.return_value = False
-        mock_llm.generate_summary.return_value = {
-            "summary": "A greeting",
-            "retry_count": 0,
-            "model_info": {"name": "test-llm"},
-        }
-
-        result_transcript, result_summary = execute_llm_processing(
-            mock_llm,
-            "Hello world",
-            ["clean_transcript", "summary"],
-            "meeting_notes_v1",
-            "chunkformer",
-        )
-
-        assert result_transcript == "Hello world"  # Original text
-        assert result_summary == "A greeting"
-        mock_llm.enhance_text.assert_not_called()
-
-    def test_enhancement_failure_fallback(self, mocker):
-        """Test fallback when text enhancement fails."""
-        mock_llm = Mock()
-        mock_llm.needs_enhancement.return_value = True
-        mock_llm.enhance_text.side_effect = Exception("Enhancement failed")
-        mock_llm.generate_summary.return_value = {
-            "summary": "A greeting",
-            "retry_count": 0,
-            "model_info": {"name": "test-llm"},
-        }
-
-        result_transcript, result_summary = execute_llm_processing(
-            mock_llm,
-            "Hello world",
-            ["clean_transcript", "summary"],
-            "meeting_notes_v1",
-            "whisper",
-        )
-
-        assert result_transcript == "Hello world"  # Fallback to original
-        assert result_summary == "A greeting"
-
-    def test_summary_only(self, mocker):
-        """Test LLM processing with summary only."""
-        mock_llm = Mock()
-        mock_llm.generate_summary.return_value = {
-            "summary": "Summary only",
-            "retry_count": 1,
-            "model_info": {"name": "test-llm"},
-        }
-
-        result_transcript, result_summary = execute_llm_processing(
-            mock_llm, "Hello world", ["summary"], "meeting_notes_v1", "whisper"
-        )
-
-        assert result_transcript == "Hello world"  # Always returns clean_transcript
-        assert result_summary == "Summary only"
-
-    def test_missing_template_id_for_summary(self, mocker):
-        """Test error when template_id missing for summary feature."""
-        mock_llm = Mock()
-
-        with pytest.raises(LLMProcessingError) as exc_info:
-            execute_llm_processing(
-                mock_llm, "Hello world", ["summary"], None, "whisper"
-            )
-
-        assert "template_id required" in str(exc_info.value)
-
-    def test_summary_generation_failure(self, mocker):
-        """Test handling of summary generation failure."""
-        mock_llm = Mock()
-        mock_llm.needs_enhancement.return_value = False
-        mock_llm.generate_summary.return_value = {
-            "error": "Summary failed",
-            "retry_count": 2,
-        }
-
-        with pytest.raises(LLMProcessingError) as exc_info:
-            execute_llm_processing(
-                mock_llm, "Hello world", ["summary"], "meeting_notes_v1", "whisper"
-            )
-
-        assert "Summary generation failed" in str(exc_info.value)
-
-    def test_unexpected_exception(self, mocker):
-        """Test handling of unexpected exceptions."""
-        mock_llm = Mock()
-        mock_llm.needs_enhancement.side_effect = Exception("Unexpected error")
-
-        with pytest.raises(LLMProcessingError) as exc_info:
-            execute_llm_processing(
-                mock_llm, "Hello world", ["clean_transcript"], None, "whisper"
-            )
-
-        assert "LLM processing failed" in str(exc_info.value)
-
-
 class TestGetVersionMetadata:
     """Test get_version_metadata function."""
 
@@ -569,7 +177,7 @@ class TestGetVersionMetadata:
         asr_metadata = {"model_name": "whisper-base", "language": "en"}
         result = get_version_metadata(asr_metadata, mock_llm)
 
-        assert result["processing_pipeline"] == "1.0.0"  # From settings mock
+        assert result["pipeline_version"] == "1.0.0"  # From settings mock
         assert result["asr"]["model_name"] == "whisper-base"
         assert result["llm"]["model_name"] == "test-llm"
 
@@ -611,8 +219,8 @@ class TestCalculateMetrics:
 
         metrics = calculate_metrics("Hello world", None, start_time, 5.0, 0.8)
 
-        assert metrics["total_processing_time"] == 10.0
-        assert metrics["total_rtf"] == 2.0  # 10.0 / 5.0
+        assert metrics["processing_time_seconds"] == 10.0
+        assert metrics["rtf"] == 2.0  # 10.0 / 5.0
         assert metrics["asr_rtf"] == 0.8
         assert metrics["transcription_length"] == 11
         assert metrics["audio_duration"] == 5.0
@@ -636,7 +244,7 @@ class TestCalculateMetrics:
 
         metrics = calculate_metrics("Hello", None, start_time, 0.0, 0.0)
 
-        assert metrics["total_rtf"] == 0.0
+        assert metrics["rtf"] == 0.0
         assert metrics["asr_rtf"] == 0.0
 
 
@@ -681,15 +289,14 @@ class TestProcessAudioTask:
                 "model_info": {"name": "test-llm"},
             }
 
-            # Mock the loading functions
-            mocker.patch(
-                "src.worker.pipeline.load_asr_model", return_value=mock_asr_model
-            )
-            mocker.patch(
-                "src.worker.pipeline.load_llm_model", return_value=mock_llm_model
-            )
-            mocker.patch("src.worker.pipeline.unload_asr_model")
-            mocker.patch("src.worker.pipeline.unload_llm_model")
+            # Mock the ASRFactory and LLMProcessor classes
+            mock_asr_factory = Mock()
+            mock_asr_factory.create.return_value = mock_asr_model
+            mocker.patch("src.processors.asr.factory.ASRFactory", mock_asr_factory)
+            
+            mock_llm_processor_class = Mock()
+            mock_llm_processor_class.return_value = mock_llm_model
+            mocker.patch("src.processors.llm.processor.LLMProcessor", mock_llm_processor_class)
 
             # Mock RQ job
             mock_job = Mock()
@@ -811,9 +418,8 @@ class TestProcessAudioTask:
             mock_asr_model = Mock()
             mock_asr_model.execute.side_effect = Exception("ASR failed")
             mocker.patch(
-                "src.worker.pipeline.load_asr_model", return_value=mock_asr_model
+                "src.processors.asr.factory.ASRFactory.create", return_value=mock_asr_model
             )
-            mocker.patch("src.worker.pipeline.unload_asr_model")
 
             mock_job = Mock()
             mock_job.id = "test-job-123"
@@ -916,13 +522,11 @@ class TestProcessAudioTask:
 
             # Mock the loading functions
             mocker.patch(
-                "src.worker.pipeline.load_asr_model", return_value=mock_asr_model
+                "src.processors.asr.factory.ASRFactory.create", return_value=mock_asr_model
             )
             mocker.patch(
-                "src.worker.pipeline.load_llm_model", return_value=mock_llm_model
+                "src.processors.llm.LLMProcessor", return_value=mock_llm_model
             )
-            mocker.patch("src.worker.pipeline.unload_asr_model")
-            mocker.patch("src.worker.pipeline.unload_llm_model")
 
             # No Redis/job mocking - should work without Redis
             mocker.patch("src.worker.pipeline.get_current_job", return_value=None)

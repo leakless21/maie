@@ -137,10 +137,10 @@ def validate_configuration():
     api_key = os.getenv("LLM_TEST_API_KEY")
     if not enhance_model_path and (not api_key):
         issues.append("Cần cấu hình model path hoặc API key")
-    if not settings.templates_dir.exists():
-        warnings.append(f"Templates directory không tồn tại: {settings.templates_dir}")
-    if not settings.models_dir.exists():
-        warnings.append(f"Models directory không tồn tại: {settings.models_dir}")
+    if not settings.paths.templates_dir.exists():
+        warnings.append(f"Templates directory không tồn tại: {settings.paths.templates_dir}")
+    if not settings.paths.models_dir.exists():
+        warnings.append(f"Models directory không tồn tại: {settings.paths.models_dir}")
     if settings.llm_enhance_temperature < 0 or settings.llm_enhance_temperature > 2:
         warnings.append(
             f"LLM enhancement temperature ngoài phạm vi hợp lệ: {settings.llm_enhance_temperature}"
@@ -196,8 +196,8 @@ def main():
     logger.info("   🏗️  Cấu hình từ config.py:")
     logger.info(f"      - Environment: {settings.environment}")
     logger.debug(f"      - Debug mode: {settings.debug}")
-    logger.info(f"      - Templates dir: {settings.templates_dir}")
-    logger.info(f"      - Models dir: {settings.models_dir}")
+    logger.info(f"      - Templates dir: {settings.paths.templates_dir}")
+    logger.info(f"      - Models dir: {settings.paths.models_dir}")
     env = os.environ.copy()
     env.update(
         {

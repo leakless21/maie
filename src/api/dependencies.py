@@ -33,7 +33,7 @@ async def get_redis_client() -> AsyncRedis:
         AsyncRedis: Async Redis client instance
     """
     client = AsyncRedis.from_url(
-        settings.redis_url, encoding="utf-8", decode_responses=True
+        settings.redis.url, encoding="utf-8", decode_responses=True
     )
     return client
 
@@ -49,7 +49,7 @@ async def get_results_redis() -> AsyncRedis:
         AsyncRedis: Async Redis client for results
     """
     # Use results DB by replacing /0 with /{redis_results_db} in URL
-    results_url = settings.redis_url.replace("/0", f"/{settings.redis_results_db}")
+    results_url = settings.redis.url.replace("/0", f"/{settings.redis.results_db}")
     client = AsyncRedis.from_url(
         results_url,
         encoding="utf-8",
@@ -72,7 +72,7 @@ def get_sync_redis() -> SyncRedis:
         SyncRedis: Synchronous Redis client for RQ
     """
     client = SyncRedis.from_url(
-        settings.redis_url, encoding="utf-8", decode_responses=True
+        settings.redis.url, encoding="utf-8", decode_responses=True
     )
     return client
 
@@ -131,8 +131,14 @@ async def api_key_guard(
 
     # Use timing-safe comparison
     try:
-        expected = getattr(settings, "secret_api_key", None)
-        fallback_keys = tuple(getattr(settings, "fallback_api_keys", ()))
+        # Read keys from nested API settings
+        expected_secret = getattr(settings.api, "secret_key", None)
+        expected = (
+            expected_secret.get_secret_value()  # type: ignore[attr-defined]
+            if expected_secret is not None
+            else None
+        )
+        fallback_keys = tuple(getattr(settings.api, "fallback_keys", ()))
         if expected is None and not fallback_keys:
             raise NotAuthorizedException("API key validation not configured")
 
@@ -232,7 +238,7 @@ async def validate_request_data(data: Any) -> bool:
     except Exception:
         raise ValueError("Invalid file size value")
 
-    max_bytes = int(getattr(settings, "max_file_size_mb", 500) * 1024 * 1024)
+    max_bytes = int(settings.api.max_file_size_mb * 1024 * 1024)
     if size_int > max_bytes:
         raise ValueError(f"File too large: {size_int} bytes (max {max_bytes} bytes)")
 

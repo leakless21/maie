@@ -127,7 +127,7 @@ Gửi tệp âm thanh để xử lý không đồng bộ với các tính năng 
 | `file`        | binary | Có         | Tệp âm thanh để xử lý                                                |
 | `features`    | array  | Không          | Danh sách các đầu ra mong muốn (mặc định: `["clean_transcript", "summary"]`)
 | `template_id` | string | Điều kiện | ID mẫu cho định dạng tóm tắt (bắt buộc nếu `summary` trong features)   |
-| `asr_backend` | string | Không          | Lựa chọn backend ASR (mặc định: `"whisper"`)                         |
+| `asr_backend` | string | Không          | Lựa chọn backend ASR (mặc định: `"chunkformer"`)                         |
 
 **Tùy chọn tính năng:**
 
@@ -138,8 +138,8 @@ Gửi tệp âm thanh để xử lý không đồng bộ với các tính năng 
 
 **Tùy chọn backend ASR:**
 
-- `whisper` - Mô hình Whisper của OpenAI (mặc định)
-- `chunkformer` - Mô hình ASR ChunkFormer
+- `chunkformer` - Mô hình ASR ChunkFormer (mặc định)
+- `whisper` - Mô hình Whisper của OpenAI
 
 #### Ví dụ
 
@@ -191,20 +191,17 @@ def process_audio(file_path, api_key, features=None, template_id=None, asr_backe
         features = ["clean_transcript", "summary"]
 
     # Chuẩn bị dữ liệu biểu mẫu đa phần
-    files = {"file": open(file_path, "rb")}
-    data = {}
-
-    # Thêm tính năng dưới dạng các trường biểu mẫu riêng biệt
-    for feature in features:
-        data[f"features"] = feature
-
+    # 'data' phải là một danh sách các tuple để hỗ trợ nhiều giá trị cho cùng một khóa 'features'
+    form_data = [("features", f) for f in features]
     if template_id:
-        data["template_id"] = template_id
-
+        form_data.append(("template_id", template_id))
     if asr_backend != "whisper":
-        data["asr_backend"] = asr_backend
+        form_data.append(("asr_backend", asr_backend))
 
-    response = requests.post(url, headers=headers, files=files, data=data)
+    with open(file_path, "rb") as audio_file:
+        files = {"file": audio_file}
+        response = requests.post(url, headers=headers, files=files, data=form_data)
+    
     return response.json()
 
 # Cách sử dụng
@@ -296,19 +293,21 @@ print(f"Status: {status['status']}")
       }
     },
     "llm": {
-      "name": "qwen3",
-      "checkpoint_hash": "z9y8x7w6v5u4...",
+      "name": "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit",
+      "checkpoint_hash": "f6g7h8i9j0k1...",
       "quantization": "awq-4bit",
       "thinking": false,
       "reasoning_parser": null,
       "structured_output": {
-        "title": "string",
-        "main_points": ["string"],
-        "tags": ["string"]
+        "backend": "json_schema",
+        "schema_id": "meeting_notes_v1",
+        "schema_hash": "sha256:..."
       },
       "decoding_params": {
         "temperature": 0.3,
-        "top_p": 0.9
+        "top_p": 0.9,
+        "top_k": 20,
+        "repetition_penalty": 1.05
       }
     }
   },
@@ -325,6 +324,7 @@ print(f"Status: {status['status']}")
     "clean_transcript": "Cuộc họp ngày 4 tháng 10 đã đề cập...",
     "summary": {
       "title": "Cuộc họp lập kế hoạch ngân sách Q4",
+      "abstract": "Tổng kết đề xuất ngân sách quý 4, tập trung vào phân bổ cho marketing và R&D.",
       "main_points": [
         "Đã phê duyệt ngân sách cho các sáng kiến Q4",
         "Đã thảo luận kế hoạch tuyển dụng mới",
@@ -469,18 +469,18 @@ class C500Client:
         url = f"{self.base_url}/v1/process"
         headers = self._get_headers()
 
+        # Chuẩn bị dữ liệu biểu mẫu multipart.
+        # Phải sử dụng một danh sách các tuple để gửi nhiều giá trị cho khóa 'features'.
+        form_data = [("asr_backend", asr_backend)]
+        if features:
+            for feature in features:
+                form_data.append(("features", feature))
+        if template_id:
+            form_data.append(("template_id", template_id))
+
         with open(file_path, "rb") as audio_file:
             files = {"file": audio_file}
-            data = {"asr_backend": asr_backend}
-
-            if features:
-                for feature in features:
-                    data[f"features"] = feature
-
-            if template_id:
-                data["template_id"] = template_id
-
-            response = requests.post(url, headers=headers, files=files, data=data)
+            response = requests.post(url, headers=headers, files=files, data=form_data)
             response.raise_for_status()
 
         return response.json()

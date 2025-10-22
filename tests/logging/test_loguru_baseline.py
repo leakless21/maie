@@ -150,25 +150,6 @@ def test_update_status_uses_redis_and_logs(monkeypatch):
     )
 
 
-def test_handle_processing_error_updates_redis_and_logs(monkeypatch):
-    fake = FakeRedis()
-    # Replace loguru.logger used inside the function with a DummyLogger so we can inspect records
-    dummy = DummyLogger()
-    monkeypatch.setattr(loguru, "logger", dummy)
-    pipeline.handle_processing_error(
-        fake, "task:999", Exception("boom"), stage="preprocessing", error_code="E1"
-    )
-    assert fake.hset_calls, "Redis.hset was not called by handle_processing_error"
-    key, mapping = fake.hset_calls[-1]
-    assert mapping["stage"] == "preprocessing"
-    assert "error" in mapping and "boom" in mapping["error"]
-    # Loguru logger (dummy) should have an error record containing the stage message
-    assert any(
-        r["level"] == "ERROR" and "failed at stage" in r["message"]
-        for r in dummy.records
-    )
-
-
 def test_pipeline_logging_integration_smoke(monkeypatch):
     # Smoke test: simulate a simple pipeline run where audio_path invalid triggers logging and raises
     dummy = DummyLogger()

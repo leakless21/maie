@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = ["soxr>=1.0.0,<2", "transformers>=4.57.1,<5", "flashinfer-cubin>=0.4.1,<0.5"]
+dependencies = ["soxr>=1.0.0,<2", "transformers>=4.57.1,<5", "flashinfer-cubin>=0.4.1,<0.5", "rq-dashboard>=0.8.5,<0.9"]
 
 
 [dependency-groups]

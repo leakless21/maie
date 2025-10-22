@@ -25,20 +25,20 @@ class TestChunkFormerConfiguration:
 
     def test_config_values_are_correct(self):
         """Verify that ChunkFormer configuration values match TDD specification after V1.0 fixes."""
-        assert settings.chunkformer_chunk_size == 64, (
-            f"chunk_size should be 64 frames, got {settings.chunkformer_chunk_size}"
+        assert settings.chunkformer.chunkformer_chunk_size == 64, (
+            f"chunk_size should be 64 frames, got {settings.chunkformer.chunkformer_chunk_size}"
         )
-        assert settings.chunkformer_left_context_size == 128, (
-            f"left_context_size should be 128 frames, got {settings.chunkformer_left_context_size}"
+        assert settings.chunkformer.chunkformer_left_context_size == 128, (
+            f"left_context_size should be 128 frames, got {settings.chunkformer.chunkformer_left_context_size}"
         )
-        assert settings.chunkformer_right_context_size == 128, (
-            f"right_context_size should be 128 frames, got {settings.chunkformer_right_context_size}"
+        assert settings.chunkformer.chunkformer_right_context_size == 128, (
+            f"right_context_size should be 128 frames, got {settings.chunkformer.chunkformer_right_context_size}"
         )
-        assert settings.chunkformer_total_batch_duration == 14400, (
-            f"total_batch_duration should be 14400 seconds, got {settings.chunkformer_total_batch_duration}"
+        assert settings.chunkformer.chunkformer_total_batch_duration == 14400, (
+            f"total_batch_duration should be 14400 seconds, got {settings.chunkformer.chunkformer_total_batch_duration}"
         )
-        assert settings.chunkformer_return_timestamps == True, (
-            f"return_timestamps should be True, got {settings.chunkformer_return_timestamps}"
+        assert settings.chunkformer.chunkformer_return_timestamps == True, (
+            f"return_timestamps should be True, got {settings.chunkformer.chunkformer_return_timestamps}"
         )
 
     def test_config_description_units(self):

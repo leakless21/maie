@@ -76,8 +76,8 @@ class TestCalculateMetrics:
         )
 
         # Verify required fields per TDD FR-5
-        assert "total_processing_time" in metrics
-        assert "total_rtf" in metrics
+        assert "processing_time_seconds" in metrics
+        assert "rtf" in metrics
         assert "asr_rtf" in metrics
         assert "transcription_length" in metrics
         assert "audio_duration" in metrics
@@ -96,7 +96,7 @@ class TestCalculateMetrics:
         )
 
         # Should be approximately 0.1 seconds (with small tolerance)
-        assert 0.08 < metrics["total_processing_time"] < 0.15
+        assert 0.08 < metrics["processing_time_seconds"] < 0.15
 
     def test_rtf_calculation_with_10_second_audio(self):
         """Test RTF calculation: processing_time / audio_duration."""
@@ -112,7 +112,7 @@ class TestCalculateMetrics:
 
         # RTF = 2.0 / 10.0 = 0.2
         expected_rtf = 2.0 / 10.0
-        assert abs(metrics["total_rtf"] - expected_rtf) < 0.05
+        assert abs(metrics["rtf"] - expected_rtf) < 0.05
 
     def test_rtf_calculation_with_60_second_audio(self):
         """Test RTF with longer audio file."""
@@ -142,7 +142,7 @@ class TestCalculateMetrics:
             asr_rtf=0.0,
         )
 
-        assert metrics["total_rtf"] == 0
+        assert metrics["rtf"] == 0
 
     def test_transcription_length_calculated(self):
         """Test that transcription length is correctly calculated."""
@@ -264,14 +264,14 @@ class TestMetricsWithEnhancement:
 
         # Verify all metrics are present
         assert "edit_rate_cleaning" in metrics
-        assert "total_processing_time" in metrics
-        assert "total_rtf" in metrics
+        assert "processing_time_seconds" in metrics
+        assert "rtf" in metrics
 
         # Edit rate should show significant change
         assert 0.3 < metrics["edit_rate_cleaning"] < 0.8
 
         # RTF should be calculated correctly
-        assert abs(metrics["total_rtf"] - (3.5 / 12.0)) < 0.05
+        assert abs(metrics["rtf"] - (3.5 / 12.0)) < 0.05
 
 
 class TestAudioDurationFlow:
@@ -312,7 +312,7 @@ class TestAudioDurationFlow:
 
         # Verify RTF calculation used the correct duration
         expected_rtf = 5.0 / 42.5
-        assert abs(metrics["total_rtf"] - expected_rtf) < 0.01
+        assert abs(metrics["rtf"] - expected_rtf) < 0.01
 
     def test_audio_duration_fallback_when_missing(self):
         """Test fallback when duration is missing from preprocessing metadata."""

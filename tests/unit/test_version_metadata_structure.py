@@ -30,8 +30,7 @@ class TestVersionMetadataStructure:
         # Verify required top-level keys
         assert "asr" in version_metadata
         assert "llm" in version_metadata
-        assert "maie_worker" in version_metadata
-        assert "processing_pipeline" in version_metadata
+        assert "pipeline_version" in version_metadata
 
     def test_asr_metadata_preserved(self):
         """Test that ASR metadata is fully preserved."""
@@ -66,11 +65,9 @@ class TestVersionMetadataStructure:
 
         version_metadata = get_version_metadata(asr_metadata, llm_model=None)
 
-        assert "maie_worker" in version_metadata
-        assert "processing_pipeline" in version_metadata
+        assert "pipeline_version" in version_metadata
         # Should be semantic version format
-        assert isinstance(version_metadata["maie_worker"], str)
-        assert isinstance(version_metadata["processing_pipeline"], str)
+        assert isinstance(version_metadata["pipeline_version"], str)
 
 
 class TestLLMVersionCollection:
@@ -215,8 +212,7 @@ class TestCompleteVersionMetadata:
         assert version_metadata["asr"]["checkpoint_hash"] == "asr_hash_456"
         assert version_metadata["llm"]["model_name"] == "qwen2.5-3b-instruct"
         assert version_metadata["llm"]["checkpoint_hash"] == "llm_hash_123"
-        assert version_metadata["maie_worker"] == "1.0.0"
-        assert version_metadata["processing_pipeline"] == "1.0.0"
+        assert version_metadata["pipeline_version"] == "1.0.0"
 
     def test_version_metadata_serializable(self):
         """Test that version metadata can be serialized to JSON."""
@@ -258,7 +254,7 @@ class TestVersionMetadataEdgeCases:
         # Should not crash
         assert version_metadata["asr"] == {}
         assert "llm" in version_metadata
-        assert "maie_worker" in version_metadata
+        assert "pipeline_version" in version_metadata
 
     def test_llm_version_with_none_return(self):
         """Test when LLM get_version_info returns None."""

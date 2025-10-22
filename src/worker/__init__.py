@@ -10,9 +10,7 @@ from .main import setup_redis_connection, start_worker, verify_models
 
 # Export pipeline processing functions
 from .pipeline import (
-    ProcessingResult,
     TaskStatus,
-    handle_processing_error,
     process_audio_task,
 )
 
@@ -24,6 +22,4 @@ __all__ = [
     # Pipeline processing functions
     "process_audio_task",
     "TaskStatus",
-    "ProcessingResult",
-    "handle_processing_error",
 ]

@@ -18,7 +18,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.config import configure_logging, get_logger
 from src.config.logging import get_module_logger
 from src.processors.audio import AudioPreprocessor
-from src.worker.pipeline import execute_asr_transcription, load_asr_model, unload_asr_model
+from src.processors.asr.factory import ASRFactory
 
 
 def main() -> int:
@@ -58,14 +58,16 @@ def main() -> int:
     asr = None
     try:
         logger.info(f"Loading ASR model: {args.backend}")
-        asr = load_asr_model(args.backend)
+        asr = ASRFactory.create(args.backend)
         logger.info("ASR model loaded")
 
         # Transcribe
         logger.info("Transcribing audio...")
-        asr_result, rtf, metadata = execute_asr_transcription(
-            asr, str(processing_audio_path), audio_duration
-        )
+        import time
+        start_time = time.time()
+        asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
+        processing_time = time.time() - start_time
+        rtf = processing_time / audio_duration if audio_duration > 0 else 0.0
 
         # Log metrics
         char_count = len(asr_result.text)
@@ -95,7 +97,7 @@ def main() -> int:
     finally:
         if asr is not None:
             try:
-                unload_asr_model(asr)
+                asr.unload()
                 logger.info("ASR model unloaded")
             except Exception:
                 pass

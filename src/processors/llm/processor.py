@@ -47,7 +47,7 @@ class LLMProcessor(LLMBackend):
             model_path: Path to the LLM model file (optional, uses config default)
             **kwargs: Additional backend-specific parameters
         """
-        self.model_path = model_path or settings.llm_enhance_model
+        self.model_path = model_path or settings.llm_enhance.model
         self.model = None
         self.tokenizer = None
         self.checkpoint_hash = None
@@ -56,22 +56,22 @@ class LLMProcessor(LLMBackend):
         self.current_schema_hash = None
 
         # Initialize prompt rendering system
-        template_loader = TemplateLoader(settings.templates_dir / "prompts")
+        template_loader = TemplateLoader(settings.paths.templates_dir / "prompts")
         self.prompt_renderer = PromptRenderer(template_loader)
 
         # Build environment configs for different tasks
         self.env_config_enhancement = GenerationConfig(
-            temperature=settings.llm_enhance_temperature,
-            top_p=settings.llm_enhance_top_p,
-            top_k=settings.llm_enhance_top_k,
-            max_tokens=settings.llm_enhance_max_tokens,
+            temperature=settings.llm_enhance.temperature,
+            top_p=settings.llm_enhance.top_p,
+            top_k=settings.llm_enhance.top_k,
+            max_tokens=settings.llm_enhance.max_tokens,
         )
 
         self.env_config_summary = GenerationConfig(
-            temperature=settings.llm_sum_temperature,
-            top_p=settings.llm_sum_top_p,
-            top_k=settings.llm_sum_top_k,
-            max_tokens=settings.llm_sum_max_tokens,
+            temperature=settings.llm_sum.temperature,
+            top_p=settings.llm_sum.top_p,
+            top_k=settings.llm_sum.top_k,
+            max_tokens=settings.llm_sum.max_tokens,
         )
 
         # Load model lazily (only when first needed)
@@ -176,15 +176,15 @@ class LLMProcessor(LLMBackend):
 
             # Load model with configurable quantization
             quantization_method = (
-                settings.llm_enhance_quantization
+                settings.llm_enhance.quantization
                 or self._detect_quantization_method(model_name)
             )
 
             # Build LLM arguments
             llm_args = {
                 "model": model_name,
-                "gpu_memory_utilization": settings.llm_enhance_gpu_memory_utilization,
-                "max_model_len": settings.llm_enhance_max_model_len,
+                "gpu_memory_utilization": settings.llm_enhance.gpu_memory_utilization,
+                "max_model_len": settings.llm_enhance.max_model_len,
                 "trust_remote_code": True,
                 "enforce_eager": False,  # Use CUDA graphs for performance
             }
@@ -193,16 +193,16 @@ class LLMProcessor(LLMBackend):
             if quantization_method:
                 llm_args["quantization"] = quantization_method
 
-            if settings.llm_enhance_max_num_seqs is not None:
-                llm_args["max_num_seqs"] = settings.llm_enhance_max_num_seqs
-            if settings.llm_enhance_max_num_batched_tokens is not None:
+            if settings.llm_enhance.max_num_seqs is not None:
+                llm_args["max_num_seqs"] = settings.llm_enhance.max_num_seqs
+            if settings.llm_enhance.max_num_batched_tokens is not None:
                 llm_args[
                     "max_num_batched_tokens"
-                ] = settings.llm_enhance_max_num_batched_tokens
-            if settings.llm_enhance_max_num_partial_prefills is not None:
+                ] = settings.llm_enhance.max_num_batched_tokens
+            if settings.llm_enhance.max_num_partial_prefills is not None:
                 llm_args[
                     "max_num_partial_prefills"
-                ] = settings.llm_enhance_max_num_partial_prefills
+                ] = settings.llm_enhance.max_num_partial_prefills
 
             logger.debug(f"Calling LLM() constructor with args: {llm_args}")
             self.model = LLM(**llm_args)
@@ -357,7 +357,7 @@ class LLMProcessor(LLMBackend):
             # Load schema for guided decoding
             logger.info(f"About to load schema for template {template_id}")
             try:
-                schema = load_template_schema(template_id, settings.templates_dir)
+                schema = load_template_schema(template_id, settings.paths.templates_dir)
                 logger.info(f"Schema loaded successfully for template {template_id}")
                 logger.debug(f"Loaded schema for template {template_id}")
             except Exception as e:
@@ -370,60 +370,33 @@ class LLMProcessor(LLMBackend):
                 )
             
             # Build OpenAI-format messages using chat API approach
-            try:
-                logger.info(f"About to render system prompt for template {template_id}")
-                # Render system prompt (contains instructions + schema)
-                system_prompt = self.prompt_renderer.render(
-                    template_id,
-                    schema=json.dumps(schema, ensure_ascii=False, indent=2)
-                )
-                logger.info(f"System prompt rendered successfully, length: {len(system_prompt)}")
-                
-                # Build user message with transcript
-                logger.info(f"About to build user message, text length: {len(text)}")
-                user_message_content = f"Transcript to analyze:\n{text}"
-                logger.info(f"User message content built, length: {len(user_message_content)}")
-                logger.info(f"First 500 chars of user message: {user_message_content[:500]}")
-        
-                
-                # Build messages in OpenAI format
-                logger.info(f"About to build messages array")
-                messages = [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_message_content}
-                ]
-                logger.info(f"Messages array built, count: {len(messages)}")
-                logger.info(f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})")
-                logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
-                logger.debug(f"Built messages for chat API with template {template_id}")
-                
-                use_chat_api = True
-            except Exception as e:
-                logger.error(f"Exception in chat API message building: {e}")
-                logger.error(f"Exception type: {type(e)}")
-                # Fallback to old template rendering if new templates don't exist yet
-                logger.warning(f"Failed to build messages for chat API: {e}. Falling back to old template.")
-                try:
-                    logger.info(f"Using old template rendering approach for template {template_id}")
-                    logger.info(f"Text length: {len(text)}")
-                    logger.info(f"First 200 chars of text: {text[:200]}")
-                    final_prompt = self.prompt_renderer.render(
-                        template_id,
-                        transcript=text,
-                        schema=json.dumps(schema, ensure_ascii=False, indent=2)
-                    )
-                    logger.info(f"Rendered prompt length: {len(final_prompt)}")
-                    logger.info(f"First 200 chars of rendered prompt: {final_prompt[:200]}")
-                    logger.debug(f"Rendered prompt for template {template_id} (fallback)")
-                    use_chat_api = False
-                except Exception as render_error:
-                    logger.error(f"Failed to render template {template_id}: {render_error}")
-                    return LLMResult(
-                        text=text,
-                        tokens_used=None,
-                        model_info=self.model_info or {"model_name": "unknown"},
-                        metadata={"task": task, "error": f"Template render failed: {render_error}"},
-                    )
+            logger.info(f"About to render system prompt for template {template_id}")
+            # Render system prompt (contains instructions + schema)
+            system_prompt = self.prompt_renderer.render(
+                template_id,
+                schema=json.dumps(schema, ensure_ascii=False, indent=2)
+            )
+            logger.info(f"System prompt rendered successfully, length: {len(system_prompt)}")
+            
+            # Build user message with transcript
+            logger.info(f"About to build user message, text length: {len(text)}")
+            user_message_content = f"Transcript to analyze:\n{text}"
+            logger.info(f"User message content built, length: {len(user_message_content)}")
+            logger.info(f"First 500 chars of user message: {user_message_content[:500]}")
+
+            
+            # Build messages in OpenAI format
+            logger.info(f"About to build messages array")
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message_content}
+            ]
+            logger.info(f"Messages array built, count: {len(messages)}")
+            logger.info(f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})")
+            logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
+            logger.debug(f"Built messages for chat API with template {template_id}")
+            
+            use_chat_api = True
             
             # Set up guided decoding if not already provided
             if "guided_decoding" not in kwargs:
@@ -697,9 +670,18 @@ class LLMProcessor(LLMBackend):
         # Store vLLM output metadata if available
         if vllm_outputs and len(vllm_outputs) > 0 and vllm_outputs[0].outputs:
             first_output = vllm_outputs[0].outputs[0]
+            # Handle token_ids that might be a Mock object in tests
+            token_ids = getattr(first_output, 'token_ids', None)
+            generated_tokens = None
+            if token_ids is not None and hasattr(token_ids, '__len__'):
+                try:
+                    generated_tokens = len(token_ids)
+                except (TypeError, AttributeError):
+                    # token_ids might be a Mock that doesn't support len()
+                    generated_tokens = None
             result_metadata.update({
                 "finish_reason": getattr(first_output, 'finish_reason', 'unknown'),
-                "generated_tokens": len(first_output.token_ids) if hasattr(first_output, 'token_ids') else None,
+                "generated_tokens": generated_tokens,
                 "output_length": len(generated_text),
             })
         
@@ -713,7 +695,7 @@ class LLMProcessor(LLMBackend):
                 
                 # Validate against schema
                 if template_id:
-                    schema = load_template_schema(template_id, settings.templates_dir)
+                    schema = load_template_schema(template_id, settings.paths.templates_dir)
                     # validate_llm_output returns (validated_output, error_message)
                     validated_output, error_message = validate_llm_output(
                         json.dumps(structured_output),
@@ -840,7 +822,7 @@ class LLMProcessor(LLMBackend):
 
         # Load and validate template schema
         try:
-            schema = load_template_schema(template_id, settings.templates_dir)
+            schema = load_template_schema(template_id, settings.paths.templates_dir)
             self.current_template_id = template_id
             # Calculate schema hash for versioning
             self.current_schema_hash = str(hash(json.dumps(schema, sort_keys=True)))
@@ -871,7 +853,7 @@ class LLMProcessor(LLMBackend):
 
         # Generate summary with retry logic
         max_retries = 1  # Changed from 2 to 1 (total 2 attempts per TDD)
-        current_temperature = settings.llm_sum_temperature
+        current_temperature = settings.llm_sum.temperature
 
         # Create guided decoding parameters for JSON schema constraint
         from vllm.sampling_params import GuidedDecodingParams
@@ -915,8 +897,8 @@ class LLMProcessor(LLMBackend):
                 # based on input length to avoid truncation issues
                 sampling_kwargs = {
                     "temperature": current_temperature,
-                    "top_p": settings.llm_sum_top_p,
-                    "top_k": settings.llm_sum_top_k,
+                    "top_p": settings.llm_sum.top_p,
+                    "top_k": settings.llm_sum.top_k,
                     "stop": ["<|im_end|>"],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
                     "guided_decoding": guided_decoding,  # Add constrained decoding
                     **kwargs,
@@ -935,9 +917,9 @@ class LLMProcessor(LLMBackend):
                         "temperature": current_temperature,
                         "sampling_params": {
                             "temperature": current_temperature,
-                            "top_p": settings.llm_sum_top_p,
-                            "top_k": settings.llm_sum_top_k,
-                            "max_tokens": settings.llm_sum_max_tokens
+                            "top_p": settings.llm_sum.top_p,
+                            "top_k": settings.llm_sum.top_k,
+                            "max_tokens": settings.llm_sum.max_tokens
                         }
                     }
                 )
@@ -995,7 +977,7 @@ class LLMProcessor(LLMBackend):
                 
                 # Check if output was truncated due to generation limit
                 if finish_reason == "length":
-                    max_output = settings.llm_sum_max_tokens
+                    max_output = settings.llm_sum.max_tokens
                     logger.warning(
                         f"LLM output was truncated on attempt {retry_count + 1}. "
                         f"The model hit the generation limit of {max_output} output units. "
@@ -1047,7 +1029,7 @@ class LLMProcessor(LLMBackend):
                     if retry_count < max_retries:
                         # Reduce temperature for retry
                         current_temperature = retry_with_lower_temperature(
-                            settings.llm_sum_temperature, retry_count, max_retries
+                            settings.llm_sum.temperature, retry_count, max_retries
                         )
                         logger.info(
                             f"Retrying with temperature {current_temperature}",
@@ -1055,7 +1037,7 @@ class LLMProcessor(LLMBackend):
                                 "template_id": template_id,
                                 "attempt": retry_count + 1,
                                 "new_temperature": current_temperature,
-                                "previous_temperature": settings.llm_sum_temperature
+                                "previous_temperature": settings.llm_sum.temperature
                             }
                         )
                     else:
@@ -1069,7 +1051,7 @@ class LLMProcessor(LLMBackend):
                                 "final_raw_output": raw_output,
                                 "final_output_preview": output_preview,
                                 "temperature_history": [
-                                    settings.llm_sum_temperature * (0.5 ** i) for i in range(max_retries + 1)
+                                    settings.llm_sum.temperature * (0.5 ** i) for i in range(max_retries + 1)
                                 ],
                                 "schema_summary": {
                                     "type": schema.get("type"),
@@ -1163,9 +1145,9 @@ class LLMProcessor(LLMBackend):
         """
         return {
             "name": (
-                self.model_info.get("model_name", settings.llm_enhance_model)
+                self.model_info.get("model_name", settings.llm_enhance.model)
                 if self.model_info
-                else settings.llm_enhance_model
+                else settings.llm_enhance.model
             ),
             "checkpoint_hash": self.checkpoint_hash or "unknown",
             "quantization": "awq-4bit",
@@ -1177,10 +1159,10 @@ class LLMProcessor(LLMBackend):
                 "schema_hash": self.current_schema_hash or "none",
             },
             "decoding_params": {
-                "temperature": settings.llm_sum_temperature,
-                "top_p": settings.llm_sum_top_p,
-                "top_k": settings.llm_sum_top_k,
-                "max_tokens": settings.llm_sum_max_tokens,
+                "temperature": settings.llm_sum.temperature,
+                "top_p": settings.llm_sum.top_p,
+                "top_k": settings.llm_sum.top_k,
+                "max_tokens": settings.llm_sum.max_tokens,
                 "repetition_penalty": 1.05,
             },
         }

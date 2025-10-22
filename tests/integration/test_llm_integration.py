@@ -55,7 +55,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = tmp_path / "templates"
+                        mock_settings.paths.templates_dir = tmp_path / "templates"
                         mock_settings.llm_enhance_model = "test-model"
                         mock_settings.llm_enhance_temperature = 0.0
                         mock_settings.llm_enhance_top_p = 0.9
@@ -166,7 +166,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = templates_dir
+                        mock_settings.paths.templates_dir = templates_dir
                         mock_settings.llm_sum_model = "test-model"
                         mock_settings.llm_sum_temperature = 0.7
                         mock_settings.llm_sum_top_p = 0.9
@@ -223,7 +223,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = tmp_path / "templates"
+                        mock_settings.paths.templates_dir = tmp_path / "templates"
                         mock_settings.llm_enhance_model = "test-model"
                         mock_settings.llm_enhance_temperature = 0.0
                         mock_settings.llm_enhance_top_p = 0.9
@@ -280,7 +280,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = tmp_path / "templates"
+                        mock_settings.paths.templates_dir = tmp_path / "templates"
                         mock_settings.llm_enhance_model = "test-model"
                         mock_settings.llm_enhance_temperature = 0.0
                         mock_settings.llm_enhance_top_p = 0.9
@@ -315,7 +315,7 @@ class TestLLMIntegration:
         enhancement_template.write_text("{{ text_input }}")
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = tmp_path / "templates"
+            mock_settings.paths.templates_dir = tmp_path / "templates"
             mock_settings.llm_enhance_model = "test-model"
             mock_settings.llm_enhance_temperature = 0.0
             mock_settings.llm_enhance_top_p = 0.9
@@ -360,7 +360,7 @@ class TestLLMIntegration:
                         with patch(
                             "src.processors.llm.processor.settings"
                         ) as mock_settings:
-                            mock_settings.templates_dir = tmp_path / "templates"
+                            mock_settings.paths.templates_dir = tmp_path / "templates"
                             mock_settings.llm_enhance_model = "test-model"
                             mock_settings.llm_enhance_temperature = 0.0
                             mock_settings.llm_enhance_top_p = 0.9
@@ -439,7 +439,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = templates_dir
+                        mock_settings.paths.templates_dir = templates_dir
                         mock_settings.llm_sum_model = "test-model"
                         mock_settings.llm_sum_temperature = 0.7
                         mock_settings.llm_sum_top_p = 0.9
@@ -494,7 +494,7 @@ class TestLLMIntegration:
                     with patch(
                         "src.processors.llm.processor.settings"
                     ) as mock_settings:
-                        mock_settings.templates_dir = tmp_path / "templates"
+                        mock_settings.paths.templates_dir = tmp_path / "templates"
                         mock_settings.llm_enhance_model = "test-model"
                         mock_settings.llm_sum_temperature = 0.7
                         mock_settings.llm_sum_top_p = 0.9

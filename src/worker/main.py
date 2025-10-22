@@ -19,7 +19,7 @@ from src.config.logging import get_module_logger
 def setup_redis_connection() -> Redis:
     """Initialize Redis connection with configuration from centralized settings."""
     # Create Redis connection from URL
-    redis_conn = Redis.from_url(settings.redis_url, decode_responses=False)
+    redis_conn = Redis.from_url(settings.redis.url, decode_responses=False)
 
     # Verify Redis connection
     try:
@@ -40,9 +40,9 @@ def verify_models() -> bool:
 
     # Check if required model directories exist using configured paths from settings
     required_paths = [
-        Path(settings.whisper_model_path),
-        Path(settings.chunkformer_model_path),
-        Path(settings.llm_enhance_model),
+        Path(settings.asr.whisper_model_path),
+        Path(settings.chunkformer.chunkformer_model_path),
+        Path(settings.llm_enhance.model),
     ]
 
     missing = [str(p) for p in required_paths if not p.exists()]
@@ -88,7 +88,7 @@ def start_worker() -> None:
 
     # Create RQ worker with connection - use settings for worker name
     worker = Worker(
-        listen, connection=redis_conn, name=settings.worker_name, exception_handlers=[]
+        listen, connection=redis_conn, name=settings.worker.worker_name, exception_handlers=[]
     )
 
     get_logger().info("Starting worker {}", worker.name)

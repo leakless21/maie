@@ -22,11 +22,8 @@ class TestAppSettingsStructure:
         assert settings.pipeline_version == "1.0.0"
         assert settings.environment == "development"
         assert settings.logging.log_level == "INFO"
-        assert settings.log_level == settings.logging.log_level
         assert settings.api.port == 8000
-        assert settings.api_host == settings.api.host
         assert settings.paths.audio_dir == Path("data/audio")
-        assert settings.audio_dir == settings.paths.audio_dir
 
     def test_env_overrides_with_nested_delimiter(self):
         env_vars = {
@@ -44,33 +41,6 @@ class TestAppSettingsStructure:
         assert settings.api.port == 9000
         assert settings.asr.whisper_beam_size == 7
 
-    def test_compatibility_properties_mirror_nested_values(self):
-        settings = AppSettings()
-
-        assert settings.log_file_serialize == settings.logging.log_file_serialize
-        assert settings.redis_results_db == settings.redis.results_db
-        assert settings.whisper_model_path == settings.asr.whisper_model_path
-        assert settings.chunkformer_model_variant == settings.chunkformer.chunkformer_model_variant
-        assert settings.llm_enhance_model == settings.llm_enhance.model
-        assert settings.llm_sum_temperature == settings.llm_sum.temperature
-        assert settings.llm_enhance_max_num_seqs == settings.llm_enhance.max_num_seqs
-        assert settings.llm_sum_max_num_seqs == settings.llm_sum.max_num_seqs
-        assert (
-            settings.llm_enhance_max_num_batched_tokens
-            == settings.llm_enhance.max_num_batched_tokens
-        )
-        assert (
-            settings.llm_sum_max_num_batched_tokens
-            == settings.llm_sum.max_num_batched_tokens
-        )
-        assert (
-            settings.llm_enhance_max_num_partial_prefills
-            == settings.llm_enhance.max_num_partial_prefills
-        )
-        assert (
-            settings.llm_sum_max_num_partial_prefills
-            == settings.llm_sum.max_num_partial_prefills
-        )
 
 
 class TestDirectoryManagement:

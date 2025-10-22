@@ -76,8 +76,8 @@ class ProcessRequestSchema(BaseModel):
         }
     )
     asr_backend: Optional[str] = Field(
-        default="whisper",
-        description="ASR backend selection. Available options: 'whisper' (default), 'chunkformer'. Use /v1/models to get available backends.",
+        default="chunkformer",
+        description="ASR backend selection. Available options: 'whisper', 'chunkformer'(default). Use /v1/models to get available backends.",
         json_schema_extra={
             "examples": ["whisper", "chunkformer"],
             "enum": ["whisper", "chunkformer"]
@@ -374,6 +374,8 @@ class TemplateInfoSchema(BaseModel):
     parameters: dict = Field(
         default_factory=dict, description="Default parameters for the template"
     )
+    example: Optional[Dict[str, Any]] = Field(None, description="Example of the template output")
+    example: Optional[Dict[str, Any]] = Field(None, description="Example of the template output")
 
 
 class TemplatesResponseSchema(BaseModel):

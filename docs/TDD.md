@@ -139,7 +139,7 @@ The system follows a **three-tier architecture** with clear separation of concer
 **File Upload Handling:**
 
 - Maximum file size: 500MB (server-side validation)
-- Supported formats: `.wav`, `.mp3` (FR-1)
+- Supported formats: `.wav`, `.mp3`, `.m4a`, `.flac` (FR-1)
 - Files saved to `{AUDIO_DIR}/{task_id}.{ext}`
 - Asynchronous file I/O to avoid blocking event loop
 
@@ -173,7 +173,7 @@ For `POST /v1/process`:
 
 1. Validate `file` is present and acceptable format
 2. Validate `features` array (optional, default: `["clean_transcript", "summary"]`)
-3. Validate `asr_backend` (optional, default: `"whisper"`)
+3. Validate `asr_backend` (optional, default: `"chunkformer"`)
    - Valid values: `"whisper"`, `"chunkformer"` (V1.0)
    - For `"whisper"`, model variant determined by `WHISPER_MODEL_VARIANT` (default: `erax-wow-turbo`, org CT2 default)
    - For `"chunkformer"`, model name determined by `CHUNKFORMER_MODEL_NAME` (default: `khanhld/chunkformer-rnnt-large-vie`)
@@ -596,7 +596,7 @@ Each concrete processor must implement:
 
 **ASR Defaults (V1.0)**
 
-- `asr_backend`: `whisper`
+- `asr_backend`: `chunkformer`
 - Whisper (faster-whisper):
   - `whisper_model_variant`: `erax-wow-turbo` (org CT2 default; use `large-v3`/`distil-large-v3` for official)
   - `whisper_beam_size`: `5`
@@ -1049,7 +1049,7 @@ All Python dependencies managed through Pixi for:
 ```
 /maie/
 ├── .env.template           # Configuration template
-├── .python-version         # Python 3.13+
+├── .python-version         # Python 3.11+
 ├── pyproject.toml          # Project metadata
 ├── pixi.toml               # Pixi environment manifest
 ├── docker-compose.yml      # Multi-service orchestration
@@ -1331,7 +1331,7 @@ Fields:
   features: list[str]            # Optional, default: ["clean_transcript", "summary"]
                                  # Valid: "raw_transcript", "clean_transcript", "summary", "enhancement_metrics"
 
-  asr_backend: str               # Optional, default: "whisper"
+  asr_backend: str               # Optional, default: "chunkformer"
                                  # Valid: "whisper", "chunkformer"
                                  # For "whisper": model variant set via WHISPER_MODEL_VARIANT config (default: erax-wow-turbo)
   template_id: str               # Required if "summary" in features

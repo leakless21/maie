@@ -21,9 +21,9 @@ class TestLLMProcessorInitialization:
     def test_init_with_default_model(self):
         """Test initialization with default model path."""
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.llm_enhance_model = "test-model"
-            mock_settings.templates_dir = Path("templates")
-            mock_settings.llm_enhance_temperature = 0.7
+            mock_settings.llm_enhance.model = "test-model"
+            mock_settings.paths.templates_dir = Path("templates")
+            mock_settings.llm_enhance.temperature = 0.7
 
             processor = LLMProcessor()
 
@@ -35,7 +35,7 @@ class TestLLMProcessorInitialization:
     def test_init_with_custom_model(self):
         """Test initialization with custom model path."""
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = Path("templates")
+            mock_settings.paths.templates_dir = Path("templates")
 
             processor = LLMProcessor(model_path="custom-model")
 
@@ -44,7 +44,7 @@ class TestLLMProcessorInitialization:
     def test_init_creates_prompt_renderer(self):
         """Test that prompt renderer is created during initialization."""
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = Path("templates")
+            mock_settings.paths.templates_dir = Path("templates")
 
             with patch("src.processors.llm.processor.TemplateLoader") as mock_loader:
                 with patch(
@@ -89,7 +89,7 @@ class TestLoadModel:
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_enhance_model = "test-model"
-            mock_settings.templates_dir = Path("templates")
+            mock_settings.paths.templates_dir = Path("templates")
             mock_settings.llm_enhance_temperature = 0.0
             mock_settings.llm_enhance_top_p = None
             mock_settings.llm_enhance_top_k = None
@@ -340,7 +340,7 @@ class TestGenerateSummary:
         processor.model = Mock()
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = tmp_path
+            mock_settings.paths.templates_dir = tmp_path
 
             result = processor.generate_summary("transcript", "nonexistent_template")
 
@@ -371,7 +371,7 @@ class TestGenerateSummary:
         schema_file.write_text(json.dumps(schema))
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = tmp_path
+            mock_settings.paths.templates_dir = tmp_path
 
             with patch.object(
                 processor.prompt_renderer,
@@ -416,7 +416,7 @@ class TestGenerateSummary:
         processor.model = mock_model
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = tmp_path
+            mock_settings.paths.templates_dir = tmp_path
             mock_settings.llm_sum_temperature = 0.7
             mock_settings.llm_sum_top_p = 0.9
             mock_settings.llm_sum_top_k = 20
@@ -469,7 +469,7 @@ class TestGenerateSummary:
         processor.model = Mock()
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
-            mock_settings.templates_dir = tmp_path
+            mock_settings.paths.templates_dir = tmp_path
             mock_settings.llm_sum_temperature = 0.7
             mock_settings.llm_sum_top_p = 0.9
             mock_settings.llm_sum_top_k = 20

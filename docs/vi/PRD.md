@@ -16,13 +16,13 @@ Tổng quan kiến trúc: Hệ thống sử dụng kiến trúc ba tầng với 
 
 #### 2. Tính năng & Yêu cầu Chức năng V1.0 (FR)
 
-- FR-1: Tiếp nhận Âm thanh — Hệ thống PHẢI chấp nhận ít nhất các định dạng âm thanh `.wav` và `.mp3` thông qua tải lên `multipart/form-data`.
+- FR-1: Tiếp nhận Âm thanh — Hệ thống PHẢI chấp nhận các định dạng âm thanh phổ biến bao gồm `.wav`, `.mp3`, `.m4a`, và `.flac` thông qua tải lên `multipart/form-data`.
 
 - FR-2: Backend ASR — Hệ thống cung cấp hai backend ASR cho V1.0:
 
-  - whisper: Backend mặc định cho V1.0, sử dụng các mô hình dựa trên Whisper thông qua runtime CTranslate2. Biến thể mô hình mặc định là EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), cung cấp dấu câu và viết hoa tự nhiên, được tối ưu hóa cho thông lượng với bộ lọc VAD.
+  - chunkformer: Backend mặc định cho V1.0, được tối ưu hóa cho việc phiên âm âm thanh dạng dài và độ trễ của một yêu cầu. Biến thể mô hình mặc định là `khanhld/chunkformer-rnnt-large-vie`, cung cấp xử lý theo từng đoạn với các cửa sổ ngữ cảnh có thể cấu hình.
 
-  - chunkformer: Backend thay thế để phiên âm âm thanh dạng dài, sử dụng các mô hình ChunkFormer được tối ưu hóa cho độ trễ yêu cầu đơn. Biến thể mô hình mặc định là `khanhld/chunkformer-rnnt-large-vie`, cung cấp xử lý theo từng đoạn với các cửa sổ ngữ cảnh có thể cấu hình và xử lý nhanh hơn đáng kể cho các tệp âm thanh dài.
+  - whisper: Backend thay thế sử dụng các mô hình dựa trên Whisper thông qua runtime CTranslate2. Biến thể mô hình mặc định là EraX-WoW-Turbo V1.1 (`erax-wow-turbo`), cung cấp dấu câu và viết hoa tự nhiên, được tối ưu hóa cho thông lượng với bộ lọc VAD.
 
   **Phạm vi tính năng ASR V1.0:**
 
@@ -92,7 +92,7 @@ Nội dung Yêu cầu (`multipart/form-data`)
   - Giá trị: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics`.
   - Mặc định: `["clean_transcript", "summary"]`.
   - Lưu ý: `tags` KHÔNG CÒN là một tính năng riêng biệt. Các thẻ được nhúng trong đầu ra `summary` thông qua lược đồ mẫu.
-- `asr_backend`: Lựa chọn backend giữa `"whisper"` (mặc định) và `"chunkformer"` cho các trường hợp sử dụng khác nhau.
+- `asr_backend`: Lựa chọn backend giữa `"chunkformer"` (mặc định) và `"whisper"` cho các trường hợp sử dụng khác nhau.
 - `template_id` (str): Định dạng tóm tắt. (Bắt buộc nếu `summary` có trong `features`)
   - Các mẫu nên bao gồm một trường `tags` (mảng từ 1-5 chuỗi) để phân loại tự động.
 
@@ -121,7 +121,7 @@ Phản hồi Cuối cùng Thành công (Nội dung JSON)
         "vad_filter": true
       }
     },
-    "summarization_llm": {
+    "llm": {
       "name": "cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit",
       "checkpoint_hash": "f6g7h8i9j0k1...",
       "quantization": "awq-4bit",

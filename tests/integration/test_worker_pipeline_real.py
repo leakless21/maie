@@ -152,14 +152,14 @@ def mock_llm_model():
 class TestFullPipelineWithRealComponents:
     """Test complete pipeline with real components and mocked models."""
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_full_pipeline_wav_file(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -176,8 +176,8 @@ class TestFullPipelineWithRealComponents:
         """
         # Setup mocks
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         # Prepare task parameters
         task_id = "test-full-pipeline-wav"
@@ -204,12 +204,12 @@ class TestFullPipelineWithRealComponents:
         # Verify versions
         assert result["versions"]["asr"]["model_name"] == "whisper-large-v3"
         assert result["versions"]["llm"]["model_name"] == "qwen3-4b-instruct"
-        assert result["versions"]["processing_pipeline"] == settings.pipeline_version
+        assert result["versions"]["pipeline_version"] == settings.pipeline_version
 
         # Verify metrics
         metrics = result["metrics"]
-        assert "total_processing_time" in metrics
-        assert "total_rtf" in metrics
+        assert "processing_time_seconds" in metrics
+        assert "rtf" in metrics
         assert "audio_duration" in metrics
         assert metrics["audio_duration"] > 0  # Real audio duration from preprocessing
 
@@ -231,14 +231,14 @@ class TestFullPipelineWithRealComponents:
         mock_llm_model.generate_summary.assert_called_once()
         mock_llm_model.unload.assert_called_once()
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_transcript_only_feature(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -246,8 +246,8 @@ class TestFullPipelineWithRealComponents:
     ):
         """Test pipeline with transcript-only feature (no summary)."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-transcript-only"
         task_params = {
@@ -270,14 +270,14 @@ class TestFullPipelineWithRealComponents:
         # Verify LLM generate_summary was NOT called (only enhancement, which is skipped for Whisper)
         mock_llm_model.generate_summary.assert_not_called()
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_summary_only_feature(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -285,8 +285,8 @@ class TestFullPipelineWithRealComponents:
     ):
         """Test pipeline with summary-only feature (no clean transcript)."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-summary-only"
         task_params = {
@@ -313,14 +313,14 @@ class TestFullPipelineWithRealComponents:
 class TestAudioPreprocessingIntegration:
     """Test real AudioPreprocessor integration."""
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_audio_duration_extraction(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -328,8 +328,8 @@ class TestAudioPreprocessingIntegration:
     ):
         """Test that audio duration is correctly extracted from preprocessing."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-audio-duration"
         task_params = {
@@ -354,19 +354,19 @@ class TestAudioPreprocessingIntegration:
         assert 0.1 < audio_duration < 60.0
 
         # Verify RTF calculation uses this duration
-        assert "total_rtf" in metrics
-        processing_time = metrics["total_processing_time"]
+        assert "rtf" in metrics
+        processing_time = metrics["processing_time_seconds"]
         expected_rtf = processing_time / audio_duration
-        assert abs(metrics["total_rtf"] - expected_rtf) < 0.01
+        assert abs(metrics["rtf"] - expected_rtf) < 0.01
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_audio_format_validation(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -374,8 +374,8 @@ class TestAudioPreprocessingIntegration:
     ):
         """Test that audio preprocessing validates format correctly."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-format-validation"
         task_params = {
@@ -397,14 +397,14 @@ class TestAudioPreprocessingIntegration:
 class TestRedisIntegration:
     """Test fake Redis integration for status tracking."""
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_status_transitions(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -412,8 +412,8 @@ class TestRedisIntegration:
     ):
         """Test that status transitions are correctly stored in Redis."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-status-transitions"
         task_key = f"task:{task_id}"
@@ -447,14 +447,14 @@ class TestRedisIntegration:
         results = json.loads(task_data["results"])
         assert isinstance(results, dict)
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_error_status_on_failure(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -464,8 +464,8 @@ class TestRedisIntegration:
         # Make ASR fail
         mock_asr_model.execute.side_effect = RuntimeError("ASR model failed")
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-error-status"
         task_key = f"task:{task_id}"
@@ -495,14 +495,14 @@ class TestRedisIntegration:
 class TestEnhancementLogic:
     """Test enhancement logic with different ASR backends."""
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_whisper_skips_enhancement(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -510,8 +510,8 @@ class TestEnhancementLogic:
     ):
         """Test that Whisper backend skips text enhancement."""
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
-        mock_load_llm.return_value = mock_llm_model
+        mock_asr_factory.return_value = mock_asr_model
+        mock_llm_class.return_value = mock_llm_model
 
         # Configure mock to indicate Whisper doesn't need enhancement
         mock_llm_model.needs_enhancement.return_value = False
@@ -538,14 +538,14 @@ class TestEnhancementLogic:
         # Verify needs_enhancement was checked
         mock_llm_model.needs_enhancement.assert_called()
 
-    @patch("src.worker.pipeline.load_asr_model")
-    @patch("src.worker.pipeline.load_llm_model")
+    @patch("src.processors.asr.factory.ASRFactory.create")
+    @patch("src.processors.llm.LLMProcessor")
     @patch("src.worker.pipeline.Redis")
     def test_chunkformer_applies_enhancement(
         self,
         mock_redis_class,
-        mock_load_llm,
-        mock_load_asr,
+        mock_llm_class,
+        mock_asr_factory,
         redis_client,
         test_audio_path,
         mock_asr_model,
@@ -558,7 +558,7 @@ class TestEnhancementLogic:
             "model_variant": "large-vie",
         }
         mock_redis_class.return_value = redis_client
-        mock_load_asr.return_value = mock_asr_model
+        mock_asr_factory.return_value = mock_asr_model
 
         # Configure LLM to indicate ChunkFormer needs enhancement
         mock_llm_model.needs_enhancement.return_value = True
@@ -568,7 +568,7 @@ class TestEnhancementLogic:
             "edit_rate": 0.15,
             "edit_distance": 5,
         }
-        mock_load_llm.return_value = mock_llm_model
+        mock_llm_class.return_value = mock_llm_model
 
         task_id = "test-chunkformer-enhancement"
         task_params = {

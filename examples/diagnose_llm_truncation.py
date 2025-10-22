@@ -19,9 +19,9 @@ if str(_PROJECT_ROOT) not in sys.path:
 from src.config import configure_logging, get_logger, settings
 from src.config.logging import get_module_logger
 from src.processors.audio import AudioPreprocessor
+from src.processors.asr.factory import ASRFactory
 from src.processors.llm import LLMProcessor
 from src.processors.llm.schema_validator import load_template_schema
-from src.worker.pipeline import execute_asr_transcription, load_asr_model, unload_asr_model
 
 
 def main() -> int:
@@ -56,10 +56,12 @@ def main() -> int:
         processing_audio_path = metadata.get("normalized_path") or audio_path
         audio_duration = float(metadata.get("duration", 0.0))
 
-        asr = load_asr_model(args.backend)
-        asr_result, rtf, _ = execute_asr_transcription(
-            asr, str(processing_audio_path), audio_duration
-        )
+        asr = ASRFactory.create(args.backend)
+        import time
+        start_time = time.time()
+        asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
+        processing_time = time.time() - start_time
+        rtf = processing_time / audio_duration if audio_duration > 0 else 0.0
         transcript = asr_result.text
         
         char_count = len(transcript)
@@ -71,7 +73,7 @@ def main() -> int:
         return 3
     finally:
         if asr:
-            unload_asr_model(asr)
+            asr.unload()
 
     # Step 2: Load LLM and tokenizer
     print("\n2. Loading LLM and analyzing token counts...")

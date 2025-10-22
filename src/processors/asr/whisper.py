@@ -86,12 +86,13 @@ class WhisperBackend(ASRBackend):
 
         # Resolve model path with environment override if provided
         env_model = os.getenv("WHISPER_MODEL_PATH")
+        config_model = None  # Initialize to avoid unbound variable error
         if self.model_path is None:
             if env_model:
                 self.model_path = env_model
             else:
                 config_model = (
-                    getattr(cfg.settings, "whisper_model_path", None)
+                    getattr(cfg.settings.asr, "whisper_model_path", None)
                     if hasattr(cfg, "settings")
                     else None
                 )
@@ -181,10 +182,10 @@ class WhisperBackend(ASRBackend):
             return str(val).strip().lower() in {"1", "true", "yes", "y", "on"}
 
         device = os.getenv("WHISPER_DEVICE") or getattr(
-            cfg.settings, "whisper_device", "cuda"
+            cfg.settings.asr, "whisper_device", "cuda"
         )
         compute_type = os.getenv("WHISPER_COMPUTE_TYPE") or getattr(
-            cfg.settings, "whisper_compute_type", "float16"
+            cfg.settings.asr, "whisper_compute_type", "float16"
         )
 
         # Check GPU availability and raise error if not available
@@ -210,7 +211,7 @@ class WhisperBackend(ASRBackend):
         # Get cpu_threads from env or config for CPU performance tuning
         cpu_threads = os.getenv("WHISPER_CPU_THREADS")
         if cpu_threads is None:
-            cpu_threads = getattr(cfg.settings, "whisper_cpu_threads", None)
+            cpu_threads = getattr(cfg.settings.asr, "whisper_cpu_threads", None)
 
         load_kwargs = {"device": device, "compute_type": compute_type}
 
@@ -314,7 +315,7 @@ class WhisperBackend(ASRBackend):
             except ValueError:
                 beam_size = None
         if beam_size is None:
-            beam_size = getattr(cfg.settings, "whisper_beam_size", None)
+            beam_size = getattr(cfg.settings.asr, "whisper_beam_size", None)
         if beam_size is not None:
             transcribe_kwargs["beam_size"] = beam_size
 
@@ -330,7 +331,7 @@ class WhisperBackend(ASRBackend):
             }
         else:
             condition_on_previous = getattr(
-                cfg.settings, "whisper_condition_on_previous_text", None
+                cfg.settings.asr, "whisper_condition_on_previous_text", None
             )
         if condition_on_previous is not None:
             transcribe_kwargs["condition_on_previous_text"] = condition_on_previous
@@ -338,7 +339,7 @@ class WhisperBackend(ASRBackend):
         # Apply language from env or config (None = auto-detect)
         language = os.getenv("WHISPER_LANGUAGE")
         if language is None:
-            language = getattr(cfg.settings, "whisper_language", None)
+            language = getattr(cfg.settings.asr, "whisper_language", None)
         if language is not None:
             transcribe_kwargs["language"] = language
 
@@ -355,7 +356,7 @@ class WhisperBackend(ASRBackend):
                 "on",
             }
         else:
-            word_timestamps = getattr(cfg.settings, "whisper_word_timestamps", True)
+            word_timestamps = getattr(cfg.settings.asr, "whisper_word_timestamps", True)
         transcribe_kwargs["word_timestamps"] = word_timestamps
 
         # Apply VAD filter settings (env overrides config)
@@ -363,7 +364,7 @@ class WhisperBackend(ASRBackend):
         if env_vad is not None:
             vad_filter = str(env_vad).strip().lower() in {"1", "true", "yes", "y", "on"}
         else:
-            vad_filter = getattr(cfg.settings, "whisper_vad_filter", False)
+            vad_filter = getattr(cfg.settings.asr, "whisper_vad_filter", False)
         if vad_filter:
             transcribe_kwargs["vad_filter"] = True
 
@@ -378,7 +379,7 @@ class WhisperBackend(ASRBackend):
                     vad_min_silence = None
             if vad_min_silence is None:
                 vad_min_silence = getattr(
-                    cfg.settings, "whisper_vad_min_silence_ms", None
+                    cfg.settings.asr, "whisper_vad_min_silence_ms", None
                 )
             if vad_min_silence is not None:
                 vad_params["min_silence_duration_ms"] = vad_min_silence
@@ -392,7 +393,7 @@ class WhisperBackend(ASRBackend):
                     vad_speech_pad = None
             if vad_speech_pad is None:
                 vad_speech_pad = getattr(
-                    cfg.settings, "whisper_vad_speech_pad_ms", None
+                    cfg.settings.asr, "whisper_vad_speech_pad_ms", None
                 )
             if vad_speech_pad is not None:
                 vad_params["speech_pad_ms"] = vad_speech_pad
@@ -574,14 +575,14 @@ class WhisperBackend(ASRBackend):
 
         info: VersionInfo = {
             "backend": "whisper",
-            "model_variant": getattr(cfg.settings, "whisper_model_variant", "unknown"),
+            "model_variant": getattr(cfg.settings.asr, "whisper_model_variant", "unknown"),
             "model_path": str(self.model_path) if self.model_path else "unknown",
             "checkpoint_hash": checkpoint_hash,
-            "device": getattr(cfg.settings, "whisper_device", "unknown"),
-            "compute_type": getattr(cfg.settings, "whisper_compute_type", "unknown"),
-            "vad_filter": getattr(cfg.settings, "whisper_vad_filter", False),
+            "device": getattr(cfg.settings.asr, "whisper_device", "unknown"),
+            "compute_type": getattr(cfg.settings.asr, "whisper_compute_type", "unknown"),
+            "vad_filter": getattr(cfg.settings.asr, "whisper_vad_filter", False),
             "condition_on_previous_text": getattr(
-                cfg.settings, "whisper_condition_on_previous_text", True
+                cfg.settings.asr, "whisper_condition_on_previous_text", True
             ),
             "version": "1.0.0",
             "library": "faster-whisper",
@@ -589,15 +590,15 @@ class WhisperBackend(ASRBackend):
         }
 
         # Only include optional fields if they are not None
-        cpu_threads = getattr(cfg.settings, "whisper_cpu_threads", None)
+        cpu_threads = getattr(cfg.settings.asr, "whisper_cpu_threads", None)
         if cpu_threads is not None:
             info["cpu_threads"] = cpu_threads
 
-        beam_size = getattr(cfg.settings, "whisper_beam_size", None)
+        beam_size = getattr(cfg.settings.asr, "whisper_beam_size", None)
         if beam_size is not None:
             info["beam_size"] = beam_size
 
-        language = getattr(cfg.settings, "whisper_language", None)
+        language = getattr(cfg.settings.asr, "whisper_language", None)
         info["language"] = language if language is not None else "auto"
 
         return info

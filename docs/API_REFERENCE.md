@@ -50,11 +50,14 @@ curl -X POST 'http://localhost:8000/v1/process' \
 
 Successful responses return the requested data payload directly as a JSON object.
 
-Error responses use a standardized format:
+Error responses use a standardized format with an `error` object:
 
 ```json
 {
-  "detail": "A human-readable error message."
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "A human-readable error message."
+  }
 }
 ```
 
@@ -192,7 +195,7 @@ X-API-Key: your_api_key_here
 | `file`        | binary | Yes         | Audio file to process                                                |
 | `features`    | array  | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
 | `template_id` | string | Conditional | Template ID for summary format (required if `summary` in features)   |
-| `asr_backend` | string | No          | ASR backend selection (default: `"whisper"`)                         |
+| `asr_backend` | string | No          | ASR backend selection (default: `"chunkformer"`)                         |
 
 **Features Options:**
 
@@ -203,8 +206,8 @@ X-API-Key: your_api_key_here
 
 **ASR Backend Options:**
 
-- `whisper` - OpenAI Whisper model (default)
-- `chunkformer` - ChunkFormer ASR model
+- `chunkformer` - ChunkFormer ASR model (default)
+- `whisper` - OpenAI Whisper model
 
 #### Request Body Examples
 
@@ -256,20 +259,17 @@ def process_audio(file_path, api_key, features=None, template_id=None, asr_backe
         features = ["clean_transcript", "summary"]
 
     # Prepare multipart form data
-    files = {"file": open(file_path, "rb")}
-    data = {}
-
-    # Add features as separate form fields
-    for feature in features:
-        data[f"features"] = feature
-
+    # Data must be a list of tuples to support multiple values for the same key.
+    form_data = [("features", f) for f in features]
     if template_id:
-        data["template_id"] = template_id
-
+        form_data.append(("template_id", template_id))
     if asr_backend != "whisper":
-        data["asr_backend"] = asr_backend
+        form_data.append(("asr_backend", asr_backend))
 
-    response = requests.post(url, headers=headers, files=files, data=data)
+    with open(file_path, "rb") as audio_file:
+        files = {"file": audio_file}
+        response = requests.post(url, headers=headers, files=files, data=form_data)
+    
     return response.json()
 
 # Usage
@@ -279,7 +279,7 @@ result = process_audio(
     features=["clean_transcript", "summary"],
     template_id="meeting_notes_v1"
 )
-print(f"Task ID: {result['data']['task_id']}")
+print(f"Task ID: {result['task_id']}")
 ```
 
 #### Response Format
@@ -288,15 +288,8 @@ print(f"Task ID: {result['data']['task_id']}")
 
 ```json
 {
-  "data": {
-    "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-    "status": "PENDING"
-  },
-  "meta": {
-    "request_id": "req_12345678-1234-1234-1234-123456789abc",
-    "timestamp": "2025-10-20T07:18:17.637Z",
-    "version": "1.0.0"
-  }
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "PENDING"
 }
 ```
 
@@ -374,67 +367,60 @@ print(f"Status: {status['data']['status']}")
 
 ```json
 {
-  "data": {
-    "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-    "status": "COMPLETE",
-    "submitted_at": "2025-10-20T07:18:17.637Z",
-    "completed_at": "2025-10-20T07:20:45.123Z",
-    "versions": {
-      "pipeline_version": "1.0.0",
-      "asr_backend": {
-        "name": "whisper",
-        "model_variant": "erax-wow-turbo",
-        "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
-        "checkpoint_hash": "a1b2c3d4e5f6...",
-        "compute_type": "int8_float16",
-        "decoding_params": {
-          "beam_size": 5,
-          "vad_filter": true
-        }
-      },
-      "llm": {
-        "name": "qwen3",
-        "checkpoint_hash": "z9y8x7w6v5u4...",
-        "quantization": "awq-4bit",
-        "thinking": false,
-        "reasoning_parser": null,
-        "structured_output": {
-          "title": "string",
-          "main_points": ["string"],
-          "tags": ["string"]
-        },
-        "decoding_params": {
-          "temperature": 0.3,
-          "top_p": 0.9
-        }
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "COMPLETE",
+  "submitted_at": "2025-10-20T07:18:17.637Z",
+  "completed_at": "2025-10-20T07:20:45.123Z",
+  "versions": {
+    "pipeline_version": "1.0.0",
+    "asr_backend": {
+      "name": "whisper",
+      "model_variant": "erax-wow-turbo",
+      "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
+      "checkpoint_hash": "a1b2c3d4e5f6...",
+      "compute_type": "int8_float16",
+      "decoding_params": {
+        "beam_size": 5,
+        "vad_filter": true
       }
     },
-    "metrics": {
-      "input_duration_seconds": 2701.3,
-      "processing_time_seconds": 162.8,
-      "rtf": 0.06,
-      "vad_coverage": 0.88,
-      "asr_confidence_avg": 0.91,
-      "edit_rate_cleaning": 0.15
-    },
-    "results": {
-      "raw_transcript": "The meeting on October 4th...",
-      "clean_transcript": "The meeting on October 4th covered...",
-      "summary": {
-        "title": "Q4 Budget Planning Meeting",
-        "main_points": [
-          "Budget approved for Q4 initiatives",
-          "New hiring plan discussed",
-          "Timeline set for product launch"
-        ],
-        "tags": ["Finance", "Budget", "Planning"]
+    "llm": {
+      "name": "qwen3",
+      "checkpoint_hash": "z9y8x7w6v5u4...",
+      "quantization": "awq-4bit",
+      "thinking": false,
+      "reasoning_parser": null,
+      "structured_output": {
+        "title": "string",
+        "main_points": ["string"],
+        "tags": ["string"]
+      },
+      "decoding_params": {
+        "temperature": 0.3,
+        "top_p": 0.9
       }
     }
   },
-  "meta": {
-    "request_id": "req_87654321-4321-4321-4321-fedcba987654",
-    "timestamp": "2025-10-20T07:21:30.456Z",
-    "version": "1.0.0"
+  "metrics": {
+    "input_duration_seconds": 2701.3,
+    "processing_time_seconds": 162.8,
+    "rtf": 0.06,
+    "vad_coverage": 0.88,
+    "asr_confidence_avg": 0.91,
+    "edit_rate_cleaning": 0.15
+  },
+  "results": {
+    "raw_transcript": "The meeting on October 4th...",
+    "clean_transcript": "The meeting on October 4th covered...",
+    "summary": {
+      "title": "Q4 Budget Planning Meeting",
+      "main_points": [
+        "Budget approved for Q4 initiatives",
+        "New hiring plan discussed",
+        "Timeline set for product launch"
+      ],
+      "tags": ["Finance", "Budget", "Planning"]
+    }
   }
 }
 ```
@@ -443,19 +429,9 @@ print(f"Status: {status['data']['status']}")
 
 ```json
 {
-  "data": {
-    "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-    "status": "PROCESSING_ASR",
-    "submitted_at": "2025-10-20T07:18:17.637Z",
-    "versions": {
-      "pipeline_version": "1.0.0"
-    }
-  },
-  "meta": {
-    "request_id": "req_87654321-4321-4321-4321-fedcba987654",
-    "timestamp": "2025-10-20T07:19:45.123Z",
-    "version": "1.0.0"
-  }
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "PROCESSING_ASR",
+  "submitted_at": "2025-10-20T07:18:17.637Z"
 }
 ```
 
@@ -466,10 +442,6 @@ print(f"Status: {status['data']['status']}")
   "error": {
     "code": "TASK_NOT_FOUND",
     "message": "Task c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b not found"
-  },
-  "meta": {
-    "request_id": "req_87654321-4321-4321-4321-fedcba987654",
-    "timestamp": "2025-10-20T07:21:30.456Z"
   }
 }
 ```
@@ -512,31 +484,24 @@ curl -X GET 'http://localhost:8000/v1/models' \
 
 ```json
 {
-  "data": {
-    "models": [
-      {
-        "id": "whisper",
-        "name": "Whisper Backend",
-        "description": "ASR backend using whisper",
-        "type": "ASR",
-        "version": "1.0",
-        "supported_languages": ["en", "vi", "zh", "ja", "ko"]
-      },
-      {
-        "id": "chunkformer",
-        "name": "ChunkFormer Backend",
-        "description": "ASR backend using chunkformer",
-        "type": "ASR",
-        "version": "1.0",
-        "supported_languages": ["en", "vi", "zh", "ja", "ko"]
-      }
-    ]
-  },
-  "meta": {
-    "request_id": "req_12345678-1234-1234-1234-123456789abc",
-    "timestamp": "2025-10-20T07:18:17.637Z",
-    "version": "1.0.0"
-  }
+  "models": [
+    {
+      "id": "whisper",
+      "name": "Whisper Backend",
+      "description": "ASR backend using whisper",
+      "type": "ASR",
+      "version": "1.0",
+      "supported_languages": ["en", "vi", "zh", "ja", "ko"]
+    },
+    {
+      "id": "chunkformer",
+      "name": "ChunkFormer Backend",
+      "description": "ASR backend using chunkformer",
+      "type": "ASR",
+      "version": "1.0",
+      "supported_languages": ["en", "vi", "zh", "ja", "ko"]
+    }
+  ]
 }
 ```
 
@@ -577,29 +542,22 @@ curl -X GET 'http://localhost:8000/v1/templates' \
 
 ```json
 {
-  "data": {
-    "templates": [
-      {
-        "id": "meeting_notes_v1",
-        "name": "Meeting Notes v1",
-        "description": "Structured format for meeting transcripts",
-        "schema_url": "/v1/templates/meeting_notes_v1/schema",
-        "parameters": {}
-      },
-      {
-        "id": "interview_transcript_v1",
-        "name": "Interview Transcript v1",
-        "description": "Format for interview recordings",
-        "schema_url": "/v1/templates/interview_transcript_v1/schema",
-        "parameters": {}
-      }
-    ]
-  },
-  "meta": {
-    "request_id": "req_12345678-1234-1234-1234-123456789abc",
-    "timestamp": "2025-10-20T07:18:17.637Z",
-    "version": "1.0.0"
-  }
+  "templates": [
+    {
+      "id": "meeting_notes_v1",
+      "name": "Meeting Notes v1",
+      "description": "Structured format for meeting transcripts",
+      "schema_url": "/v1/templates/meeting_notes_v1/schema",
+      "parameters": {}
+    },
+    {
+      "id": "interview_transcript_v1",
+      "name": "Interview Transcript v1",
+      "description": "Format for interview recordings",
+      "schema_url": "/v1/templates/interview_transcript_v1/schema",
+      "parameters": {}
+    }
+  ]
 }
 ```
 

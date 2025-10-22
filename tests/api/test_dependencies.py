@@ -40,7 +40,7 @@ def fixed_settings(monkeypatch):
     """
     from src.config import settings
 
-    monkeypatch.setattr(settings, "max_file_size_mb", 1, raising=False)
+    monkeypatch.setattr(settings.api, "max_file_size_mb", 1, raising=False)
     yield
 
 
@@ -147,7 +147,7 @@ class TestGuardBehavior:
         """Valid API key should pass guard and return None."""
         from src.api.dependencies import api_key_guard
 
-        with patch("src.api.dependencies.settings.secret_api_key", "s" * 64):
+        with patch("src.api.dependencies.settings.api.secret_key", "s" * 64):
             connection = make_mock_connection({"X-API-Key": "s" * 64})
             route_handler = make_mock_route_handler()
 
@@ -160,7 +160,7 @@ class TestGuardBehavior:
         """Invalid API key should raise NotAuthorizedException."""
         from src.api.dependencies import api_key_guard
 
-        with patch("src.api.dependencies.settings.secret_api_key", "s" * 64):
+        with patch("src.api.dependencies.settings.api.secret_key", "s" * 64):
             connection = make_mock_connection({"X-API-Key": "invalid_key"})
             route_handler = make_mock_route_handler()
 
@@ -184,7 +184,7 @@ class TestGuardBehavior:
         """Guard should be able to access and modify connection.state."""
         from src.api.dependencies import api_key_guard
 
-        with patch("src.api.dependencies.settings.secret_api_key", "s" * 64):
+        with patch("src.api.dependencies.settings.api.secret_key", "s" * 64):
             connection = make_mock_connection({"X-API-Key": "s" * 64})
             route_handler = make_mock_route_handler()
 
@@ -203,7 +203,7 @@ class TestGuardBehavior:
         """Guard should have access to route handler for context-aware auth."""
         from src.api.dependencies import api_key_guard
 
-        with patch("src.api.dependencies.settings.secret_api_key", "s" * 64):
+        with patch("src.api.dependencies.settings.api.secret_key", "s" * 64):
             connection = make_mock_connection({"X-API-Key": "s" * 64})
             route_handler = make_mock_route_handler()
 
@@ -389,7 +389,7 @@ class TestTimingSafeAPIKeyComparison:
 
         correct_key = "s" * 64
 
-        with patch("src.api.dependencies.settings.secret_api_key", correct_key):
+        with patch("src.api.dependencies.settings.api.secret_key", correct_key):
             # Test with completely wrong key (first char different)
             wrong_key_early = "x" + "s" * 63
             connection_early = make_mock_connection({"X-API-Key": wrong_key_early})
@@ -428,7 +428,7 @@ class TestTimingSafeAPIKeyComparison:
         """Guard should validate key length to prevent short key attacks."""
         from src.api.dependencies import api_key_guard
 
-        with patch("src.api.dependencies.settings.secret_api_key", "s" * 64):
+        with patch("src.api.dependencies.settings.api.secret_key", "s" * 64):
             # Very short key
             short_key = "short"
             connection = make_mock_connection({"X-API-Key": short_key})
@@ -474,7 +474,7 @@ class TestRequestValidation:
         data = base_valid_request()
         # Make file just above the limit (fixture sets max_file_size_mb to 1 MB)
         data["file"] = make_file_obj(
-            "big.wav", "audio/wav", settings.max_file_size_mb * 1024 * 1024 + 1
+            "big.wav", "audio/wav", int(settings.api.max_file_size_mb * 1024 * 1024 + 1)
         )
         with pytest.raises(ValueError):
             await validate_request_data(data)

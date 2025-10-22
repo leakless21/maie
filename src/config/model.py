@@ -296,108 +296,6 @@ class AppSettings(BaseSettings):
         nested_model_default_partial_update=True,
     )
 
-    _COMPAT_FIELDS: ClassVar[Mapping[str, Tuple[str, ...]]] = {
-        "log_level": ("logging", "log_level"),
-        "log_dir": ("logging", "log_dir"),
-        "log_rotation": ("logging", "log_rotation"),
-        "log_retention": ("logging", "log_retention"),
-        "log_console_serialize": ("logging", "log_console_serialize"),
-        "log_file_serialize": ("logging", "log_file_serialize"),
-        "log_compression": ("logging", "log_compression"),
-        "enable_loguru": ("logging", "enable_loguru"),
-        "loguru_diagnose": ("logging", "loguru_diagnose"),
-        "loguru_backtrace": ("logging", "loguru_backtrace"),
-        "loguru_format": ("logging", "loguru_format"),
-        "api_host": ("api", "host"),
-        "api_port": ("api", "port"),
-        "secret_api_key": ("api", "secret_key"),
-        "fallback_api_keys": ("api", "fallback_keys"),
-        "max_file_size_mb": ("api", "max_file_size_mb"),
-        "redis_url": ("redis", "url"),
-        "redis_results_db": ("redis", "results_db"),
-        "max_queue_depth": ("redis", "max_queue_depth"),
-        "whisper_model_path": ("asr", "whisper_model_path"),
-        "whisper_model_variant": ("asr", "whisper_model_variant"),
-        "whisper_beam_size": ("asr", "whisper_beam_size"),
-        "whisper_vad_filter": ("asr", "whisper_vad_filter"),
-        "whisper_vad_min_silence_ms": ("asr", "whisper_vad_min_silence_ms"),
-        "whisper_vad_speech_pad_ms": ("asr", "whisper_vad_speech_pad_ms"),
-        "whisper_device": ("asr", "whisper_device"),
-        "whisper_compute_type": ("asr", "whisper_compute_type"),
-        "whisper_cpu_fallback": ("asr", "whisper_cpu_fallback"),
-        "whisper_condition_on_previous_text": (
-            "asr",
-            "whisper_condition_on_previous_text",
-        ),
-        "whisper_language": ("asr", "whisper_language"),
-        "whisper_cpu_threads": ("asr", "whisper_cpu_threads"),
-        "whisper_word_timestamps": ("asr", "whisper_word_timestamps"),
-        "chunkformer_model_path": ("chunkformer", "chunkformer_model_path"),
-        "chunkformer_model_variant": ("chunkformer", "chunkformer_model_variant"),
-        "chunkformer_chunk_size": ("chunkformer", "chunkformer_chunk_size"),
-        "chunkformer_left_context_size": ("chunkformer", "chunkformer_left_context_size"),
-        "chunkformer_right_context_size": (
-            "chunkformer",
-            "chunkformer_right_context_size",
-        ),
-        "chunkformer_total_batch_duration": (
-            "chunkformer",
-            "chunkformer_total_batch_duration",
-        ),
-        "chunkformer_return_timestamps": ("chunkformer", "chunkformer_return_timestamps"),
-        "chunkformer_device": ("chunkformer", "chunkformer_device"),
-        "chunkformer_batch_size": ("chunkformer", "chunkformer_batch_size"),
-        "chunkformer_cpu_fallback": ("chunkformer", "chunkformer_cpu_fallback"),
-        "llm_enhance_model": ("llm_enhance", "model"),
-        "llm_enhance_gpu_memory_utilization": (
-            "llm_enhance",
-            "gpu_memory_utilization",
-        ),
-        "llm_enhance_max_model_len": ("llm_enhance", "max_model_len"),
-        "llm_enhance_temperature": ("llm_enhance", "temperature"),
-        "llm_enhance_top_p": ("llm_enhance", "top_p"),
-        "llm_enhance_top_k": ("llm_enhance", "top_k"),
-        "llm_enhance_max_tokens": ("llm_enhance", "max_tokens"),
-        "llm_enhance_use_beam_search": ("llm_enhance", "use_beam_search"),
-        "llm_enhance_quantization": ("llm_enhance", "quantization"),
-        "llm_enhance_max_num_seqs": ("llm_enhance", "max_num_seqs"),
-        "llm_enhance_max_num_batched_tokens": (
-            "llm_enhance",
-            "max_num_batched_tokens",
-        ),
-        "llm_enhance_max_num_partial_prefills": (
-            "llm_enhance",
-            "max_num_partial_prefills",
-        ),
-        "llm_sum_model": ("llm_sum", "model"),
-        "llm_sum_gpu_memory_utilization": ("llm_sum", "gpu_memory_utilization"),
-        "llm_sum_max_model_len": ("llm_sum", "max_model_len"),
-        "llm_sum_temperature": ("llm_sum", "temperature"),
-        "llm_sum_top_p": ("llm_sum", "top_p"),
-        "llm_sum_top_k": ("llm_sum", "top_k"),
-        "llm_sum_max_tokens": ("llm_sum", "max_tokens"),
-        "llm_sum_quantization": ("llm_sum", "quantization"),
-        "llm_sum_max_num_seqs": ("llm_sum", "max_num_seqs"),
-        "llm_sum_max_num_batched_tokens": (
-            "llm_sum",
-            "max_num_batched_tokens",
-        ),
-        "llm_sum_max_num_partial_prefills": (
-            "llm_sum",
-            "max_num_partial_prefills",
-        ),
-        "audio_dir": ("paths", "audio_dir"),
-        "models_dir": ("paths", "models_dir"),
-        "templates_dir": ("paths", "templates_dir"),
-        "worker_name": ("worker", "worker_name"),
-        "job_timeout": ("worker", "job_timeout"),
-        "result_ttl": ("worker", "result_ttl"),
-        "worker_concurrency": ("worker", "worker_concurrency"),
-        "worker_prefetch_multiplier": ("worker", "worker_prefetch_multiplier"),
-        "worker_prefetch_timeout": ("worker", "worker_prefetch_timeout"),
-        "enable_enhancement": ("features", "enable_enhancement"),
-    }
-
     _SECRET_FIELDS: ClassVar[set[str]] = {"secret_api_key"}
 
     def ensure_directories(self) -> Dict[str, Path]:
@@ -425,55 +323,6 @@ class AppSettings(BaseSettings):
     def get_template_path(self, template_id: str) -> Path:
         return self.paths.templates_dir / f"{template_id}.json"
 
-    def _resolve_compat(self, name: str) -> Any:
-        path = self._COMPAT_FIELDS[name]
-        value: Any = self
-        for segment in path:
-            value = getattr(value, segment)
-        if name in self._SECRET_FIELDS and isinstance(value, SecretStr):
-            return value.get_secret_value()
-        return value
-
-    def __getattr__(self, name: str) -> Any:
-        if name in self._COMPAT_FIELDS:
-            return self._resolve_compat(name)
-        raise AttributeError(f"{type(self).__name__!r} object has no attribute {name!r}")
-
-    def __setattr__(self, name: str, value: Any) -> None:
-        if name in self._COMPAT_FIELDS:
-            path = self._COMPAT_FIELDS[name]
-            target: Any = self
-            for segment in path[:-1]:
-                target = BaseModel.__getattribute__(target, segment)
-            field_name = path[-1]
-            if name in self._SECRET_FIELDS:
-                value = value if isinstance(value, SecretStr) else SecretStr(str(value))
-            current_value = BaseModel.__getattribute__(target, field_name)
-            if isinstance(current_value, Path):
-                value = Path(value)
-            elif isinstance(current_value, tuple):
-                if isinstance(value, str):
-                    value = (value,)
-                elif isinstance(value, list):
-                    value = tuple(value)
-            setattr(target, field_name, value)
-            stored_value = BaseModel.__getattribute__(target, field_name)
-            if name in self._SECRET_FIELDS and isinstance(stored_value, SecretStr):
-                stored_value = stored_value.get_secret_value()
-            object.__setattr__(self, name, stored_value)
-            return
-        super().__setattr__(name, value)
-
-    def __delattr__(self, name: str) -> None:
-        if name in self._COMPAT_FIELDS:
-            object.__delattr__(self, name)
-            return
-        super().__delattr__(name)
-
-    def model_post_init(self, __context: Any) -> None:
-        super().model_post_init(__context)
-        for alias in self._COMPAT_FIELDS:
-            object.__setattr__(self, alias, self._resolve_compat(alias))
 
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
@@ -506,3 +355,4 @@ class AppSettings(BaseSettings):
 
         updated = _apply(self, profile)
         return cast(AppSettings, updated)
+

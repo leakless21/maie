@@ -33,7 +33,7 @@ class ChunkFormerBackend(ASRBackend):
         env_model = os.getenv("CHUNKFORMER_MODEL_PATH")
         # preserve config_model for later decision logic
         config_model = (
-            getattr(cfg.settings, "chunkformer_model_path", None)
+            getattr(cfg.settings.chunkformer, "chunkformer_model_path", None)
             if hasattr(cfg, "settings")
             else None
         )
@@ -73,7 +73,7 @@ class ChunkFormerBackend(ASRBackend):
             # ensure we attempt to load it even when heuristics above decided not to.
             # Tests rely on being able to set cfg.settings.chunkformer_model_path via monkeypatch.
             try:
-                cfg_model_check = getattr(cfg.settings, "chunkformer_model_path", None)
+                cfg_model_check = getattr(cfg.settings.chunkformer, "chunkformer_model_path", None)
             except Exception:
                 cfg_model_check = None
             if not self._explicit_model_arg and cfg_model_check is not None:
@@ -101,7 +101,7 @@ class ChunkFormerBackend(ASRBackend):
         # Device resolution: env > config > auto
         device_env = os.getenv("CHUNKFORMER_DEVICE")
         cfg_device = (
-            getattr(cfg.settings, "chunkformer_device", None)
+            getattr(cfg.settings.chunkformer, "chunkformer_device", None)
             if hasattr(cfg, "settings")
             else None
         )
@@ -193,21 +193,21 @@ class ChunkFormerBackend(ASRBackend):
                     # User kwargs override config defaults
                     params = {
                         "chunk_size": kwargs.pop(
-                            "chunk_size", cfg.settings.chunkformer_chunk_size
+                            "chunk_size", cfg.settings.chunkformer.chunkformer_chunk_size
                         ),
                         "left_context_size": kwargs.pop(
-                            "left_context", cfg.settings.chunkformer_left_context_size
+                            "left_context", cfg.settings.chunkformer.chunkformer_left_context_size
                         ),
                         "right_context_size": kwargs.pop(
-                            "right_context", cfg.settings.chunkformer_right_context_size
+                            "right_context", cfg.settings.chunkformer.chunkformer_right_context_size
                         ),
                         "total_batch_duration": kwargs.pop(
                             "total_batch_duration",
-                            cfg.settings.chunkformer_total_batch_duration,
+                            cfg.settings.chunkformer.chunkformer_total_batch_duration,
                         ),
                         "return_timestamps": kwargs.pop(
                             "return_timestamps",
-                            cfg.settings.chunkformer_return_timestamps,
+                            cfg.settings.chunkformer.chunkformer_return_timestamps,
                         ),
                     }
                     # Add any additional kwargs
@@ -301,10 +301,10 @@ class ChunkFormerBackend(ASRBackend):
                     # User kwargs override config defaults
                     params = {
                         "left_context": kwargs.pop(
-                            "left_context", cfg.settings.chunkformer_left_context_size
+                            "left_context", cfg.settings.chunkformer.chunkformer_left_context_size
                         ),
                         "right_context": kwargs.pop(
-                            "right_context", cfg.settings.chunkformer_right_context_size
+                            "right_context", cfg.settings.chunkformer.chunkformer_right_context_size
                         ),
                     }
                     # Add any additional kwargs
@@ -442,7 +442,7 @@ class ChunkFormerBackend(ASRBackend):
         """Return version metadata for the backend (NFR-1 compliance)."""
         info: VersionInfo = {}
         info["backend"] = "chunkformer"
-        info["model_variant"] = cfg.settings.chunkformer_model_variant
+        info["model_variant"] = cfg.settings.chunkformer.chunkformer_model_variant
         info["model_path"] = self.model_path
         info["library"] = "chunkformer"
 
@@ -455,17 +455,16 @@ class ChunkFormerBackend(ASRBackend):
             info["version"] = "unknown"
 
         # Add architecture parameters for reproducibility (NFR-1 requirement)
-        info["chunk_size"] = cfg.settings.chunkformer_chunk_size
-        info["left_context_size"] = cfg.settings.chunkformer_left_context_size
-        info["right_context_size"] = cfg.settings.chunkformer_right_context_size
-        info["total_batch_duration"] = cfg.settings.chunkformer_total_batch_duration
-        info["return_timestamps"] = cfg.settings.chunkformer_return_timestamps
+        # Only include valid fields in VersionInfo TypedDict
+        info["model_variant"] = cfg.settings.chunkformer.chunkformer_model_variant
+        info["model_path"] = str(self.model_path) if self.model_path else "unknown"
 
         # Device info
         try:
             device = getattr(self.model, "device", None)
             # Convert torch.device to string if needed
-            info["device"] = str(device) if device is not None else None
+            if device is not None:
+                info["device"] = str(device)
         except Exception:
             pass
 

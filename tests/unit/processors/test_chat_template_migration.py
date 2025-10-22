@@ -21,7 +21,7 @@ class TestChatFormattedTemplates:
     @pytest.fixture
     def renderer(self):
         """Create prompt renderer with templates."""
-        loader = TemplateLoader(settings.templates_dir / "prompts")
+        loader = TemplateLoader(settings.paths.templates_dir / "prompts")
         return PromptRenderer(loader)
 
     def test_meeting_notes_template_has_chat_tokens(self, renderer):
@@ -187,7 +187,7 @@ class TestTemplateBackwardCompatibility:
     @pytest.fixture
     def renderer(self):
         """Create prompt renderer."""
-        loader = TemplateLoader(settings.templates_dir / "prompts")
+        loader = TemplateLoader(settings.paths.templates_dir / "prompts")
         return PromptRenderer(loader)
 
     def test_templates_accept_same_parameters(self, renderer):

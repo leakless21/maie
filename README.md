@@ -339,20 +339,28 @@ uv pip install -e ".[dev]"
 
 ```bash
 # Start only API server
-./scripts/dev.sh --api-only
+pixi run api
 
 # Start only worker
-./scripts/dev.sh --worker-only
+pixi run worker
 
-# Start both (default)
+# For more complex scenarios, you can use the dev.sh script
 ./scripts/dev.sh
+```
+
+For running the application directly without any external tools, you can use the `main.py` script:
+```bash
+python main.py
 ```
 
 3. **Code Quality:**
 
 ```bash
 # Format code
-./scripts/lint.sh
+pixi run format
+
+# Lint code
+pixi run lint
 
 # Type checking (if mypy configured)
 mypy src/
@@ -381,15 +389,13 @@ maie/
 
 ```bash
 # Run all tests
-./scripts/test.sh
+pixi run test
 
-# Run specific test categories
-./scripts/test.sh --unit          # Unit tests only
-./scripts/test.sh --integration  # Integration tests
-./scripts/test.sh --e2e          # End-to-end tests
+# Run specific test categories by using pytest markers
+pixi run test -m "not real_llm"
 
 # Run with coverage
-./scripts/test.sh --coverage
+pixi run test --cov=src
 ```
 
 ### Test Categories
@@ -468,6 +474,23 @@ docker-compose down
 docker-compose up -d
 ```
 
+## Utilities
+
+### Clean Logs
+
+The `clean-logs.sh` script removes log files older than a specified number of days.
+
+```bash
+# Clean logs older than 7 days (default)
+./scripts/clean-logs.sh
+
+# Clean logs older than 30 days
+DAYS_TO_KEEP=30 ./scripts/clean-logs.sh
+
+# Dry run to see which files would be deleted
+DRY_RUN=true ./scripts/clean-logs.sh
+```
+
 ## 🤝 Contributing
 
 ### Development Workflow
@@ -493,10 +516,10 @@ docker-compose up -d
 # Development workflow
 git checkout -b feature/your-feature-name
 # Write tests first (TDD)
-./scripts/test.sh  # Should fail
+pixi run test # Should fail
 # Implement feature
-./scripts/test.sh  # Should pass
-./scripts/lint.sh  # Code quality
+pixi run test  # Should pass
+pixi run lint  # Code quality
 git push origin feature/your-feature-name
 ```
 

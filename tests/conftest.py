@@ -528,19 +528,29 @@ def mock_config(monkeypatch):
 
     class ConfigMocker:
         def set(self, key, value):
-            monkeypatch.setattr(config.settings, key, value)
+            # Handle nested configuration paths
+            if key.startswith("whisper_"):
+                monkeypatch.setattr(config.settings.asr, key, value)
+            elif key.startswith("chunkformer_"):
+                monkeypatch.setattr(config.settings.chunkformer, key, value)
+            elif key.startswith("max_file_size"):
+                monkeypatch.setattr(config.settings.api, key, value)
+            elif key.startswith("templates_dir"):
+                monkeypatch.setattr(config.settings.paths, key, value)
+            else:
+                monkeypatch.setattr(config.settings, key, value)
 
         def set_whisper_defaults(self):
             """Set common Whisper config defaults."""
-            self.set("whisper_device", "cuda")
-            self.set("whisper_compute_type", "float16")
-            self.set("whisper_beam_size", 5)
-            self.set("whisper_vad_filter", True)
-            self.set("whisper_vad_min_silence_ms", 500)
-            self.set("whisper_vad_speech_pad_ms", 400)
-            self.set("whisper_condition_on_previous_text", True)
-            self.set("whisper_language", None)
-            self.set("whisper_cpu_fallback", False)
+            monkeypatch.setattr(config.settings.asr, "whisper_device", "cuda")
+            monkeypatch.setattr(config.settings.asr, "whisper_compute_type", "float16")
+            monkeypatch.setattr(config.settings.asr, "whisper_beam_size", 5)
+            monkeypatch.setattr(config.settings.asr, "whisper_vad_filter", True)
+            monkeypatch.setattr(config.settings.asr, "whisper_vad_min_silence_ms", 500)
+            monkeypatch.setattr(config.settings.asr, "whisper_vad_speech_pad_ms", 400)
+            monkeypatch.setattr(config.settings.asr, "whisper_condition_on_previous_text", True)
+            monkeypatch.setattr(config.settings.asr, "whisper_language", None)
+            monkeypatch.setattr(config.settings.asr, "whisper_cpu_fallback", False)
 
     return ConfigMocker()
 

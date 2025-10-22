@@ -137,7 +137,7 @@ litestar_kwargs: Dict[str, Any] = {
         Exception: _handle_generic,
     },
     "debug": settings.debug,
-    "request_max_body_size": settings.max_file_size_mb * 1024 * 1024,
+    "request_max_body_size": settings.api.max_file_size_mb * 1024 * 1024,
 }
 if CORSConfig is not None:
     litestar_kwargs["cors_config"] = CORSConfig(
@@ -163,8 +163,8 @@ if __name__ == "__main__":
     # Suppress uvicorn's default logging to avoid duplicate messages
     uvicorn.run(
         app, 
-        host=settings.api_host, 
-        port=settings.api_port,
+        host=settings.api.host,
+        port=settings.api.port,
         log_config=None,  # Disable uvicorn's default logging config
         access_log=False  # Disable access logs to reduce noise
     )

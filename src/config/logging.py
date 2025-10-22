@@ -94,8 +94,8 @@ def configure_logging() -> Any:
         pass
 
     # Get settings
-    level = settings.log_level.upper()
-    log_dir = Path(settings.log_dir)
+    level = settings.logging.log_level.upper()
+    log_dir = Path(settings.logging.log_dir)
     
     # Ensure log directory exists
     log_dir.mkdir(parents=True, exist_ok=True)
@@ -115,8 +115,8 @@ def configure_logging() -> Any:
         format=console_format,
         level=level,
         colorize=True,
-        backtrace=settings.loguru_backtrace,
-        diagnose=settings.loguru_diagnose,
+        backtrace=settings.logging.loguru_backtrace,
+        diagnose=settings.logging.loguru_diagnose,
         filter=lambda record: _inject_context(record)
     )
 
@@ -128,10 +128,10 @@ def configure_logging() -> Any:
             "{extra[module]}:{function}:{line} | {extra[correlation_id]} | {message}"
         ),
         level=level,
-        rotation=settings.log_rotation,
-        retention=settings.log_retention,
-        compression=settings.log_compression,
-        backtrace=settings.loguru_backtrace,
+        rotation=settings.logging.log_rotation,
+        retention=settings.logging.log_retention,
+        compression=settings.logging.log_compression,
+        backtrace=settings.logging.loguru_backtrace,
         diagnose=False,
         filter=lambda record: _inject_context(record)
     )
@@ -145,9 +145,9 @@ def configure_logging() -> Any:
             "STRUCTURED: {extra}"
         ),
         level="ERROR",
-        rotation=settings.log_rotation,
-        retention=settings.log_retention,
-        compression=settings.log_compression,
+        rotation=settings.logging.log_rotation,
+        retention=settings.logging.log_retention,
+        compression=settings.logging.log_compression,
         backtrace=True,
         diagnose=False,
         filter=lambda record: _inject_context(record)

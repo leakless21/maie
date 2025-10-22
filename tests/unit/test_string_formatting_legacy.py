@@ -21,8 +21,8 @@ class TestStringFormattingLegacy:
             with patch("src.worker.main.settings") as mock_settings:
                 with patch("pathlib.Path.exists", return_value=True):
                     # Set up mock settings
-                    mock_settings.whisper_model_path = "/fake/whisper"
-                    mock_settings.chunkformer_model_path = "/fake/chunkformer"
+                    mock_settings.asr.whisper_model_path = "/fake/whisper"
+                    mock_settings.chunkformer.chunkformer_model_path = "/fake/chunkformer"
                     mock_settings.llm_enhance_model = "/fake/llm"
 
                     # Test case 1: Both modules available (should not trigger the legacy formatting)
@@ -51,8 +51,8 @@ class TestStringFormattingLegacy:
             with patch("src.worker.main.settings") as mock_settings:
                 with patch("pathlib.Path.exists", return_value=True):
                     # Set up mock settings
-                    mock_settings.whisper_model_path = "/fake/whisper"
-                    mock_settings.chunkformer_model_path = "/fake/chunkformer"
+                    mock_settings.asr.whisper_model_path = "/fake/whisper"
+                    mock_settings.chunkformer.chunkformer_model_path = "/fake/chunkformer"
                     mock_settings.llm_enhance_model = "/fake/llm"
 
                     # Simulate missing ASR factory but present LLM
@@ -89,8 +89,8 @@ class TestStringFormattingLegacy:
             with patch("src.worker.main.settings") as mock_settings:
                 with patch("pathlib.Path.exists", return_value=True):
                     # Set up mock settings
-                    mock_settings.whisper_model_path = "/fake/whisper"
-                    mock_settings.chunkformer_model_path = "/fake/chunkformer"
+                    mock_settings.asr.whisper_model_path = "/fake/whisper"
+                    mock_settings.chunkformer.chunkformer_model_path = "/fake/chunkformer"
                     mock_settings.llm_enhance_model = "/fake/llm"
 
                     # Simulate both modules missing
@@ -119,8 +119,8 @@ class TestStringFormattingLegacy:
             with patch("src.worker.main.settings") as mock_settings:
                 with patch("pathlib.Path.exists", return_value=True):
                     # Set up mock settings
-                    mock_settings.whisper_model_path = "/fake/whisper"
-                    mock_settings.chunkformer_model_path = "/fake/chunkformer"
+                    mock_settings.asr.whisper_model_path = "/fake/whisper"
+                    mock_settings.chunkformer.chunkformer_model_path = "/fake/chunkformer"
                     mock_settings.llm_enhance_model = "/fake/llm"
 
                     # Test different boolean combinations

@@ -110,7 +110,7 @@ def check_queue_depth() -> bool:
     try:
         queue = get_rq_queue()
         current_depth = queue.count
-        return current_depth < settings.max_queue_depth
+        return current_depth < settings.redis.max_queue_depth
     except Exception:
         # Fail open for availability
         return True
@@ -146,14 +146,14 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
         ext = ".wav"  # Fallback to safe default
 
     # Use UUID-based filename
-    file_path = settings.audio_dir / f"{task_id}{ext}"
+    file_path = settings.paths.audio_dir / f"{task_id}{ext}"
 
     # Ensure directory exists
-    settings.audio_dir.mkdir(parents=True, exist_ok=True)
+    settings.paths.audio_dir.mkdir(parents=True, exist_ok=True)
 
     # Stream file content to disk using aiofiles with size validation
     total_size = 0
-    max_size_bytes = settings.max_file_size_mb * 1024 * 1024
+    max_size_bytes = settings.api.max_file_size_mb * 1024 * 1024
     chunk_size = 64 * 1024  # 64KB chunks
 
     async with aiofiles.open(file_path, "wb") as f:
@@ -174,10 +174,10 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
 
                 file_size_mb = total_size / (1024 * 1024)
                 error = AudioValidationError(
-                    message=f"File too large: {file_size_mb:.2f}MB (max {settings.max_file_size_mb}MB)",
+                    message=f"File too large: {file_size_mb:.2f}MB (max {settings.api.max_file_size_mb}MB)",
                     details={
                         "file_size_mb": file_size_mb,
-                        "max_size_mb": settings.max_file_size_mb,
+                        "max_size_mb": settings.api.max_file_size_mb,
                         "filename": file.filename,
                     },
                 )
@@ -204,13 +204,13 @@ async def create_task_in_redis(
             "task_id": str(task_id),
             "status": TaskStatus.PENDING.value,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
-            "features": json.dumps(request_params.get("features", [])),
-            "template_id": request_params.get("template_id", ""),
+            "features": json.dumps(request_params.get("features", ["summary"])),
+            "template_id": request_params.get("template_id", "generic_summary_v1"),
             "file_path": request_params.get("file_path", ""),
-            "asr_backend": request_params.get("asr_backend", "whisper"),
+            "asr_backend": request_params.get("asr_backend", "chunkformer"),
         }
         await redis_client.hset(task_key, mapping=task_data)
-        await redis_client.expire(task_key, settings.result_ttl)
+        await redis_client.expire(task_key, settings.worker.result_ttl)
     finally:
         await redis_client.aclose()
 
@@ -227,20 +227,20 @@ def enqueue_job(
     task_params = {
         "task_id": str(task_id),
         "audio_path": str(file_path),
-        "features": request_params.get("features", ["clean_transcript", "summary"]),
+        "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
-        "asr_backend": request_params.get("asr_backend", "whisper"),
+        "asr_backend": request_params.get("asr_backend", "chunkformer"),
         "redis_host": "localhost",
         "redis_port": 6379,
-        "redis_db": settings.redis_results_db,
+        "redis_db": settings.redis.results_db,
     }
 
     queue.enqueue(
         process_audio_task,
         task_params,
         job_id=str(task_id),
-        job_timeout=settings.job_timeout,
-        result_ttl=settings.result_ttl,
+        job_timeout=settings.worker.job_timeout,
+        result_ttl=settings.worker.result_ttl,
     )
 
 
@@ -366,14 +366,14 @@ class ProcessController(Controller):
         file = payload.file
         features_raw = payload.features
         template_id = payload.template_id
-        asr_backend = payload.asr_backend or "whisper"
+        asr_backend = payload.asr_backend or "chunkformer"
 
         # Normalize and validate asr_backend
         from src.processors.asr.factory import ASRFactory
         if isinstance(asr_backend, str):
             asr_backend = asr_backend.strip().lower()
         else:
-            asr_backend = "whisper"
+            asr_backend = "chunkformer"
 
         allowed = set(ASRFactory.BACKENDS.keys())
         if asr_backend not in allowed:
@@ -575,35 +575,81 @@ def get_available_models() -> ModelsResponseSchema:
 
 def scan_templates_directory() -> TemplatesResponseSchema:
     """
-    Scan templates directory for available templates.
+    Scans the templates directory and returns a list of available templates with Vietnamese descriptions and examples.
 
     Returns:
-        TemplatesResponseSchema with templates list
+        TemplatesResponseSchema: A list of available templates.
     """
+    templates_data = [
+        {
+            "id": "generic_summary_v1",
+            "name": "Bản tóm tắt chung (v1)",
+            "description": "Mẫu này cung cấp một cái nhìn tổng quan ngắn gọn về một văn bản. Nó bao gồm một bản tóm tắt ngắn, một tiêu đề và danh sách các điểm chính.",
+            "example": {
+              "title": "Tác động của AI lên năng suất làm việc",
+              "summary": "Bài nói trình bày cách các công cụ trí tuệ nhân tạo hỗ trợ tự động hóa tác vụ lặp lại, gợi ý nội dung và cải thiện tốc độ xử lý công việc. Diễn giả nhấn mạnh tầm quan trọng của việc thiết lập quy trình kiểm duyệt để đảm bảo chất lượng và đạo đức khi áp dụng AI vào môi trường doanh nghiệp.",
+              "key_topics": [
+                "Tự động hóa tác vụ",
+                "Gợi ý nội dung",
+                "Quy trình kiểm duyệt",
+                "Đạo đức trong AI"
+              ],
+              "tags": ["ai", "năng suất", "doanh nghiệp"]
+            }
+        },
+        {
+            "id": "interview_transcript_v1",
+            "name": "Bản ghi phỏng vấn (v1)",
+            "description": "Mẫu này được thiết kế để tóm tắt các cuộc phỏng vấn. Nó bao gồm một tiêu đề, một bản tóm tắt ngắn gọn của cuộc trò chuyện và danh sách các câu hỏi và câu trả lời.",
+            "example": {
+              "interview_summary": "Cuộc phỏng vấn với chị An, trưởng nhóm sản phẩm, xoay quanh kinh nghiệm triển khai quy trình phát hành nhanh. Chị chia sẻ về việc rút ngắn chu kỳ phát hành bằng cách tăng tự động hóa kiểm thử, chuẩn hóa tiêu chí chấp nhận và cải thiện giao tiếp giữa nhóm phát triển và vận hành.",
+              "key_insights": [
+                "Tự động hóa kiểm thử giúp rút ngắn chu kỳ phát hành",
+                "Tiêu chí chấp nhận rõ ràng hạn chế lỗi phát sinh",
+                "Tăng cường giao tiếp giữa Dev và Ops"
+              ],
+              "participant_sentiment": "positive",
+              "tags": ["sản phẩm", "quy trình", "phỏng vấn"]
+            }
+        },
+        {
+            "id": "meeting_notes_v1",
+            "name": "Ghi chú cuộc họp (v1)",
+            "description": "Mẫu này dùng để tóm tắt các cuộc họp. Nó bao gồm tiêu đề cuộc họp, bản tóm tắt cuộc thảo luận, danh sách các mục hành động và các quyết định chính đã được đưa ra.",
+            "example": {
+              "title": "Họp dự án X – rà soát tiến độ và phân công",
+              "participants": ["Minh", "Lan", "Hùng"],
+              "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
+              "agenda": [
+                "Cập nhật tiến độ sprint",
+                "Phạm vi phát hành",
+                "Phân công công việc"
+              ],
+              "decisions": [
+                "Ưu tiên xử lý lỗi còn tồn đọng",
+                "Giữ nguyên phạm vi tính năng hiện tại"
+              ],
+              "action_items": [
+                {"description": "Lan tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "assignee": "Lan", "due_date": "2025-10-23"},
+                {"description": "Hùng cập nhật test cases cho tính năng thanh toán", "assignee": "Hùng"}
+              ],
+              "tags": ["họp nhóm", "dự án", "kế hoạch"]
+            }
+        }
+    ]
+
     templates = []
-
-    # Scan templates directory
-    if settings.templates_dir.exists():
-        for template_file in settings.templates_dir.glob("*.json"):
-            template_id = template_file.stem
-
-            # Try to load template for metadata
-            try:
-                with open(template_file, "r") as f:
-                    template_data = json.load(f)
-
-                templates.append(
-                    TemplateInfoSchema(
-                        id=template_id,
-                        name=template_data.get("title", template_id),
-                        description=template_data.get("description", ""),
-                        schema_url=f"/v1/templates/{template_id}/schema",
-                        parameters={},
-                    )
-                )
-            except Exception:
-                # Skip malformed templates
-                continue
+    for t_data in templates_data:
+        templates.append(
+            TemplateInfoSchema(
+                id=t_data["id"],
+                name=t_data["name"],
+                description=t_data["description"],
+                schema_url=f"/v1/templates/{t_data['id']}/schema",
+                parameters={},
+                example=t_data["example"],
+            )
+        )
 
     return TemplatesResponseSchema(templates=templates)
 
