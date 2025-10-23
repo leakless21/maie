@@ -13,6 +13,8 @@ import jsonschema
 from jsonschema import ValidationError
 
 from src.config.logging import get_module_logger
+from src.utils.json_utils import safe_parse_json, validate_json_schema, extract_validation_error
+from src.utils.logging_utils import log_json_parse_error, log_validation_error
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -97,51 +99,41 @@ def validate_llm_output(
     output_preview = output.strip()[:200] + ("..." if len(output.strip()) > 200 else "")
     logger.debug(f"Validating LLM output: {output_preview!r}")
 
-    # First, try to parse as JSON
-    try:
-        parsed_data = json.loads(output.strip())
-        logger.debug(
-            f"Successfully parsed JSON with {len(parsed_data)} top-level keys: {list(parsed_data.keys())}"
-        )
-    except json.JSONDecodeError as e:
+    # First, try to parse as JSON using the consolidated utility
+    parsed_data, parse_error = safe_parse_json(output.strip())
+    if parse_error:
         # Enhanced logging for JSON parse failures
+        log_json_parse_error(json.JSONDecodeError("JSON decode error", output, 0), {
+            "raw_output": output.strip(),
+            "output_length": len(output.strip()),
+            "output_preview": output_preview,
+        })
         logger.error(
             "JSON parsing failed",
             extra={
                 "error_type": "json_parse_error",
-                "error_message": str(e),
+                "error_message": parse_error,
                 "raw_output": output.strip(),
                 "output_length": len(output.strip()),
                 "output_preview": output_preview,
-                "line": getattr(e, "lineno", "unknown"),
-                "column": getattr(e, "colno", "unknown"),
-                "position": getattr(e, "pos", "unknown"),
             },
         )
-        return None, f"Invalid JSON format: {e}"
+        return None, parse_error
 
-    # Then validate against schema
-    try:
-        jsonschema.validate(parsed_data, schema)
-        logger.debug("LLM output validated successfully against schema")
-        return parsed_data, None
-    except ValidationError as e:
-        # Enhanced logging for schema validation failures
-        error_msg = f"Schema validation failed: {e.message}"
-        if e.path:
-            error_msg += f" (at path: {' -> '.join(str(p) for p in e.path)})"
+    if parsed_data is not None:
+        logger.debug(
+            f"Successfully parsed JSON with {len(parsed_data)} top-level keys: {list(parsed_data.keys())}"
+        )
 
-        logger.error(
-            "Schema validation failed",
-            extra={
-                "error_type": "schema_validation_error",
-                "error_message": e.message,
-                "validation_path": list(e.path),
-                "validation_absolute_path": list(e.absolute_path),
-                "validator": e.validator,
-                "validator_value": e.validator_value,
-                "failed_instance": e.instance,
-                "schema_path": list(e.schema_path),
+        # Then validate against schema using the consolidated utility
+        is_valid, validation_error = validate_json_schema(parsed_data, schema)
+        if not is_valid:
+            # Enhanced logging for schema validation failures
+            error_msg = f"Schema validation failed: {validation_error.get('error', 'Unknown validation error') if validation_error else 'Unknown validation error'}"
+            if validation_error and 'path' in validation_error:
+                error_msg += f" (at path: {' -> '.join(str(p) for p in validation_error['path'])})"
+
+            log_validation_error(ValidationError(error_msg), {
                 "raw_output": output.strip(),
                 "output_preview": output_preview,
                 "parsed_data": parsed_data,
@@ -150,19 +142,45 @@ def validate_llm_output(
                     "properties": list(schema.get("properties", {}).keys()),
                     "required": schema.get("required", []),
                 },
-            },
-        )
-        return None, error_msg
-    except Exception as e:
-        error_msg = f"Unexpected validation error: {e}"
+            })
+            
+            logger.error(
+                "Schema validation failed",
+                extra={
+                    "error_type": "schema_validation_error",
+                    "error_message": validation_error.get('error', 'Unknown validation error') if validation_error else 'Unknown validation error',
+                    "validation_path": validation_error.get('path', []) if validation_error else [],
+                    "validation_absolute_path": validation_error.get('absolute_path', []) if validation_error else [],
+                    "validator": validation_error.get('validator', 'unknown') if validation_error else 'unknown',
+                    "validator_value": validation_error.get('validator_value', 'unknown') if validation_error else 'unknown',
+                    "failed_instance": validation_error.get('instance', 'unknown') if validation_error else 'unknown',
+                    "schema_path": validation_error.get('schema_path', []) if validation_error else [],
+                    "raw_output": output.strip(),
+                    "output_preview": output_preview,
+                    "parsed_data": parsed_data,
+                    "schema_summary": {
+                        "type": schema.get("type"),
+                        "properties": list(schema.get("properties", {}).keys()),
+                        "required": schema.get("required", []),
+                    },
+                },
+            )
+            return None, error_msg
+
+        logger.debug("LLM output validated successfully against schema")
+        return parsed_data, None
+    else:
+        # This case should not happen since safe_parse_json returns (None, error_msg) on failure
+        # But added for safety
+        error_msg = "Failed to parse JSON output"
         logger.error(
-            "Unexpected schema validation error",
+            "JSON parsing failed",
             extra={
-                "error_type": "unexpected_validation_error",
-                "error_message": str(e),
+                "error_type": "json_parse_error",
+                "error_message": error_msg,
                 "raw_output": output.strip(),
+                "output_length": len(output.strip()),
                 "output_preview": output_preview,
-                "parsed_data": parsed_data if "parsed_data" in locals() else None,
             },
         )
         return None, error_msg
@@ -233,15 +251,7 @@ def extract_validation_errors(validation_error: ValidationError) -> Dict[str, An
         ...     error_info = extract_validation_errors(e)
         ...     print(error_info["message"])
     """
-    return {
-        "message": validation_error.message,
-        "path": list(validation_error.path),
-        "absolute_path": list(validation_error.absolute_path),
-        "schema_path": list(validation_error.schema_path),
-        "validator": validation_error.validator,
-        "validator_value": validation_error.validator_value,
-        "instance": validation_error.instance,
-    }
+    return extract_validation_error(validation_error)
 
 
 def create_validation_summary(

@@ -19,12 +19,13 @@ import pytest
 from src.api.schemas import TaskStatus
 from src.worker.pipeline import (
     _calculate_edit_rate,
-    _sanitize_metadata,
     _update_status,
     calculate_metrics,
     get_version_metadata,
     process_audio_task,
 )
+
+from src.utils.sanitization import sanitize_metadata as _sanitize_metadata
 
 try:
     import fakeredis
@@ -173,7 +174,7 @@ class TestGetVersionMetadata:
         result = get_version_metadata(asr_metadata, mock_llm)
 
         assert result["pipeline_version"] == "1.0.0"  # From settings mock
-        assert result["asr"]["model_name"] == "whisper-base"
+        assert result["asr_backend"]["name"] == "whisper-base"
         assert result["llm"]["model_name"] == "test-llm"
 
     def test_without_llm_model(self, mocker):
@@ -323,7 +324,12 @@ class TestProcessAudioTask:
                 assert "metrics" in result
                 assert "results" in result
                 assert result["results"]["transcript"] == "Hello world"
-                assert result["results"]["summary"] == "A greeting"
+                # After migration to structured output, summary is now a dict, not a string
+                assert isinstance(result["results"]["summary"], dict)
+                assert "action_items" in result["results"]["summary"]
+                assert "agenda" in result["results"]["summary"]
+                assert "decisions" in result["results"]["summary"]
+                assert "meeting_date" in result["results"]["summary"]
 
                 # Verify Redis updates were made
                 task_data = redis_client.hgetall("task:test-job-123")

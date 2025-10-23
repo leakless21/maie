@@ -28,7 +28,7 @@ class TestVersionMetadataStructure:
         version_metadata = get_version_metadata(asr_metadata, llm_model=None)
 
         # Verify required top-level keys
-        assert "asr" in version_metadata
+        assert "asr_backend" in version_metadata
         assert "llm" in version_metadata
         assert "pipeline_version" in version_metadata
 
@@ -44,10 +44,13 @@ class TestVersionMetadataStructure:
 
         version_metadata = get_version_metadata(asr_metadata, llm_model=None)
 
-        # ASR metadata should be preserved exactly
-        assert version_metadata["asr"] == asr_metadata
-        assert version_metadata["asr"]["model_name"] == "whisper-large-v3"
-        assert version_metadata["asr"]["checkpoint_hash"] == "abc123"
+        # ASR metadata should be transformed to standardized structure
+        assert version_metadata["asr_backend"]["name"] == "whisper-large-v3"
+        assert version_metadata["asr_backend"]["checkpoint_hash"] == "abc123"
+        assert version_metadata["asr_backend"]["model_variant"] == "unknown"
+        assert version_metadata["asr_backend"]["model_path"] == ""
+        assert version_metadata["asr_backend"]["compute_type"] == "float16"
+        assert version_metadata["asr_backend"]["decoding_params"] == {}
 
     def test_llm_metadata_when_no_model(self):
         """Test LLM metadata when model is not loaded."""
@@ -143,14 +146,14 @@ class TestASRMetadataCollection:
 
         version_metadata = get_version_metadata(asr_metadata, None)
 
-        asr = version_metadata["asr"]
+        asr = version_metadata["asr_backend"]
         # Required fields per TDD NFR-1
-        assert "model_name" in asr
+        assert "name" in asr
         assert "checkpoint_hash" in asr
-        assert "backend" in asr
-        # Optional config fields
-        assert "language" in asr
-        assert "device" in asr
+        assert "model_variant" in asr
+        assert "model_path" in asr
+        assert "compute_type" in asr
+        assert "decoding_params" in asr
 
     def test_chunkformer_metadata_structure(self):
         """Test that ChunkFormer backend metadata has required fields."""
@@ -164,10 +167,13 @@ class TestASRMetadataCollection:
 
         version_metadata = get_version_metadata(asr_metadata, None)
 
-        asr = version_metadata["asr"]
-        assert asr["model_name"] == "chunkformer-rnnt-large-vie"
+        asr = version_metadata["asr_backend"]
+        assert asr["name"] == "chunkformer-rnnt-large-vie"
         assert asr["checkpoint_hash"] == "hash_xyz789"
-        assert asr["backend"] == "chunkformer"
+        assert asr["model_variant"] == "unknown"
+        assert asr["model_path"] == ""
+        assert asr["compute_type"] == "float16"
+        assert asr["decoding_params"] == {}
 
     def test_asr_metadata_with_minimal_fields(self):
         """Test ASR metadata with only required fields."""
@@ -178,7 +184,7 @@ class TestASRMetadataCollection:
         version_metadata = get_version_metadata(asr_metadata, None)
 
         # Should work with minimal metadata
-        assert version_metadata["asr"]["model_name"] == "whisper-base"
+        assert version_metadata["asr_backend"]["name"] == "whisper-base"
 
 
 class TestCompleteVersionMetadata:
@@ -208,8 +214,8 @@ class TestCompleteVersionMetadata:
         version_metadata = get_version_metadata(asr_metadata, llm_model)
 
         # Verify all components present
-        assert version_metadata["asr"]["model_name"] == "whisper-large-v3"
-        assert version_metadata["asr"]["checkpoint_hash"] == "asr_hash_456"
+        assert version_metadata["asr_backend"]["name"] == "whisper-large-v3"
+        assert version_metadata["asr_backend"]["checkpoint_hash"] == "asr_hash_456"
         assert version_metadata["llm"]["model_name"] == "qwen2.5-3b-instruct"
         assert version_metadata["llm"]["checkpoint_hash"] == "llm_hash_123"
         assert version_metadata["pipeline_version"] == "1.0.0"
@@ -238,7 +244,7 @@ class TestCompleteVersionMetadata:
             assert json_str is not None
             # Should be able to deserialize back
             restored = json.loads(json_str)
-            assert restored["asr"]["model_name"] == "whisper"
+            assert restored["asr_backend"]["name"] == "whisper"
             assert restored["llm"]["model_name"] == "test-model"
         except (TypeError, ValueError) as e:
             pytest.fail(f"Version metadata not JSON serializable: {e}")
@@ -251,8 +257,13 @@ class TestVersionMetadataEdgeCases:
         """Test with empty ASR metadata dict."""
         version_metadata = get_version_metadata({}, None)
 
-        # Should not crash
-        assert version_metadata["asr"] == {}
+        # Should not crash and should have standardized structure
+        assert version_metadata["asr_backend"]["name"] == "unknown"
+        assert version_metadata["asr_backend"]["model_variant"] == "unknown"
+        assert version_metadata["asr_backend"]["model_path"] == ""
+        assert version_metadata["asr_backend"]["checkpoint_hash"] == ""
+        assert version_metadata["asr_backend"]["compute_type"] == "float16"
+        assert version_metadata["asr_backend"]["decoding_params"] == {}
         assert "llm" in version_metadata
         assert "pipeline_version" in version_metadata
 
@@ -283,7 +294,10 @@ class TestVersionMetadataEdgeCases:
 
         version_metadata = get_version_metadata(asr_metadata, None)
 
-        # All fields should be preserved
-        assert version_metadata["asr"]["extra_field_1"] == "value1"
-        assert version_metadata["asr"]["extra_field_2"] == 42
-        assert version_metadata["asr"]["nested"]["key"] == "value"
+        # Standardized fields should be present
+        assert version_metadata["asr_backend"]["name"] == "whisper"
+        assert version_metadata["asr_backend"]["checkpoint_hash"] == "abc"
+        assert version_metadata["asr_backend"]["model_variant"] == "unknown"
+        assert version_metadata["asr_backend"]["model_path"] == ""
+        assert version_metadata["asr_backend"]["compute_type"] == "float16"
+        assert version_metadata["asr_backend"]["decoding_params"] == {}

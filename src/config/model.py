@@ -6,24 +6,7 @@ from typing import Any, ClassVar, Dict, Literal, Mapping, Tuple, TypeVar, cast
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-def _coerce_optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped == "":
-            return None
-        return int(stripped)
-    return int(value)
-
-
-def _blank_to_none(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip() == "":
-        return None
-    return value
+from src.utils.validation import coerce_optional_int, blank_to_none
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -123,12 +106,12 @@ class AsrSettings(BaseModel):
     @field_validator("whisper_language", mode="before")
     @classmethod
     def empty_languages_to_none(cls, value: Any) -> str | None:
-        return _blank_to_none(value)
+        return blank_to_none(value)
 
     @field_validator("whisper_cpu_threads", mode="before")
     @classmethod
     def convert_optional_threads(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class ChunkformerSettings(BaseModel):
@@ -158,14 +141,14 @@ class ChunkformerSettings(BaseModel):
     @field_validator("chunkformer_batch_size", mode="before")
     @classmethod
     def convert_optional_batch(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class LlmEnhanceSettings(BaseModel):
     model: str = Field(default="data/models/qwen3-4b-instruct-2507-awq")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
     max_model_len: int = Field(default=32768)
-    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
     max_tokens: int | None = Field(default=None)
@@ -199,14 +182,14 @@ class LlmEnhanceSettings(BaseModel):
     )
     @classmethod
     def optional_ints(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class LlmSumSettings(BaseModel):
     model: str = Field(default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
     max_model_len: int = Field(default=32768)
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
     max_tokens: int | None = Field(default=None)
@@ -239,7 +222,7 @@ class LlmSumSettings(BaseModel):
     )
     @classmethod
     def optional_ints(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class PathsSettings(BaseModel):

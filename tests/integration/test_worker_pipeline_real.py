@@ -202,7 +202,7 @@ class TestFullPipelineWithRealComponents:
         assert "results" in result
 
         # Verify versions
-        assert result["versions"]["asr"]["model_name"] == "whisper-large-v3"
+        assert result["versions"]["asr_backend"]["name"] == "whisper-large-v3"
         assert result["versions"]["llm"]["model_name"] == "qwen3-4b-instruct"
         assert result["versions"]["pipeline_version"] == settings.pipeline_version
 

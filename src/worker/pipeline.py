@@ -19,7 +19,6 @@ from typing import Any, Dict, Optional
 # Optional torch import (may not be available in test environment)
 try:
     import torch
-
     TORCH_AVAILABLE = True
 except ImportError:
     torch = None  # type: ignore
@@ -42,6 +41,7 @@ from src.api.errors import (
 )
 from src.api.schemas import TaskStatus
 from src.config import settings
+from src.utils.sanitization import sanitize_metadata
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -51,69 +51,6 @@ logger = get_module_logger(__name__)
 # =============================================================================
 
 
-def _sanitize_metadata(value: Any, _seen: Optional[set[int]] = None) -> Any:
-    """
-    Convert metadata into JSON-serializable primitives.
-
-    Handles nested dicts/lists and falls back to string representation for
-    complex objects (e.g., MagicMock instances in tests).
-
-    Args:
-        value: The value to sanitize
-        _seen: Internal set to track object IDs and prevent recursion
-
-    Returns:
-        JSON-serializable representation of the value
-    """
-    # Initialize recursion tracking
-    if _seen is None:
-        _seen = set()
-
-    # Handle MagicMock and other test objects early
-    if hasattr(value, "_mock_name") or hasattr(value, "_mock_parent"):
-        return f"[Mock object: {type(value).__name__}]"
-
-    # Check for recursion using object identity
-    obj_id = id(value)
-    if obj_id in _seen:
-        return f"[Recursive reference to {type(value).__name__}]"
-
-    # Add current object to seen set
-    _seen.add(obj_id)
-
-    try:
-        if isinstance(value, dict):
-            return {str(k): _sanitize_metadata(v, _seen) for k, v in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [_sanitize_metadata(v, _seen) for v in value]
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if hasattr(value, "dict") and callable(value.dict):
-            try:
-                return _sanitize_metadata(value.dict(), _seen)
-            except (AttributeError, TypeError, ValueError) as e:
-                logger.debug(
-                    "Failed to serialize object with dict() method",
-                    error=str(e),
-                    object_type=type(value).__name__,
-                )
-                return str(value)
-        if hasattr(value, "__iter__") and not isinstance(
-            value, (bytes, bytearray, str)
-        ):
-            try:
-                return [_sanitize_metadata(v, _seen) for v in list(value)]
-            except (TypeError, ValueError) as e:
-                logger.debug(
-                    "Failed to iterate over object",
-                    error=str(e),
-                    object_type=type(value).__name__,
-                )
-                return str(value)
-        return str(value)
-    finally:
-        # Clean up tracking for this branch
-        _seen.discard(obj_id)
 
 
 def _update_status(
@@ -142,7 +79,7 @@ def _update_status(
         # Serialize complex objects (dicts, lists) to JSON strings
         for key, value in details.items():
             if isinstance(value, (dict, list)):
-                update_data[key] = json.dumps(_sanitize_metadata(value))
+                update_data[key] = json.dumps(sanitize_metadata(value))
             else:
                 update_data[key] = value
 
@@ -235,7 +172,7 @@ def get_version_metadata(
     """
     # Build ASR metadata variants - ensure all required fields are strings (not None)
     asr_backend = {
-        "name": (asr_result_metadata.get("name") or "whisper")
+        "name": (asr_result_metadata.get("model_name") or asr_result_metadata.get("name") or "whisper")
         if asr_result_metadata
         else "unknown",
         "model_variant": (asr_result_metadata.get("model_variant") or "unknown")

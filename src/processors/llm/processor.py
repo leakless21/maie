@@ -25,6 +25,7 @@ from src.tooling.vllm_utils import (
     calculate_checkpoint_hash,
     get_model_info,
 )
+from src.utils.json_utils import safe_json_loads, validate_llm_output as utils_validate_llm_output
 
 from .schema_validator import (
     load_template_schema,
@@ -789,35 +790,36 @@ class LLMProcessor(LLMBackend):
         if task == "summary":
             template_id = kwargs.get("template_id")
             try:
-                # Parse JSON output
-                structured_output = json.loads(generated_text)
+                # Parse JSON output using safe utility
+                structured_output = safe_json_loads(generated_text, default=None)
 
-                # Validate against schema
-                if template_id:
-                    schema = load_template_schema(
-                        template_id, settings.paths.templates_dir
-                    )
-                    # validate_llm_output returns (validated_output, error_message)
-                    validated_output, error_message = validate_llm_output(
-                        json.dumps(structured_output), schema
-                    )
+                if structured_output is not None:
+                    # Validate against schema
+                    if template_id:
+                        schema = load_template_schema(
+                            template_id, settings.paths.templates_dir
+                        )
+                        # validate_llm_output returns (validated_output, error_message)
+                        validated_output, error_message = validate_llm_output(
+                            json.dumps(structured_output), schema
+                        )
 
-                    if validated_output is not None:
-                        result_metadata["structured_summary"] = validated_output
-                        result_metadata["validation"] = "passed"
-                        logger.info(f"Summary validation passed for {template_id}")
+                        if validated_output is not None:
+                            result_metadata["structured_summary"] = validated_output
+                            result_metadata["validation"] = "passed"
+                            logger.info(f"Summary validation passed for {template_id}")
+                        else:
+                            result_metadata["validation"] = "failed"
+                            result_metadata["validation_error"] = error_message
+                            logger.warning(f"Summary validation failed: {error_message}")
                     else:
-                        result_metadata["validation"] = "failed"
-                        result_metadata["validation_error"] = error_message
-                        logger.warning(f"Summary validation failed: {error_message}")
+                        result_metadata["structured_summary"] = structured_output
+                        result_metadata["validation"] = "skipped"
                 else:
-                    result_metadata["structured_summary"] = structured_output
-                    result_metadata["validation"] = "skipped"
+                    logger.error("Failed to parse JSON output")
+                    result_metadata["validation"] = "json_parse_error"
+                    result_metadata["parse_error"] = "Invalid JSON format"
 
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON output: {e}")
-                result_metadata["validation"] = "json_parse_error"
-                result_metadata["parse_error"] = str(e)
             except Exception as e:
                 logger.error(f"Summary validation error: {e}")
                 result_metadata["validation"] = "error"

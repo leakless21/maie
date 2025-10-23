@@ -13,6 +13,7 @@ from typing import Any, Optional, Tuple, Dict, AsyncGenerator
 from dataclasses import dataclass
 
 from src.config.logging import get_module_logger
+from src.utils.error_handling import safe_async_execute as utils_safe_async_execute
 
 logger = get_module_logger(__name__)
 
@@ -141,17 +142,8 @@ async def safe_async_execute(
     Returns:
         Tuple of (result, error_info)
     """
-    try:
-        result = await processor.execute(*args, **kwargs)
-        return result, None
-    except Exception as exc:
-        error_info = {
-            "type": type(exc).__name__,
-            "message": str(exc),
-            "processor": type(processor).__name__,
-        }
-        logger.error(f"Async processor execution failed: {error_info}")
-        return None, error_info
+    # Use the consolidated utility function
+    return await utils_safe_async_execute(processor.execute, *args, **kwargs)
 
 
 @asynccontextmanager
