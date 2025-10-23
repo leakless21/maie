@@ -6,7 +6,6 @@ from typing import Any, Dict, Type
 
 from src.processors.asr.chunkformer import ChunkFormerBackend
 from src.processors.asr.whisper import WhisperBackend
-from src.processors.audio.metrics import AudioMetricsCollector
 from src.processors.audio.preprocessor import AudioPreprocessor
 from src.processors.base import ASRBackend
 
@@ -74,7 +73,6 @@ class ASRFactory:
         return {
             "asr_processor": asr_processor,
             "audio_preprocessor": AudioPreprocessor(),
-            "audio_metrics_collector": AudioMetricsCollector(),
         }
 
 

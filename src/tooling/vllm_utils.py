@@ -10,8 +10,6 @@ import json
 from pathlib import Path
 from typing import Any, Dict
 
-from loguru import logger
-
 from src.config.logging import get_module_logger
 
 # Create module-bound logger for better debugging

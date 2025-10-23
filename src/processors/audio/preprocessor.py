@@ -14,8 +14,6 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
-from loguru import logger
-
 from src.config import settings
 from src.config.logging import get_module_logger
 

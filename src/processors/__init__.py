@@ -12,8 +12,6 @@ try:
 except Exception:  # optional dependency may be missing in test environments
     LLMProcessor = None
 
-from src.processors.audio.metrics import AudioMetricsCollector
-
 # Audio processors
 from src.processors.audio.preprocessor import AudioPreprocessor
 from src.processors.prompt.renderer import PromptRenderer
@@ -32,7 +30,6 @@ __all__ = [
     "ChunkFormerBackend",
     "LLMProcessor",
     "AudioPreprocessor",
-    "AudioMetricsCollector",
     "TemplateLoader",
     "PromptRenderer",
 ]

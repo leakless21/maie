@@ -26,9 +26,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from src.config import configure_logging, get_logger
-from src.config.logging import get_module_logger
-from src.processors.audio import AudioPreprocessor
+from src.config import configure_logging, get_logger  # noqa: E402
+from src.config.logging import get_module_logger  # noqa: E402
+from src.processors.audio import AudioPreprocessor  # noqa: E402
 
 
 def _json_default(obj: Any) -> Any:

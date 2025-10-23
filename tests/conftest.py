@@ -39,11 +39,11 @@ try:  # pragma: no cover - test scaffolding convenience
 except Exception:
     pass
 
-import sys as _sys
+import sys as _sys  # noqa: E402
 
 # Configure Loguru for tests: keep output minimal and captureable by pytest.
 # This configuration runs when conftest is imported so it applies early during test collection.
-from loguru import logger as _loguru_logger
+from loguru import logger as _loguru_logger  # noqa: E402
 
 try:
     # Remove any pre-existing handlers added by application code
@@ -134,12 +134,6 @@ def sanitize_test_environment():
 
 def has_real_llm_config():
     """Check if real LLM testing is configured."""
-    # Check for required environment variables or config files
-    required_vars = [
-        "LLM_TEST_MODEL_PATH",  # Path to local model
-        "LLM_TEST_API_KEY",  # API key for cloud models (optional)
-    ]
-
     # At least one model path should be available
     model_path = os.getenv("LLM_TEST_MODEL_PATH")
     if model_path and Path(model_path).exists():
@@ -371,10 +365,10 @@ def has_faster_whisper():
         return _HAS_FASTER_WHISPER
 
     try:
-        import faster_whisper
+        import importlib.util
 
-        _HAS_FASTER_WHISPER = True
-        return True
+        _HAS_FASTER_WHISPER = importlib.util.find_spec("faster_whisper") is not None
+        return _HAS_FASTER_WHISPER
     except (ImportError, RuntimeError):
         # ImportError: library not installed
         # RuntimeError: can occur with torch/ctranslate2 compatibility issues
