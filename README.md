@@ -349,6 +349,7 @@ pixi run worker
 ```
 
 For running the application directly without any external tools, you can use the `main.py` script:
+
 ```bash
 python main.py
 ```
@@ -474,22 +475,132 @@ docker-compose down
 docker-compose up -d
 ```
 
-## Utilities
+## 🧹 Maintenance & Cleanup
 
-### Clean Logs
+MAIE includes comprehensive cleanup and maintenance tools to keep your deployment running efficiently. These tools help manage disk space, cache, and temporary files.
 
-The `clean-logs.sh` script removes log files older than a specified number of days.
+### Quick Cleanup
+
+```bash
+# Run all cleanup scripts in sequence
+./scripts/clean-all.sh
+
+# Preview changes before executing
+DRY_RUN=true ./scripts/clean-all.sh
+
+# Monitor disk usage and auto-cleanup if needed
+DISK_THRESHOLD=80 EMERGENCY_CLEANUP=true ./scripts/disk-monitor.sh
+```
+
+### Individual Cleanup Scripts
+
+**Log Management:**
 
 ```bash
 # Clean logs older than 7 days (default)
 ./scripts/clean-logs.sh
 
-# Clean logs older than 30 days
+# Custom retention period
 DAYS_TO_KEEP=30 ./scripts/clean-logs.sh
-
-# Dry run to see which files would be deleted
-DRY_RUN=true ./scripts/clean-logs.sh
 ```
+
+**Audio File Cleanup:**
+
+```bash
+# Clean processed audio files for completed tasks
+./scripts/clean-audio.sh
+
+# Custom retention period
+RETENTION_DAYS=14 ./scripts/clean-audio.sh
+```
+
+**Cache Management:**
+
+```bash
+# Clean Redis cache and queue entries
+./scripts/clean-cache.sh
+```
+
+**Disk Monitoring:**
+
+```bash
+# Check current disk usage
+./scripts/disk-monitor.sh
+
+# Auto-cleanup when disk usage exceeds threshold
+EMERGENCY_CLEANUP=true ./scripts/disk-monitor.sh
+```
+
+### Server-Level Automated Maintenance
+
+**User-Specific Cron Jobs (Recommended for MAIE Server):**
+
+For small server deployments, use **user-level cron jobs** instead of system-level automation:
+
+```bash
+# Switch to MAIE user (recommended approach)
+sudo su - maie
+
+# Edit user crontab (no root needed when already maie user)
+crontab -e
+
+# Add these lines for server-level automation:
+# Weekly full cleanup (Sunday 2 AM)
+0 2 * * 0 ./scripts/clean-all.sh >> logs/cron/cleanup.log 2>&1
+
+# Daily audio cleanup (6 AM)
+0 6 * * * ./scripts/clean-audio.sh >> logs/cron/audio-cleanup.log 2>&1
+
+# Daily cache cleanup (7 AM)
+0 7 * * * ./scripts/clean-cache.sh >> logs/cron/cache-cleanup.log 2>&1
+
+# Disk monitoring every 6 hours
+0 */6 * * * ./scripts/disk-monitor.sh >> logs/cron/disk-monitor.log 2>&1
+```
+
+**Why User-Level Cron (Recommended for MAIE):**
+
+- ✅ **No root access required** - Run as MAIE user only
+- ✅ **Isolated to MAIE processes** - Won't affect other server applications
+- ✅ **Easier troubleshooting** - Clear separation of concerns
+- ✅ **Lower security risk** - Limited permissions scope
+- ✅ **Simple management** - Standard user crontab operations
+
+**Alternative User Accounts:**
+
+```bash
+# As deployment user (if MAIE runs under different user)
+sudo su - deploy
+crontab -e
+
+# As root user (not recommended - use only if required)
+sudo crontab -e
+```
+
+**Docker Integration:**
+
+```bash
+# Run cleanup in Docker (alternative approach)
+docker-compose --profile cleanup up
+```
+
+### Configuration Options
+
+| Variable         | Description                         | Default |
+| ---------------- | ----------------------------------- | ------- |
+| `RETENTION_DAYS` | Days to keep audio files            | `7`     |
+| `DAYS_TO_KEEP`   | Days to keep log files              | `7`     |
+| `DISK_THRESHOLD` | Disk usage alert threshold (%)      | `80`    |
+| `DRY_RUN`        | Preview mode (doesn't delete files) | `false` |
+
+### Safety Features
+
+- **Dry-run Mode**: Test all operations before execution
+- **Status Verification**: Only removes audio files for completed/failed tasks
+- **Redis Safety**: Uses TTL-based cleanup, preserves active data
+- **Error Handling**: Robust error handling with detailed logging
+
+For comprehensive documentation, see [`docs/CLEANUP_GUIDE.md`](docs/CLEANUP_GUIDE.md).
 
 ## 🤝 Contributing
 

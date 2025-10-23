@@ -45,7 +45,7 @@ class TestCreateTaskInRedis:
         request_params = {
             "features": ["clean_transcript", "summary"],
             "template_id": "meeting_notes",
-            "file_path": "/data/audio/test.wav",
+            "file_path": "/data/audio/test-task/raw.wav",
         }
 
         with patch(
@@ -65,7 +65,7 @@ class TestCreateTaskInRedis:
     async def test_sets_submitted_at_timestamp(self, fake_async_redis):
         """Should set submitted_at timestamp when creating task."""
         task_id = uuid.uuid4()
-        request_params = {"features": [], "file_path": "/test.wav"}
+        request_params = {"features": [], "file_path": "/test/raw.wav"}
 
         with patch(
             "src.api.dependencies.get_results_redis", return_value=fake_async_redis
@@ -88,7 +88,7 @@ class TestCreateTaskInRedis:
         task_id = uuid.uuid4()
         request_params = {
             "features": ["clean_transcript", "summary", "enhancement_metrics"],
-            "file_path": "/test.wav",
+            "file_path": "/test/raw.wav",
         }
 
         with patch(
@@ -108,7 +108,7 @@ class TestCreateTaskInRedis:
     async def test_sets_ttl_on_task_key(self, fake_async_redis):
         """Should set expiration TTL on task key."""
         task_id = uuid.uuid4()
-        request_params = {"features": [], "file_path": "/test.wav"}
+        request_params = {"features": [], "file_path": "/test/raw.wav"}
 
         with patch(
             "src.api.dependencies.get_results_redis", return_value=fake_async_redis
@@ -240,7 +240,7 @@ class TestEnqueueJob:
     def test_enqueues_job_with_correct_parameters(self):
         """Should enqueue job with task parameters."""
         task_id = uuid.uuid4()
-        file_path = Path("/data/audio/test.wav")
+        file_path = Path("/data/audio/test-task/raw.wav")
         request_params = {
             "features": ["clean_transcript"],
             "template_id": "notes",

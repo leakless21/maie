@@ -41,7 +41,7 @@ from src.api.schemas import (
 )
 from src.api.dependencies import api_key_guard
 from src.config import settings
-from src.config.logging import get_module_logger
+from src.config.logging import get_module_logger, correlation_id as _cid_var
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -134,7 +134,7 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
     """
     import aiofiles
 
-    # SECURITY: Use UUID for filename, not user input (prevents path traversal)
+    # SECURITY: Use per-task UUID directory and fixed base name, not user input
     # Extract extension from user filename for convenience
     if file.filename:
         sanitized = sanitize_filename(file.filename)
@@ -147,11 +147,12 @@ async def save_audio_file_streaming(file: UploadFile, task_id: uuid.UUID) -> Pat
     if ext.lower() not in allowed_extensions:
         ext = ".wav"  # Fallback to safe default
 
-    # Use UUID-based filename
-    file_path = settings.paths.audio_dir / f"{task_id}{ext}"
+    # Build per-task directory and raw file path
+    task_dir = settings.paths.audio_dir / str(task_id)
+    file_path = task_dir / f"raw{ext}"
 
-    # Ensure directory exists
-    settings.paths.audio_dir.mkdir(parents=True, exist_ok=True)
+    # Ensure directories exist
+    task_dir.mkdir(parents=True, exist_ok=True)
 
     # Stream file content to disk using aiofiles with size validation
     total_size = 0
@@ -202,14 +203,23 @@ async def create_task_in_redis(
     redis_client = await get_results_redis()
     try:
         task_key = f"task:{task_id}"
+        template_value = request_params.get("template_id") or "generic_summary_v1"
+        file_path_value = request_params.get("file_path") or ""
+        if isinstance(file_path_value, Path):
+            file_path_value = str(file_path_value)
+        asr_backend_value = request_params.get("asr_backend") or "chunkformer"
+        features_value = request_params.get("features", ["summary"])
+        features_json = json.dumps(features_value)
         task_data = {
             "task_id": str(task_id),
             "status": TaskStatus.PENDING.value,
             "submitted_at": datetime.now(timezone.utc).isoformat(),
-            "features": json.dumps(request_params.get("features", ["summary"])),
-            "template_id": request_params.get("template_id", "generic_summary_v1"),
-            "file_path": request_params.get("file_path", ""),
-            "asr_backend": request_params.get("asr_backend", "chunkformer"),
+            "features": features_json,
+            "template_id": template_value,
+            "file_path": file_path_value,
+            "asr_backend": asr_backend_value,
+            # Store correlation ID for traceability in results DB
+            "correlation_id": _cid_var.get() or "",
         }
         await redis_client.hset(task_key, mapping=task_data)
         await redis_client.expire(task_key, settings.worker.result_ttl)
@@ -222,9 +232,9 @@ def enqueue_job(
 ) -> None:
     """Enqueue processing job to Redis queue (DB 0)."""
     from src.api.dependencies import get_rq_queue
-    from src.worker.pipeline import process_audio_task
-
     queue = get_rq_queue()
+
+    job_func = "src.worker.pipeline.process_audio_task"
 
     task_params = {
         "task_id": str(task_id),
@@ -235,10 +245,12 @@ def enqueue_job(
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_db": settings.redis.results_db,
+        # Propagate correlation ID to worker for consistent logs
+        "correlation_id": _cid_var.get() or None,
     }
 
     queue.enqueue(
-        process_audio_task,
+        job_func,
         task_params,
         job_id=str(task_id),
         job_timeout=settings.worker.job_timeout,
@@ -594,86 +606,77 @@ def get_available_models() -> ModelsResponseSchema:
 
 def scan_templates_directory() -> TemplatesResponseSchema:
     """
-    Scans the templates directory and returns a list of available templates with Vietnamese descriptions and examples.
+    Discover templates by scanning the configured templates directory.
+
+    Rules:
+    - Any JSON file under `<templates_dir>/schemas/*.json` is a template schema
+    - Template ID = filename stem (e.g., `generic_summary_v1`)
+    - `name` comes from schema.title if present, otherwise prettified ID
+    - `description` comes from schema.description if present, otherwise a default
+    - `example` is loaded from `<templates_dir>/examples/{id}.example.json` if it exists
 
     Returns:
-        TemplatesResponseSchema: A list of available templates.
+        TemplatesResponseSchema: List of discovered templates.
     """
-    templates_data = [
-        {
-            "id": "generic_summary_v1",
-            "name": "Bản tóm tắt chung (v1)",
-            "description": "Mẫu này cung cấp một cái nhìn tổng quan ngắn gọn về một văn bản. Nó bao gồm một bản tóm tắt ngắn, một tiêu đề và danh sách các điểm chính.",
-            "example": {
-                "title": "Tác động của AI lên năng suất làm việc",
-                "summary": "Bài nói trình bày cách các công cụ trí tuệ nhân tạo hỗ trợ tự động hóa tác vụ lặp lại, gợi ý nội dung và cải thiện tốc độ xử lý công việc. Diễn giả nhấn mạnh tầm quan trọng của việc thiết lập quy trình kiểm duyệt để đảm bảo chất lượng và đạo đức khi áp dụng AI vào môi trường doanh nghiệp.",
-                "key_topics": [
-                    "Tự động hóa tác vụ",
-                    "Gợi ý nội dung",
-                    "Quy trình kiểm duyệt",
-                    "Đạo đức trong AI",
-                ],
-                "tags": ["ai", "năng suất", "doanh nghiệp"],
-            },
-        },
-        {
-            "id": "interview_transcript_v1",
-            "name": "Bản ghi phỏng vấn (v1)",
-            "description": "Mẫu này được thiết kế để tóm tắt các cuộc phỏng vấn. Nó bao gồm một tiêu đề, một bản tóm tắt ngắn gọn của cuộc trò chuyện và danh sách các câu hỏi và câu trả lời.",
-            "example": {
-                "interview_summary": "Cuộc phỏng vấn với chị An, trưởng nhóm sản phẩm, xoay quanh kinh nghiệm triển khai quy trình phát hành nhanh. Chị chia sẻ về việc rút ngắn chu kỳ phát hành bằng cách tăng tự động hóa kiểm thử, chuẩn hóa tiêu chí chấp nhận và cải thiện giao tiếp giữa nhóm phát triển và vận hành.",
-                "key_insights": [
-                    "Tự động hóa kiểm thử giúp rút ngắn chu kỳ phát hành",
-                    "Tiêu chí chấp nhận rõ ràng hạn chế lỗi phát sinh",
-                    "Tăng cường giao tiếp giữa Dev và Ops",
-                ],
-                "participant_sentiment": "positive",
-                "tags": ["sản phẩm", "quy trình", "phỏng vấn"],
-            },
-        },
-        {
-            "id": "meeting_notes_v1",
-            "name": "Ghi chú cuộc họp (v1)",
-            "description": "Mẫu này dùng để tóm tắt các cuộc họp. Nó bao gồm tiêu đề cuộc họp, bản tóm tắt cuộc thảo luận, danh sách các mục hành động và các quyết định chính đã được đưa ra.",
-            "example": {
-                "title": "Họp dự án X – rà soát tiến độ và phân công",
-                "participants": ["Minh", "Lan", "Hùng"],
-                "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
-                "agenda": [
-                    "Cập nhật tiến độ sprint",
-                    "Phạm vi phát hành",
-                    "Phân công công việc",
-                ],
-                "decisions": [
-                    "Ưu tiên xử lý lỗi còn tồn đọng",
-                    "Giữ nguyên phạm vi tính năng hiện tại",
-                ],
-                "action_items": [
-                    {
-                        "description": "Lan tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm",
-                        "assignee": "Lan",
-                        "due_date": "2025-10-23",
-                    },
-                    {
-                        "description": "Hùng cập nhật test cases cho tính năng thanh toán",
-                        "assignee": "Hùng",
-                    },
-                ],
-                "tags": ["họp nhóm", "dự án", "kế hoạch"],
-            },
-        },
-    ]
+    templates: List[TemplateInfoSchema] = []
 
-    templates = []
-    for t_data in templates_data:
+    schemas_dir = settings.paths.templates_dir / "schemas"
+    examples_dir = settings.paths.templates_dir / "examples"
+
+    try:
+        schema_files = sorted(p for p in schemas_dir.glob("*.json") if p.is_file())
+    except Exception as e:
+        logger.error(f"Failed to scan schemas directory {schemas_dir}: {e}")
+        return TemplatesResponseSchema(templates=[])
+
+    for schema_path in schema_files:
+        template_id = schema_path.stem
+        try:
+            with schema_path.open("r", encoding="utf-8") as f:
+                schema_data = json.load(f)
+        except Exception as e:
+            logger.error(
+                "Failed to load schema",
+                extra={
+                    "template_id": template_id,
+                    "path": str(schema_path),
+                    "error": str(e),
+                },
+            )
+            continue
+
+        # Derive name/description
+        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
+        description = schema_data.get(
+            "description",
+            "Auto-discovered template based on JSON schema.",
+        )
+
+        # Load example if available
+        example: Dict[str, Any] | None = None
+        example_path = examples_dir / f"{template_id}.example.json"
+        if example_path.exists():
+            try:
+                with example_path.open("r", encoding="utf-8") as ef:
+                    example = json.load(ef)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load example JSON",
+                    extra={
+                        "template_id": template_id,
+                        "path": str(example_path),
+                        "error": str(e),
+                    },
+                )
+
         templates.append(
             TemplateInfoSchema(
-                id=t_data["id"],
-                name=t_data["name"],
-                description=t_data["description"],
-                schema_url=f"/v1/templates/{t_data['id']}/schema",
+                id=template_id,
+                name=str(raw_name),
+                description=str(description),
+                schema_url=f"/v1/templates/{template_id}/schema",
                 parameters={},
-                example=t_data["example"],
+                example=example,
             )
         )
 
@@ -763,6 +766,44 @@ class TemplatesController(Controller):
         if isinstance(templates, dict):
             return templates
         return TemplatesResponseSchema.model_validate(templates)
+
+    @get(
+        "/v1/templates/{template_id:str}/schema",
+        summary="Get template schema",
+        description="Return the JSON Schema for a given template ID",
+        tags=["Templates"],
+    )
+    async def get_template_schema(self, template_id: str) -> Dict[str, Any]:
+        """
+        Serve the raw JSON schema for a template.
+
+        Args:
+            template_id: Template identifier (filename stem under templates/schemas)
+
+        Returns:
+            The JSON schema as a dictionary.
+        """
+        # Prevent path traversal by allowing only safe characters in ID
+        if not re.fullmatch(r"[a-zA-Z0-9_-]+", template_id):
+            raise NotFoundException("Invalid template ID")
+
+        schema_path = settings.paths.templates_dir / "schemas" / f"{template_id}.json"
+        if not schema_path.exists() or not schema_path.is_file():
+            raise NotFoundException(f"Schema not found for template: {template_id}")
+
+        try:
+            with schema_path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid schema JSON for template {template_id}: {e}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"Failed to load schema for template {template_id}: {e}",
+            )
 
 
 # Define route handlers for the app
