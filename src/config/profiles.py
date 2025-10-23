@@ -31,6 +31,16 @@ DEVELOPMENT_PROFILE: ProfileData = {
         "worker_prefetch_multiplier": 2,
         "worker_prefetch_timeout": 10,
     },
+    "cleanup": {
+        "audio_cleanup_interval": 60,
+        "log_cleanup_interval": 3600,
+        "cache_cleanup_interval": 300,
+        "disk_monitor_interval": 30,
+        "audio_retention_days": 1,
+        "logs_retention_days": 1,
+        "disk_threshold_pct": 90,
+        "emergency_cleanup": False,
+    },
     "llm_enhance": {
         "gpu_memory_utilization": 0.9,
         "max_model_len": 32768,
@@ -74,6 +84,16 @@ PRODUCTION_PROFILE: ProfileData = {
         "worker_concurrency": 2,
         "worker_prefetch_multiplier": 4,
         "worker_prefetch_timeout": 30,
+    },
+    "cleanup": {
+        "audio_cleanup_interval": 3600,
+        "log_cleanup_interval": 86400,
+        "cache_cleanup_interval": 1800,
+        "disk_monitor_interval": 300,
+        "audio_retention_days": 7,
+        "logs_retention_days": 7,
+        "disk_threshold_pct": 85,
+        "emergency_cleanup": True,
     },
     "llm_enhance": {
         "gpu_memory_utilization": 0.9,

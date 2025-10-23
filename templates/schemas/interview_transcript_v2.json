@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Bản ghi phỏng vấn V2",
+  "description": "Định dạng có cấu trúc cho bản ghi phỏng vấn với các thẻ phân loại. Tùy chọn bao gồm interview_date nếu bản ghi chứa nó một cách rõ ràng.",
+  "type": "object",
+  "properties": {
+    "interview_date": {
+      "type": ["string", "null"],
+      "description": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
+      "pattern": "^\d{4}-\d{2}-\d{2}$"
+    },
+    "interview_summary": {
+      "type": "string",
+      "description": "Tóm tắt toàn diện về nội dung cuộc phỏng vấn",
+      "maxLength": 2000
+    },
+    "key_insights": {
+      "type": "array",
+      "description": "Những hiểu biết hoặc phát hiện chính từ cuộc phỏng vấn",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 1,
+      "maxItems": 15
+    },
+    "participant_sentiment": {
+      "type": "string",
+      "description": "Cảm tính chung của (những) người tham gia phỏng vấn",
+      "enum": ["positive", "neutral", "negative", "mixed"]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Thẻ danh mục để phân loại nội dung (FR-6)",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 5
+    }
+  },
+  "required": [
+    "interview_summary",
+    "key_insights",
+    "participant_sentiment",
+    "tags"
+  ],
+  "additionalProperties": false
+}

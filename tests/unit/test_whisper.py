@@ -103,7 +103,7 @@ def test_model_path_validation(inject_mock_faster_whisper, tmp_path):
 
     # Should raise FileNotFoundError for invalid path
     with pytest.raises(FileNotFoundError):
-        backend = WhisperBackend(model_path=invalid_path)
+        WhisperBackend(model_path=invalid_path)
 
 
 # ============================================================================
@@ -337,7 +337,7 @@ def test_vad_parameters_preparation(
     backend = WhisperBackend()
 
     # Execute to trigger parameter preparation
-    result = backend.execute(str(temp_audio_file))
+    backend.execute(str(temp_audio_file))
 
     # Verify transcribe was called (mock tracks this)
     assert backend.model.transcribe_call_count > 0
@@ -425,7 +425,7 @@ def test_prepare_transcribe_kwargs(
 
     backend = WhisperBackend()
 
-    result = backend.execute(str(temp_audio_file))
+    backend.execute(str(temp_audio_file))
 
     # Check that parameters were used in transcription
     kwargs = backend.model.last_transcribe_kwargs
@@ -450,7 +450,7 @@ def test_vad_parameters_in_kwargs(
 
     backend = WhisperBackend()
 
-    result = backend.execute(str(temp_audio_file))
+    backend.execute(str(temp_audio_file))
 
     # VAD params should be in kwargs
     kwargs = backend.model.last_transcribe_kwargs
@@ -473,7 +473,7 @@ def test_language_parameter_in_kwargs(
 
     backend = WhisperBackend()
 
-    result = backend.execute(str(temp_audio_file))
+    backend.execute(str(temp_audio_file))
 
     kwargs = backend.model.last_transcribe_kwargs
     assert "language" in kwargs

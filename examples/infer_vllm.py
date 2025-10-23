@@ -35,8 +35,8 @@ if _PROJECT_ROOT not in sys.path:
 # Respect any value the user already provided.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
-from src.config import configure_logging, get_logger
-from src.processors.llm import LLMProcessor
+from src.config import configure_logging, get_logger  # noqa: E402
+from src.processors.llm import LLMProcessor  # noqa: E402
 
 
 def main() -> int:

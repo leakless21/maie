@@ -25,7 +25,12 @@ correlation_id: contextvars.ContextVar[Optional[str]] = contextvars.ContextVar(
 
 
 def generate_correlation_id(prefix: str = "") -> str:
-    """Generate a UUID-based correlation id for request tracing."""
+    """
+    Generate a UUID-based correlation id for request tracing.
+
+    Propagate from API → queue → worker:
+    Generate/bind in API request handler, insert into task payload, bind in worker before processing.
+    """
     return f"{prefix}-{uuid.uuid4().hex[:8]}" if prefix else uuid.uuid4().hex[:8]
 
 

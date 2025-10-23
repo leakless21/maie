@@ -156,7 +156,7 @@ class TestAsyncProcessorModern:
 
     def test_no_running_loop_error(self):
         """Test proper error when no loop is running."""
-        processor = self.create_async_processor()
+        self.create_async_processor()
 
         with pytest.raises(RuntimeError):
             # Should fail if called outside async context

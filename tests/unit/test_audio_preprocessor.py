@@ -184,7 +184,7 @@ class TestAudioPreprocessor:
             asr_factory_module.ASRFactory, "create", staticmethod(fake_create)
         )
         # call helper (process_task_audio)
-        res = p.process_task_audio(task_id, str(raw))
+        p.process_task_audio(task_id, str(raw))
         assert called["backend"] == "whisper"
         assert called["config"].get("task_id") == task_id
         assert called["config"].get("audio_path") == str(preprocessed)

@@ -25,15 +25,14 @@ except ImportError:
     torch = None  # type: ignore
     TORCH_AVAILABLE = False
 
-from loguru import logger
 from redis import Redis
 from rq import get_current_job
 
-from src.config.logging import get_module_logger
-
-# Create module-bound logger for better debugging
-logger = get_module_logger(__name__)
-
+from src.config.logging import (
+    get_module_logger,
+    bind_correlation_id,
+    clear_correlation_id,
+)
 from src.api.errors import (
     ASRProcessingError,
     AudioPreprocessingError,
@@ -43,6 +42,9 @@ from src.api.errors import (
 )
 from src.api.schemas import TaskStatus
 from src.config import settings
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 
 # =============================================================================
 # Helper Functions
@@ -371,23 +373,6 @@ def calculate_metrics(
     return metrics
 
 
-def update_task_status(
-    job_id: str,
-    status: TaskStatus,
-    redis_conn: Redis,
-    details: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Update the task status in Redis."""
-    if redis_conn:
-        status_data = {"status": status.value, "updated_at": time.time()}
-        if details:
-            status_data.update(details)
-
-        redis_conn.hset(
-            f"task:{job_id}", mapping=status_data
-        )  # Fixed key format per TDD
-
-
 def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Main pipeline function that processes audio through ASR and LLM sequentially.
@@ -415,6 +400,15 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     job = get_current_job()
     job_id = job.id if job else "unknown"
     task_key = f"task:{job_id}"
+
+    # Bind correlation ID for end-to-end traceability across worker logs
+    _cid = task_params.get("correlation_id")
+    if _cid:
+        try:
+            bind_correlation_id(str(_cid))
+        except Exception:
+            # Non-fatal; proceed without a bound ID
+            pass
 
     # Extract parameters
     audio_path = task_params.get("audio_path")
@@ -495,6 +489,14 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     },
                 )
 
+            try:
+                clear_correlation_id()
+            except Exception:
+                pass
+            try:
+                clear_correlation_id()
+            except Exception:
+                pass
             return {
                 "status": "error",
                 "error": {
@@ -573,6 +575,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         "error_type": type(error).__name__,
                     },
                 )
+            try:
+                clear_correlation_id()
+            except Exception:
+                pass
             return {
                 "status": "error",
                 "error": {
@@ -1107,6 +1113,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         )
 
         # Return result as dictionary
+        try:
+            clear_correlation_id()
+        except Exception:
+            pass
         return result
 
     except (
@@ -1148,6 +1158,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             )
 
         # Return structured error response
+        try:
+            clear_correlation_id()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": {
@@ -1177,6 +1191,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error=str(e),
         )
 
+        try:
+            clear_correlation_id()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": {
@@ -1203,6 +1221,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error=str(e),
         )
 
+        try:
+            clear_correlation_id()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": {
@@ -1222,6 +1244,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error=str(e),
         )
 
+        try:
+            clear_correlation_id()
+        except Exception:
+            pass
         return {
             "status": "error",
             "error": {
@@ -1233,6 +1259,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         }
 
     # This should never be reached due to exception handling above
+    try:
+        clear_correlation_id()
+    except Exception:
+        pass
     return {
         "versions": None,
         "metrics": None,

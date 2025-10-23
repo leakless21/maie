@@ -30,7 +30,7 @@ class TestWhisperVerbose:
 
                     whisper_module._FASTER_WHISPER_MODULE = None
 
-                    backend = WhisperBackend(model_path="test-model")
+                    WhisperBackend(model_path="test-model")
 
                     # Check that verbose setting was passed correctly
                     # In test mode, it calls load_model, not WhisperModel

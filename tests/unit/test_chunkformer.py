@@ -295,7 +295,7 @@ def test_execute_endless_decode_with_custom_params(monkeypatch):
     backend = ChunkFormerBackend()
 
     # Execute with custom params
-    result = backend.execute(
+    backend.execute(
         b"\x00\x01",
         chunk_size=32,
         left_context=64,
@@ -315,7 +315,7 @@ def test_execute_endless_decode_with_custom_params(monkeypatch):
     assert observed.get("total_batch_duration") == 7200, (
         "Custom total_batch_duration should override config"
     )
-    assert observed.get("return_timestamps") == False, (
+    assert not observed.get("return_timestamps"), (
         "Custom return_timestamps should override config"
     )
 

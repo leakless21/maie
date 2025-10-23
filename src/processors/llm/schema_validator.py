@@ -11,7 +11,6 @@ from typing import Any, Dict, Optional, Tuple
 
 import jsonschema
 from jsonschema import ValidationError
-from loguru import logger
 
 from src.config.logging import get_module_logger
 
@@ -38,7 +37,7 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
         >>> schema = load_template_schema("meeting_notes_v1", Path("templates"))
         >>> print(schema["type"])  # "object"
     """
-    template_file = templates_dir / f"{template_id}.json"
+    template_file = templates_dir / "schemas" / f"{template_id}.json"
 
     if not template_file.exists():
         raise FileNotFoundError(f"Template file not found: {template_file}")
@@ -128,7 +127,6 @@ def validate_llm_output(
         return parsed_data, None
     except ValidationError as e:
         # Enhanced logging for schema validation failures
-        error_details = extract_validation_errors(e)
         error_msg = f"Schema validation failed: {e.message}"
         if e.path:
             error_msg += f" (at path: {' -> '.join(str(p) for p in e.path)})"

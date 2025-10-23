@@ -50,6 +50,7 @@ vllm = ">=0.11.0, <0.12"
 pydantic-settings = ">=2.11.0, <3"
 redis = { version = ">=6.4.0, <7", extras = ["hiredis"] }
 rq = ">=2.6.0, <3"
+rq-scheduler = ">=0.13.1, <0.14"
 huggingface-hub = ">=0.35.3, <0.36"
 loguru = ">=0.7.3, <0.8"
 pydantic = ">=2.12.2, <3"

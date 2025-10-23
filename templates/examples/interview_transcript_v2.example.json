@@ -1,0 +1,10 @@
+{
+  "interview_summary": "Cuộc phỏng vấn với chị An, trưởng nhóm sản phẩm, xoay quanh kinh nghiệm triển khai quy trình phát hành nhanh. Chị chia sẻ về việc rút ngắn chu kỳ phát hành bằng cách tăng tự động hóa kiểm thử, chuẩn hóa tiêu chí chấp nhận và cải thiện giao tiếp giữa nhóm phát triển và vận hành.",
+  "key_insights": [
+    "Tự động hóa kiểm thử giúp rút ngắn chu kỳ phát hành",
+    "Tiêu chí chấp nhận rõ ràng hạn chế lỗi phát sinh",
+    "Tăng cường giao tiếp giữa Dev và Ops"
+  ],
+  "participant_sentiment": "positive",
+  "tags": ["sản phẩm", "quy trình", "phỏng vấn"]
+}

@@ -91,7 +91,7 @@ class TestCalculateEditRate:
     def test_identical_strings(self):
         """Test edit rate for identical strings (should be 0.0)."""
         text = "The quick brown fox jumps over the lazy dog"
-        rate = _calculate_edit_rate(text, text)
+        _calculate_edit_rate(text, text)
 
     def test_completely_different_strings(self):
         """Test edit rate for completely different strings."""
@@ -108,19 +108,19 @@ class TestCalculateEditRate:
         """Test edit rate for single character substitution."""
         original = "test"
         enhanced = "best"
-        rate = _calculate_edit_rate(original, enhanced)
+        _calculate_edit_rate(original, enhanced)
 
     def test_insertion(self):
         """Test edit rate with character insertions."""
         original = "test"
         enhanced = "testing"
-        rate = _calculate_edit_rate(original, enhanced)
+        _calculate_edit_rate(original, enhanced)
 
     def test_deletion(self):
         """Test edit rate with character deletions."""
         original = "testing"
         enhanced = "test"
-        rate = _calculate_edit_rate(original, enhanced)
+        _calculate_edit_rate(original, enhanced)
 
     def test_empty_strings(self):
         """Test edit rate with empty strings."""
@@ -154,13 +154,13 @@ class TestCalculateEditRate:
         """Test edit rate with punctuation additions."""
         original = "hello world"
         enhanced = "Hello, world!"
-        rate = _calculate_edit_rate(original, enhanced)
+        _calculate_edit_rate(original, enhanced)
 
     def test_word_reordering(self):
         """Test edit rate with word reordering."""
         original = "dog brown quick"
         enhanced = "quick brown dog"
-        rate = _calculate_edit_rate(original, enhanced)
+        _calculate_edit_rate(original, enhanced)
 
     def test_case_sensitivity(self):
         """Test that edit rate is case-sensitive."""

@@ -9,13 +9,9 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from Levenshtein import distance as levenshtein_distance
-from loguru import logger
 
 from src.config import settings
 from src.config.logging import get_module_logger
-
-# Create module-bound logger for better debugging
-logger = get_module_logger(__name__)
 from src.processors.base import LLMBackend, LLMResult
 from src.processors.llm.config import (
     GenerationConfig,
@@ -35,6 +31,9 @@ from .schema_validator import (
     retry_with_lower_temperature,
     validate_llm_output,
 )
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 
 
 class LLMProcessor(LLMBackend):
@@ -323,7 +322,7 @@ class LLMProcessor(LLMBackend):
 
         Args:
             text: Input text to process
-            **kwargs: Additional parameters including task type
+            **kwargs: Additional parameters including task type and optional retry_hint
 
         Returns:
             LLMResult with processed text and metadata
@@ -333,6 +332,7 @@ class LLMProcessor(LLMBackend):
         )
         logger.info(f"First 200 chars of text: {text[:200]}")
         task = kwargs.get("task", "general")
+        retry_hint = kwargs.pop("retry_hint", None)  # Extract retry hint if provided
 
         # Load model if not already loaded
         if not self._model_loaded:
@@ -383,21 +383,34 @@ class LLMProcessor(LLMBackend):
             # Build OpenAI-format messages using chat API approach
             logger.info(f"About to render system prompt for template {template_id}")
             # Render system prompt (contains instructions + schema)
-            system_prompt = self.prompt_renderer.render(
-                template_id, schema=json.dumps(schema, ensure_ascii=False, indent=2)
-            )
-            logger.info(
-                f"System prompt rendered successfully, length: {len(system_prompt)}"
-            )
+            try:
+                system_prompt = self.prompt_renderer.render(
+                    template_id, schema=json.dumps(schema, ensure_ascii=False, indent=2)
+                )
+                logger.info(
+                    f"System prompt rendered successfully, length: {len(system_prompt)}"
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to render system prompt for template {template_id}: {e}"
+                )
+                return LLMResult(
+                    text=text,
+                    tokens_used=None,
+                    model_info=self.model_info or {"model_name": "unknown"},
+                    metadata={"task": task, "error": f"Prompt rendering error: {e}"},
+                )
+
+            # Append retry hint if provided
+            if retry_hint:
+                system_prompt += f"\n\n[RETRY FEEDBACK]\n{retry_hint}"
+                logger.debug("Appended retry hint to system prompt")
 
             # Build user message with transcript
             logger.info(f"About to build user message, text length: {len(text)}")
             user_message_content = f"Transcript to analyze:\n{text}"
             logger.info(
                 f"User message content built, length: {len(user_message_content)}"
-            )
-            logger.info(
-                f"First 500 chars of user message: {user_message_content[:500]}"
             )
 
             # Build messages in OpenAI format
@@ -410,7 +423,9 @@ class LLMProcessor(LLMBackend):
             logger.info(
                 f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})"
             )
-            logger.info(f"User message first 500 chars: {messages[1]['content'][:500]}")
+            logger.debug(
+                f"User message first 500 chars: {messages[1]['content'][:500]}"
+            )
             logger.debug(f"Built messages for chat API with template {template_id}")
 
             use_chat_api = True
@@ -914,23 +929,12 @@ class LLMProcessor(LLMBackend):
                 "model_info": self.model_info or {"model_name": "unavailable"},
             }
 
-        # Render summary prompt (template now includes chat formatting)
-        try:
-            prompt = self.prompt_renderer.render(
-                template_id, transcript=transcript, schema=json.dumps(schema, indent=2)
-            )
-
-        except Exception as e:
-            logger.error(f"Failed to render summary prompt: {e}")
-            return {
-                "summary": None,
-                "error": f"Prompt rendering error: {e}",
-                "model_info": self.model_info or {"model_name": "unavailable"},
-            }
-
         # Generate summary with retry logic
         max_retries = 1  # Changed from 2 to 1 (total 2 attempts per TDD)
         current_temperature = settings.llm_sum.temperature
+        last_error: Optional[str] = (
+            None  # Track last validation error for retry feedback
+        )
 
         # Create guided decoding parameters for JSON schema constraint
         from vllm.sampling_params import GuidedDecodingParams
@@ -957,19 +961,16 @@ class LLMProcessor(LLMBackend):
 
         for retry_count in range(max_retries + 1):
             try:
-                # Prepare prompt (add feedback on retry)
-                if retry_count > 0 and "last_error" in locals():
-                    last_error_str = str(locals().get("last_error"))
-                    error_hint = (
-                        "\n\nIMPORTANT: Previous attempt failed validation with error: "
-                        f"{last_error_str}\nPlease ensure the output is valid JSON that strictly matches the provided schema."
+                # Build retry hint from last error if retrying
+                retry_hint = None
+                if retry_count > 0 and last_error:
+                    retry_hint = (
+                        f"IMPORTANT: Previous attempt failed validation with error: {last_error}\n"
+                        "Please ensure the output is valid JSON that strictly matches the provided schema."
                     )
-                    prompt_for_attempt = prompt + error_hint
                     logger.info(
                         f"Retrying with error feedback (attempt {retry_count + 1})"
                     )
-                else:
-                    prompt_for_attempt = prompt
 
                 # Prepare sampling parameters with current temperature and guided decoding
                 # NOTE: Do NOT pass max_tokens here - let execute() calculate it dynamically
@@ -988,6 +989,10 @@ class LLMProcessor(LLMBackend):
                 # Only pass max_tokens if explicitly provided by caller
                 if "max_tokens" in kwargs:
                     sampling_kwargs["max_tokens"] = kwargs["max_tokens"]
+
+                # Add retry_hint if available (will be appended to system prompt in execute())
+                if retry_hint:
+                    sampling_kwargs["retry_hint"] = retry_hint
 
                 # Log attempt details
                 logger.debug(
@@ -1038,6 +1043,30 @@ class LLMProcessor(LLMBackend):
                         "inference_duration_minutes": inference_duration / 60,
                     },
                 )
+
+                # Check if execute() encountered an error (e.g., prompt rendering failure)
+                if result.metadata and "error" in result.metadata:
+                    error_in_execute = result.metadata["error"]
+                    logger.error(
+                        f"Execution error on attempt {retry_count + 1}: {error_in_execute}"
+                    )
+                    if retry_count >= max_retries:
+                        logger.error(
+                            f"All generation attempts failed for template {template_id}"
+                        )
+                        return {
+                            "summary": None,
+                            "error": f"Generation failed: {error_in_execute}",
+                            "model_info": self.model_info
+                            or {"model_name": "unavailable"},
+                        }
+                    else:
+                        # Continue to retry
+                        last_error = error_in_execute
+                        current_temperature = retry_with_lower_temperature(
+                            settings.llm_sum.temperature, retry_count, max_retries
+                        )
+                        continue
 
                 raw_output = result.text.strip()
 

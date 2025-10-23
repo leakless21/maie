@@ -319,7 +319,7 @@ class TestAsyncioGetEventLoopMigration:
 
     def test_migration_readiness_check(self):
         """Test that current code is ready for migration to get_running_loop()."""
-        processor = self.create_concrete_processor("readiness_test")
+        self.create_concrete_processor("readiness_test")
 
         # This test verifies that the current implementation structure
         # supports migration to asyncio.get_running_loop()

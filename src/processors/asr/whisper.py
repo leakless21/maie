@@ -26,14 +26,12 @@ from __future__ import annotations
 import os
 from typing import Any, Dict, Optional
 
-from loguru import logger
-
 from src import config as cfg
 from src.config.logging import get_module_logger
+from src.processors.base import ASRBackend, ASRResult, VersionInfo
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
-from src.processors.base import ASRBackend, ASRResult, VersionInfo
 
 # Cache for faster_whisper module to avoid PyTorch 2.8 re-import bug
 # See: https://github.com/pytorch/pytorch/issues/XXX
@@ -176,11 +174,6 @@ class WhisperBackend(ASRBackend):
             raise FileNotFoundError(f"Model path not found: {self.model_path}")
 
         # Use device and compute type from configured settings when available
-        def _parse_bool(val: Optional[str], default: bool) -> bool:
-            if val is None:
-                return default
-            return str(val).strip().lower() in {"1", "true", "yes", "y", "on"}
-
         device = os.getenv("WHISPER_DEVICE") or getattr(
             cfg.settings.asr, "whisper_device", "cuda"
         )

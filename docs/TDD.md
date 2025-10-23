@@ -140,7 +140,7 @@ The system follows a **three-tier architecture** with clear separation of concer
 
 - Maximum file size: 500MB (server-side validation)
 - Supported formats: `.wav`, `.mp3`, `.m4a`, `.flac` (FR-1)
-- Files saved to `{AUDIO_DIR}/{task_id}.{ext}`
+- Files saved to `{AUDIO_DIR}/{task_id}/raw{ext}`
 - Asynchronous file I/O to avoid blocking event loop
 
 **Backpressure Management (NFR-5):**
@@ -1549,7 +1549,7 @@ Key Test Cases:
 3. File Upload Flow
 
    - Multipart handling with size/type validation
-   - Persist under `/data/audio/{task_id}.{ext}`
+   - Persist under `/data/audio/{task_id}/raw.{ext}`
    - Cleanup policy on `FAILED` (configurable, default keep)
 
 4. Processor Loading (with mocks)

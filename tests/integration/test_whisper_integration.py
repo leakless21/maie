@@ -175,7 +175,7 @@ def test_real_condition_on_previous_text(shared_whisper_backend, temp_audio_file
         shared_whisper_backend.model.transcribe = spy_transcribe
 
         # Execute transcription with explicit language to avoid detection segfault
-        result = shared_whisper_backend.execute(str(temp_audio_file), language="vi")
+        shared_whisper_backend.execute(str(temp_audio_file), language="vi")
 
         # Verify the parameter was passed
         assert "condition_on_previous_text" in call_kwargs
@@ -217,7 +217,7 @@ def test_real_language_parameter(
         backend.model.transcribe = spy_transcribe
 
         # Execute with explicit language parameter
-        result = backend.execute(str(temp_audio_file), language="vi")
+        backend.execute(str(temp_audio_file), language="vi")
 
         # Verify language was passed
         assert "language" in call_kwargs
@@ -298,7 +298,7 @@ def test_gpu_required_no_fallback(
 
         # Should raise RuntimeError due to GPU requirement
         with pytest.raises(RuntimeError, match="Failed to load whisper model"):
-            backend = WhisperBackend(model_path=str(whisper_model_path))
+            WhisperBackend(model_path=str(whisper_model_path))
 
     finally:
         if original_device:

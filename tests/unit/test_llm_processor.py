@@ -50,7 +50,7 @@ class TestLLMProcessorInitialization:
                 with patch(
                     "src.processors.llm.processor.PromptRenderer"
                 ) as mock_renderer:
-                    processor = LLMProcessor()
+                    LLMProcessor()
 
                     mock_loader.assert_called_once()
                     mock_renderer.assert_called_once()
@@ -357,7 +357,9 @@ class TestGenerateSummary:
         processor.model = Mock()
 
         # Create valid schema file
-        schema_file = tmp_path / "meeting_notes_v1.json"
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+        schema_file = schemas_dir / "meeting_notes_v1.json"
         schema = {
             "type": "object",
             "properties": {
@@ -392,7 +394,9 @@ class TestGenerateSummary:
         processor._model_loaded = True
 
         # Create valid schema file
-        schema_file = tmp_path / "meeting_notes_v1.json"
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+        schema_file = schemas_dir / "meeting_notes_v1.json"
         schema = {
             "type": "object",
             "properties": {
@@ -453,7 +457,9 @@ class TestGenerateSummary:
         processor._model_loaded = True
 
         # Create valid schema file
-        schema_file = tmp_path / "meeting_notes_v1.json"
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+        schema_file = schemas_dir / "meeting_notes_v1.json"
         schema = {
             "type": "object",
             "properties": {
@@ -533,12 +539,8 @@ class TestUnload:
         processor.current_template_id = "test"
         processor.current_schema_hash = "hash"
 
-        with patch(
-            "src.processors.llm.processor.torch"
-        ) as mock_src.processors.llm.processor.torch:
-            mock_src.processors.llm.processor.torch.cuda.is_available.return_value = (
-                True
-            )
+        with patch("src.processors.llm.processor.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
 
             processor.unload()
 
@@ -546,7 +548,7 @@ class TestUnload:
             assert processor._model_loaded is False
             assert processor.current_template_id is None
             assert processor.current_schema_hash is None
-            mock_src.processors.llm.processor.torch.cuda.empty_cache.assert_called_once()
+            mock_torch.cuda.empty_cache.assert_called_once()
 
     def test_unload_without_model(self):
         """Test unloading when no model is loaded."""
@@ -563,15 +565,9 @@ class TestUnload:
         processor = LLMProcessor()
         processor.model = Mock()
 
-        with patch(
-            "src.processors.llm.processor.torch"
-        ) as mock_src.processors.llm.processor.torch:
-            mock_src.processors.llm.processor.torch.cuda.is_available.return_value = (
-                True
-            )
-            mock_src.processors.llm.processor.torch.cuda.empty_cache.side_effect = (
-                Exception("CUDA error")
-            )
+        with patch("src.processors.llm.processor.torch") as mock_torch:
+            mock_torch.cuda.is_available.return_value = True
+            mock_torch.cuda.empty_cache.side_effect = Exception("CUDA error")
 
             # Should not raise exception
             processor.unload()

@@ -43,7 +43,7 @@ class TestSanitizeMetadata:
         assert _sanitize_metadata("string") == "string"
         assert _sanitize_metadata(42) == 42
         assert _sanitize_metadata(3.14) == 3.14
-        assert _sanitize_metadata(True) == True
+        assert _sanitize_metadata(True) is True
         assert _sanitize_metadata(None) is None
 
     def test_sanitize_dict(self):
