@@ -194,21 +194,20 @@ class TestProcessController:
     ):
         """Should default asr_backend to 'chunkformer' when not provided."""
         with TestClient(app=app) as client:
-            with patch("src.api.routes.create_task_in_redis") as mock_create:
-                with patch("src.api.routes.enqueue_job") as mock_enqueue:
-                    response = client.post(
-                        "/v1/process",
-                        files={"file": ("test.wav", valid_audio_file, "audio/wav")},
-                        data={"features": ["clean_transcript"]},
-                        headers={"X-API-Key": "dev_api_key_change_in_production"},
-                    )
+            with patch("src.api.routes.enqueue_job") as mock_enqueue:
+                response = client.post(
+                    "/v1/process",
+                    files={"file": ("test.wav", valid_audio_file, "audio/wav")},
+                    data={"features": ["clean_transcript"]},
+                    headers={"X-API-Key": "dev_api_key_change_in_production"},
+                )
 
-                    assert response.status_code == HTTP_202_ACCEPTED
+                assert response.status_code == HTTP_202_ACCEPTED
 
-                    # Verify enqueue_job was called with default asr_backend
-                    call_args = mock_enqueue.call_args
-                    task_params = call_args[0][2]  # request_params
-                    assert task_params["asr_backend"] == "chunkformer"
+                # Verify enqueue_job was called with default asr_backend
+                call_args = mock_enqueue.call_args
+                task_params = call_args[0][2]  # request_params
+                assert task_params["asr_backend"] == "chunkformer"
 
     def test_process_audio_validates_asr_backend(self, app, valid_audio_file):
         """Should return 422 for invalid asr_backend values."""
@@ -338,7 +337,7 @@ class TestFileUploadSecurity:
                     # Mock save to check what path is actually used
                     mock_save.return_value = Path(f"/data/audio/{uuid.uuid4()}.wav")
 
-                    response = client.post(
+                    client.post(
                         "/v1/process",
                         files={"file": (filename, valid_audio_file, "audio/wav")},
                         data={"features": ["clean_transcript"]},

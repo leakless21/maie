@@ -326,9 +326,6 @@ class AppSettings(BaseSettings):
     def get_model_path(self, model_type: str) -> Path:
         return self.paths.models_dir / model_type
 
-    def get_template_path(self, template_id: str) -> Path:
-        return self.paths.templates_dir / f"{template_id}.json"
-
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
         Apply a profile to the settings instance, respecting fields set via environment variables.

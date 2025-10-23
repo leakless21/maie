@@ -28,6 +28,8 @@ class TestLoadTemplateSchema:
         """Test loading a valid template schema."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
         schema = {
             "type": "object",
@@ -44,7 +46,7 @@ class TestLoadTemplateSchema:
             "required": ["title", "main_points", "tags"],
         }
 
-        template_file = templates_dir / "meeting_notes_v1.json"
+        template_file = schemas_dir / "meeting_notes_v1.json"
         template_file.write_text(json.dumps(schema, indent=2))
 
         loaded_schema = load_template_schema("meeting_notes_v1", templates_dir)
@@ -55,6 +57,8 @@ class TestLoadTemplateSchema:
         """Test loading non-existent template raises FileNotFoundError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
         with pytest.raises(FileNotFoundError):
             load_template_schema("nonexistent", templates_dir)
@@ -63,8 +67,10 @@ class TestLoadTemplateSchema:
         """Test loading invalid JSON raises ValueError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
-        template_file = templates_dir / "invalid.json"
+        template_file = schemas_dir / "invalid.json"
         template_file.write_text("{ invalid json }")
 
         with pytest.raises(ValueError, match="Invalid JSON"):
@@ -74,8 +80,10 @@ class TestLoadTemplateSchema:
         """Test loading non-object schema raises ValueError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
-        template_file = templates_dir / "invalid.json"
+        template_file = schemas_dir / "invalid.json"
         template_file.write_text('["array", "not", "object"]')
 
         with pytest.raises(ValueError, match="Template schema must be a JSON object"):
@@ -85,9 +93,11 @@ class TestLoadTemplateSchema:
         """Test loading schema without type field raises ValueError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
         schema = {"properties": {"title": {"type": "string"}}}
-        template_file = templates_dir / "invalid.json"
+        template_file = schemas_dir / "invalid.json"
         template_file.write_text(json.dumps(schema))
 
         with pytest.raises(ValueError, match="Template schema missing 'type' field"):
@@ -97,9 +107,11 @@ class TestLoadTemplateSchema:
         """Test loading schema with wrong type raises ValueError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
         schema = {"type": "array", "items": {"type": "string"}}
-        template_file = templates_dir / "invalid.json"
+        template_file = schemas_dir / "invalid.json"
         template_file.write_text(json.dumps(schema))
 
         with pytest.raises(ValueError, match="Template schema must be type 'object'"):
@@ -109,13 +121,15 @@ class TestLoadTemplateSchema:
         """Test loading schema without tags field raises ValueError."""
         templates_dir = tmp_path / "templates"
         templates_dir.mkdir()
+        schemas_dir = templates_dir / "schemas"
+        schemas_dir.mkdir()
 
         schema = {
             "type": "object",
             "properties": {"title": {"type": "string"}},
             "required": ["title"],
         }
-        template_file = templates_dir / "invalid.json"
+        template_file = schemas_dir / "invalid.json"
         template_file.write_text(json.dumps(schema))
 
         with pytest.raises(

@@ -209,8 +209,8 @@ Location: `src/worker/pipeline.py`
   - 422 on invalid payload or parameters
   - 429 when queue is full
 - Worker:
-  - Domain-specific exceptions (`AudioValidationError`, `AudioPreprocessingError`, `ASRProcessingError`, `LLMProcessingError`, `ModelLoadError`) mark task FAILED and persist error info into Redis
-  - Native errors are wrapped via `leverage_native_error` as `NetworkError`, `FileSystemError`, `ModelMemoryError`, or `ProcessingError`
+  - Domain-specific exceptions (`AudioValidationError`, `AudioPreprocessingError`, `ASRProcessingError`, `LLMProcessingError`, `ModelLoadError`) mark task FAILED and persist error info into Redis via `_update_status`
+  - Unexpected exceptions are logged with full traceback and surfaced as `FAILED` tasks with structured error metadata
 
 ### Primary Functions by Stage (Quick Index)
 - Ingress: `ProcessController.process_audio` (`src/api/routes.py`)
@@ -229,4 +229,4 @@ Location: `src/worker/pipeline.py`
 - Versioning: `get_version_metadata`
 - Metrics: `calculate_metrics`
 - Status updates: `_update_status`
-- Failure updates: `handle_processing_error` / `leverage_native_error`
+- Failure updates: inline try/except blocks within `process_audio_task` (`src/worker/pipeline.py`)

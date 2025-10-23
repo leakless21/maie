@@ -277,7 +277,7 @@ class TestLLMProcessorTokenizerIntegration:
 
         # Test with conversation-like input
         conversation_input = "user: Hello\nassistant: Hi there"
-        result = processor.execute(conversation_input, task="enhancement")
+        processor.execute(conversation_input, task="enhancement")
 
         # Should have called generate with formatted prompt
         mock_model.generate.assert_called_once()

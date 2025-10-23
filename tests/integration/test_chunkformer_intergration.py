@@ -37,7 +37,7 @@ class TestChunkFormerConfiguration:
         assert settings.chunkformer.chunkformer_total_batch_duration == 14400, (
             f"total_batch_duration should be 14400 seconds, got {settings.chunkformer.chunkformer_total_batch_duration}"
         )
-        assert settings.chunkformer.chunkformer_return_timestamps == True, (
+        assert settings.chunkformer.chunkformer_return_timestamps, (
             f"return_timestamps should be True, got {settings.chunkformer.chunkformer_return_timestamps}"
         )
 
@@ -130,7 +130,7 @@ class TestChunkFormerVersionInfo:
         assert info["total_batch_duration"] == 14400, (
             f"Version info total_batch_duration should be 14400, got {info['total_batch_duration']}"
         )
-        assert info["return_timestamps"] == True, (
+        assert info["return_timestamps"], (
             f"Version info return_timestamps should be True, got {info['return_timestamps']}"
         )
         backend.unload()

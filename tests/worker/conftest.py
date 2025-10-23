@@ -169,8 +169,6 @@ def mock_asr_factory(mock_asr_backend, monkeypatch):
     """Mock ASRFactory to return mock backend."""
     from src.processors.asr import factory
 
-    original_create = factory.ASRFactory.create
-
     def mock_create(backend_id: str, **kwargs):
         return mock_asr_backend
 
@@ -279,8 +277,6 @@ def mock_audio_preprocessor(mock_audio_metadata):
 def mock_audio_preprocessor_factory(mock_audio_preprocessor, monkeypatch):
     """Mock AudioPreprocessor factory."""
     from src.processors.audio import preprocessor
-
-    original_class = preprocessor.AudioPreprocessor
 
     def mock_init(*args, **kwargs):
         return mock_audio_preprocessor

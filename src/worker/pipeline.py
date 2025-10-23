@@ -25,15 +25,10 @@ except ImportError:
     torch = None  # type: ignore
     TORCH_AVAILABLE = False
 
-from loguru import logger
 from redis import Redis
 from rq import get_current_job
 
 from src.config.logging import get_module_logger
-
-# Create module-bound logger for better debugging
-logger = get_module_logger(__name__)
-
 from src.api.errors import (
     ASRProcessingError,
     AudioPreprocessingError,
@@ -43,6 +38,9 @@ from src.api.errors import (
 )
 from src.api.schemas import TaskStatus
 from src.config import settings
+
+# Create module-bound logger for better debugging
+logger = get_module_logger(__name__)
 
 # =============================================================================
 # Helper Functions
@@ -369,23 +367,6 @@ def calculate_metrics(
         metrics["edit_rate_cleaning"] = edit_rate
 
     return metrics
-
-
-def update_task_status(
-    job_id: str,
-    status: TaskStatus,
-    redis_conn: Redis,
-    details: Optional[Dict[str, Any]] = None,
-) -> None:
-    """Update the task status in Redis."""
-    if redis_conn:
-        status_data = {"status": status.value, "updated_at": time.time()}
-        if details:
-            status_data.update(details)
-
-        redis_conn.hset(
-            f"task:{job_id}", mapping=status_data
-        )  # Fixed key format per TDD
 
 
 def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:

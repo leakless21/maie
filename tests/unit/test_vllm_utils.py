@@ -34,7 +34,7 @@ class TestApplyOverridesToSampling:
         with patch.dict(
             "sys.modules", {"vllm": Mock(SamplingParams=mock_sampling_class)}
         ):
-            result = apply_overrides_to_sampling(base_params, overrides)
+            apply_overrides_to_sampling(base_params, overrides)
 
             # Verify SamplingParams was called
             mock_sampling_class.assert_called_once()
@@ -60,7 +60,7 @@ class TestApplyOverridesToSampling:
         with patch.dict(
             "sys.modules", {"vllm": Mock(SamplingParams=mock_sampling_class)}
         ):
-            result = apply_overrides_to_sampling(mock_base, overrides)
+            apply_overrides_to_sampling(mock_base, overrides)
 
             # Verify to_dict was called and SamplingParams was called with merged params
             mock_base.to_dict.assert_called_once()
@@ -86,7 +86,7 @@ class TestApplyOverridesToSampling:
         with patch.dict(
             "sys.modules", {"vllm": Mock(SamplingParams=mock_sampling_class)}
         ):
-            result = apply_overrides_to_sampling(mock_base, overrides)
+            apply_overrides_to_sampling(mock_base, overrides)
 
             # Verify SamplingParams was called
             mock_sampling_class.assert_called_once()

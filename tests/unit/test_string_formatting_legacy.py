@@ -212,7 +212,7 @@ class TestStringFormattingLegacy:
             mock_find_spec.side_effect = lambda module: None
 
             with patch("src.worker.main.get_logger") as mock_logger:
-                result = verify_models()
+                verify_models()
 
                 # Current behavior: uses modern f-string formatting
                 mock_logger.return_value.error.assert_called_once()
@@ -367,14 +367,14 @@ class TestStringFormattingMigration:
         # Time legacy formatting
         start_time = time.time()
         for _ in range(iterations):
-            result = "ASR=%s, LLM=%s" % test_data
-        legacy_time = time.time() - start_time
+            _ = "ASR=%s, LLM=%s" % test_data
+        time.time() - start_time
 
         # Time f-string formatting
         start_time = time.time()
         for _ in range(iterations):
-            result = f"ASR={test_data[0]}, LLM={test_data[1]}"
-        modern_time = time.time() - start_time
+            _ = f"ASR={test_data[0]}, LLM={test_data[1]}"
+        time.time() - start_time
 
         # f-strings should be faster or comparable
         # This is just for documentation - actual performance depends on many factors
