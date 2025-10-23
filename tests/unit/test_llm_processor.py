@@ -539,9 +539,7 @@ class TestUnload:
         processor.current_template_id = "test"
         processor.current_schema_hash = "hash"
 
-        with patch(
-            "src.processors.llm.processor.torch"
-        ) as mock_torch:
+        with patch("src.processors.llm.processor.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = True
 
             processor.unload()
@@ -567,9 +565,7 @@ class TestUnload:
         processor = LLMProcessor()
         processor.model = Mock()
 
-        with patch(
-            "src.processors.llm.processor.torch"
-        ) as mock_torch:
+        with patch("src.processors.llm.processor.torch") as mock_torch:
             mock_torch.cuda.is_available.return_value = True
             mock_torch.cuda.empty_cache.side_effect = Exception("CUDA error")
 

@@ -423,7 +423,9 @@ class LLMProcessor(LLMBackend):
             logger.info(
                 f"User message (role={messages[1]['role']}, length={len(messages[1]['content'])})"
             )
-            logger.debug(f"User message first 500 chars: {messages[1]['content'][:500]}")
+            logger.debug(
+                f"User message first 500 chars: {messages[1]['content'][:500]}"
+            )
             logger.debug(f"Built messages for chat API with template {template_id}")
 
             use_chat_api = True

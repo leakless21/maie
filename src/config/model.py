@@ -268,6 +268,89 @@ class WorkerSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
 
+class CleanupSettings(BaseModel):
+    audio_cleanup_interval: int = Field(
+        default=3600, description="Interval in seconds between audio cleanup runs"
+    )
+    log_cleanup_interval: int = Field(
+        default=86400, description="Interval in seconds between log cleanup runs"
+    )
+    cache_cleanup_interval: int = Field(
+        default=1800, description="Interval in seconds between cache cleanup runs"
+    )
+    disk_monitor_interval: int = Field(
+        default=300, description="Interval in seconds between disk monitoring runs"
+    )
+
+    audio_retention_days: int = Field(
+        default=7, description="Number of days to keep audio files"
+    )
+    logs_retention_days: int = Field(
+        default=7, description="Number of days to keep log files"
+    )
+
+    disk_threshold_pct: int = Field(
+        default=80, description="Disk usage percentage threshold for alerts"
+    )
+    emergency_cleanup: bool = Field(
+        default=False, description="Enable automatic emergency cleanup on disk alerts"
+    )
+    check_dir: str = Field(
+        default=".", description="Directory to monitor for disk usage"
+    )
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("audio_cleanup_interval", "log_cleanup_interval", 
+                     "cache_cleanup_interval", "disk_monitor_interval")
+    @classmethod
+    def validate_intervals(cls, value: int) -> int:
+        """Ensure cleanup intervals are positive and reasonable (10s to 86400s = 1 day)."""
+        if value < 10:
+            raise ValueError(
+                f"Cleanup interval must be at least 10 seconds, got {value}"
+            )
+        if value > 86400:
+            raise ValueError(
+                f"Cleanup interval should not exceed 86400 seconds (1 day), got {value}"
+            )
+        return value
+
+    @field_validator("audio_retention_days", "logs_retention_days")
+    @classmethod
+    def validate_retention_days(cls, value: int) -> int:
+        """Ensure retention periods are non-negative."""
+        if value < 0:
+            raise ValueError(
+                f"Retention days cannot be negative, got {value}"
+            )
+        if value > 365:
+            raise ValueError(
+                f"Retention days should not exceed 365, got {value}"
+            )
+        return value
+
+    @field_validator("disk_threshold_pct")
+    @classmethod
+    def validate_disk_threshold(cls, value: int) -> int:
+        """Ensure disk threshold is between 0 and 100."""
+        if value < 0 or value > 100:
+            raise ValueError(
+                f"Disk threshold percentage must be between 0 and 100, got {value}"
+            )
+        return value
+
+    @field_validator("check_dir")
+    @classmethod
+    def validate_check_dir(cls, value: str) -> str:
+        """Ensure check_dir is a valid path string."""
+        if not value or not isinstance(value, str):
+            raise ValueError(
+                f"check_dir must be a non-empty string, got {value}"
+            )
+        return value
+
+
 class FeatureFlags(BaseModel):
     enable_enhancement: bool = Field(default=True)
 
@@ -289,6 +372,7 @@ class AppSettings(BaseSettings):
     llm_sum: LlmSumSettings = Field(default_factory=LlmSumSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
+    cleanup: CleanupSettings = Field(default_factory=CleanupSettings)
     features: FeatureFlags = Field(default_factory=FeatureFlags)
 
     model_config = SettingsConfigDict(

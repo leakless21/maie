@@ -16,6 +16,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from litestar import Litestar, Response, get
+from litestar.middleware import DefineMiddleware
 from litestar.exceptions import (
     HTTPException,
     NotAuthorizedException,
@@ -36,6 +37,7 @@ from src.api.dependencies import validate_request_data
 from src.api.routes import route_handlers
 from src.api.schemas import HealthResponse
 from src.config import settings
+from src.api.middleware import CorrelationIdMiddleware
 
 # Always configure Loguru at API startup.
 _logger = configure_logging()
@@ -157,6 +159,8 @@ litestar_kwargs: Dict[str, Any] = {
     },
     "debug": settings.debug,
     "request_max_body_size": settings.api.max_file_size_mb * 1024 * 1024,
+    # Bind correlation ID per request and echo it back in response headers
+    "middleware": [DefineMiddleware(CorrelationIdMiddleware)],
 }
 if CORSConfig is not None:
     litestar_kwargs["cors_config"] = CORSConfig(
