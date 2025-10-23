@@ -153,6 +153,11 @@ class LLMProcessor(LLMBackend):
                     "PyTorch is not installed. GPU is required for vLLM."
                 ) from _imp_err
 
+            # Disable vLLM telemetry before importing
+            import os
+            os.environ["VLLM_NO_USAGE_STATS"] = "1"
+            os.environ["DO_NOT_TRACK"] = "1"
+
             from vllm import LLM
             import logging
 

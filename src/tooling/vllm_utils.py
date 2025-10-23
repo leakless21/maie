@@ -7,10 +7,15 @@ sampling parameter management, override handling, and model versioning.
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Any, Dict
 
 from src.config.logging import get_module_logger
+
+# Disable vLLM telemetry at module level
+os.environ["VLLM_NO_USAGE_STATS"] = "1"
+os.environ["DO_NOT_TRACK"] = "1"
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
