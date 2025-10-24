@@ -11,6 +11,7 @@ from . import validation
 from . import json_utils
 from . import error_handling
 from . import sanitization
+from . import device
 from . import config_validation
 from . import logging_utils
 
@@ -71,12 +72,18 @@ from .logging_utils import (
     log_api_request,
     log_processing_step,
 )
+from .device import (
+    has_cuda,
+    select_device,
+    ensure_cuda_available,
+    reset_device_cache,
+)
 
 # Define what gets imported with "from utils import *"
 __all__ = [
     # Validation functions
     "coerce_optional_int",
-    "coerce_optional_str", 
+    "coerce_optional_str",
     "validate_range",
     "validate_port",
     "validate_choice",
@@ -124,4 +131,9 @@ __all__ = [
     "log_performance_metrics",
     "log_api_request",
     "log_processing_step",
+    # Device helpers
+    "has_cuda",
+    "select_device",
+    "ensure_cuda_available",
+    "reset_device_cache",
 ]

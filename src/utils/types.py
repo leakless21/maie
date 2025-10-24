@@ -4,9 +4,7 @@ This module contains common type aliases and constants used across all
 utility modules to ensure consistent typing and reduce code duplication.
 """
 
-from typing import Any, Dict, List, Optional, Tuple, Union, Callable, Set
-from pathlib import Path
-from jsonschema.exceptions import ValidationError
+from typing import Any, Dict, Optional, Tuple, Callable
 
 
 # Common type aliases
@@ -33,7 +31,9 @@ ValidationContext = Dict[str, Any]
 SafeCallable = Callable[..., Any]
 """Type alias for functions that can be called safely with any arguments."""
 
-AsyncSafeCallable = Callable[..., Any]  # Actually should be Awaitable but simplified for now
+AsyncSafeCallable = Callable[
+    ..., Any
+]  # Actually should be Awaitable but simplified for now
 """Type alias for async functions that can be called safely with any arguments."""
 
 # Common constants
@@ -49,12 +49,28 @@ DEFAULT_TIMEOUT = 30.0
 DEFAULT_MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 """Default maximum file size in bytes."""
 
-ALLOWED_FILE_EXTENSIONS = ['.mp3', '.wav', '.flac', '.m4a', '.mp4', '.m4v', '.mov', '.avi', '.mkv']
+ALLOWED_FILE_EXTENSIONS = [
+    ".mp3",
+    ".wav",
+    ".flac",
+    ".m4a",
+    ".mp4",
+    ".m4v",
+    ".mov",
+    ".avi",
+    ".mkv",
+]
 """List of allowed file extensions for audio/video uploads."""
 
 ALLOWED_MIME_TYPES = [
-    'audio/mpeg', 'audio/wav', 'audio/flac', 'audio/mp4',
-    'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/x-matroska'
+    "audio/mpeg",
+    "audio/wav",
+    "audio/flac",
+    "audio/mp4",
+    "video/mp4",
+    "video/quicktime",
+    "video/x-msvideo",
+    "video/x-matroska",
 ]
 """List of allowed MIME types for audio/video uploads."""
 
@@ -62,7 +78,7 @@ ALLOWED_MIME_TYPES = [
 MAX_PATH_LENGTH = 255
 """Maximum allowed path length to prevent path traversal attacks."""
 
-FORBIDDEN_PATH_CHARS = ['..', '/', '\\', ':', '*', '?', '"', '<', '>', '|']
+FORBIDDEN_PATH_CHARS = ["..", "/", "\\", ":", "*", "?", '"', "<", ">", "|"]
 """Characters that are forbidden in file paths for security reasons."""
 
 # Validation constants
@@ -74,13 +90,13 @@ DEFAULT_MAX_LENGTH = 10000
 
 # Common error codes
 ERROR_CODES = {
-    'VALIDATION_ERROR': 'VALIDATION_ERROR',
-    'PARSING_ERROR': 'PARSING_ERROR',
-    'PROCESSING_ERROR': 'PROCESSING_ERROR',
-    'CONFIG_ERROR': 'CONFIG_ERROR',
-    'SECURITY_ERROR': 'SECURITY_ERROR',
-    'TIMEOUT_ERROR': 'TIMEOUT_ERROR',
-    'NETWORK_ERROR': 'NETWORK_ERROR',
-    'FILE_ERROR': 'FILE_ERROR',
+    "VALIDATION_ERROR": "VALIDATION_ERROR",
+    "PARSING_ERROR": "PARSING_ERROR",
+    "PROCESSING_ERROR": "PROCESSING_ERROR",
+    "CONFIG_ERROR": "CONFIG_ERROR",
+    "SECURITY_ERROR": "SECURITY_ERROR",
+    "TIMEOUT_ERROR": "TIMEOUT_ERROR",
+    "NETWORK_ERROR": "NETWORK_ERROR",
+    "FILE_ERROR": "FILE_ERROR",
 }
 """Dictionary of standard error codes used across the application."""

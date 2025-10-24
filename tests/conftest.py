@@ -388,9 +388,9 @@ def has_gpu():
         return _HAS_GPU
 
     try:
-        import torch
+        from src.utils.device import has_cuda
 
-        _HAS_GPU = torch.cuda.is_available()
+        _HAS_GPU = has_cuda()
         return _HAS_GPU
     except (ImportError, RuntimeError):
         _HAS_GPU = False

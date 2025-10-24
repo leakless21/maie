@@ -11,8 +11,6 @@ from typing import Any, Dict, Optional
 
 from pydantic import BaseModel, Field
 
-from src.utils.error_handling import create_error_response as utils_create_error_response, handle_generic_error as utils_handle_generic_error
-
 
 class ErrorResponse(BaseModel):
     """Standardized error response structure."""

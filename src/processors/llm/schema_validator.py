@@ -9,11 +9,14 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
-import jsonschema
 from jsonschema import ValidationError
 
 from src.config.logging import get_module_logger
-from src.utils.json_utils import safe_parse_json, validate_json_schema, extract_validation_error
+from src.utils.json_utils import (
+    safe_parse_json,
+    validate_json_schema,
+    extract_validation_error,
+)
 from src.utils.logging_utils import log_json_parse_error, log_validation_error
 
 # Create module-bound logger for better debugging
@@ -103,11 +106,14 @@ def validate_llm_output(
     parsed_data, parse_error = safe_parse_json(output.strip())
     if parse_error:
         # Enhanced logging for JSON parse failures
-        log_json_parse_error(json.JSONDecodeError("JSON decode error", output, 0), {
-            "raw_output": output.strip(),
-            "output_length": len(output.strip()),
-            "output_preview": output_preview,
-        })
+        log_json_parse_error(
+            json.JSONDecodeError("JSON decode error", output, 0),
+            {
+                "raw_output": output.strip(),
+                "output_length": len(output.strip()),
+                "output_preview": output_preview,
+            },
+        )
         logger.error(
             "JSON parsing failed",
             extra={
@@ -130,31 +136,54 @@ def validate_llm_output(
         if not is_valid:
             # Enhanced logging for schema validation failures
             error_msg = f"Schema validation failed: {validation_error.get('error', 'Unknown validation error') if validation_error else 'Unknown validation error'}"
-            if validation_error and 'path' in validation_error:
+            if validation_error and "path" in validation_error:
                 error_msg += f" (at path: {' -> '.join(str(p) for p in validation_error['path'])})"
 
-            log_validation_error(ValidationError(error_msg), {
-                "raw_output": output.strip(),
-                "output_preview": output_preview,
-                "parsed_data": parsed_data,
-                "schema_summary": {
-                    "type": schema.get("type"),
-                    "properties": list(schema.get("properties", {}).keys()),
-                    "required": schema.get("required", []),
+            log_validation_error(
+                ValidationError(error_msg),
+                {
+                    "raw_output": output.strip(),
+                    "output_preview": output_preview,
+                    "parsed_data": parsed_data,
+                    "schema_summary": {
+                        "type": schema.get("type"),
+                        "properties": list(schema.get("properties", {}).keys()),
+                        "required": schema.get("required", []),
+                    },
                 },
-            })
-            
+            )
+
             logger.error(
                 "Schema validation failed",
                 extra={
                     "error_type": "schema_validation_error",
-                    "error_message": validation_error.get('error', 'Unknown validation error') if validation_error else 'Unknown validation error',
-                    "validation_path": validation_error.get('path', []) if validation_error else [],
-                    "validation_absolute_path": validation_error.get('absolute_path', []) if validation_error else [],
-                    "validator": validation_error.get('validator', 'unknown') if validation_error else 'unknown',
-                    "validator_value": validation_error.get('validator_value', 'unknown') if validation_error else 'unknown',
-                    "failed_instance": validation_error.get('instance', 'unknown') if validation_error else 'unknown',
-                    "schema_path": validation_error.get('schema_path', []) if validation_error else [],
+                    "error_message": validation_error.get(
+                        "error", "Unknown validation error"
+                    )
+                    if validation_error
+                    else "Unknown validation error",
+                    "validation_path": validation_error.get("path", [])
+                    if validation_error
+                    else [],
+                    "validation_absolute_path": validation_error.get(
+                        "absolute_path", []
+                    )
+                    if validation_error
+                    else [],
+                    "validator": validation_error.get("validator", "unknown")
+                    if validation_error
+                    else "unknown",
+                    "validator_value": validation_error.get(
+                        "validator_value", "unknown"
+                    )
+                    if validation_error
+                    else "unknown",
+                    "failed_instance": validation_error.get("instance", "unknown")
+                    if validation_error
+                    else "unknown",
+                    "schema_path": validation_error.get("schema_path", [])
+                    if validation_error
+                    else [],
                     "raw_output": output.strip(),
                     "output_preview": output_preview,
                     "parsed_data": parsed_data,

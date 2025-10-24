@@ -189,35 +189,9 @@ When word timestamps are available (faster‑whisper), store words compactly und
 }
 ```
 
-### Timestamp Normalization Utilities
+### Timestamp Handling
 
-The following utilities will be in `src/processors/audio/timestamp_utils.py`.
-
-```python
-# src/processors/audio/timestamp_utils.py
-import re
-from typing import Any, Dict
-
-def normalize_timestamp(timestamp: Any) -> float:
-    if isinstance(timestamp, (float, int)):
-        return float(timestamp)
-    if isinstance(timestamp, str):
-        ts = timestamp.strip("[]")
-        m = re.match(r"(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})", ts)
-        if m:
-            h, m_, s, ms = m.groups()
-            return int(h) * 3600 + int(m_) * 60 + int(s) + int(ms) / 1000.0
-        return float(ts)
-    raise ValueError(f"Unsupported timestamp type: {type(timestamp)}")
-
-def normalize_segment(segment: Dict[str, Any]) -> Dict[str, Any]:
-    out = dict(segment)
-    if "start" in out:
-        out["start"] = normalize_timestamp(out["start"])
-    if "end" in out:
-        out["end"] = normalize_timestamp(out["end"])
-    return out
-```
+ChunkFormer now normalizes its timestamps internally (HH:MM:SS.mmm → float seconds). Whisper already returns floats. That means the diarizer can consume ASR segments directly—no separate normalization module is required.
 
 ### Overlap + Alignment Logic
 
@@ -238,76 +212,86 @@ def align_diarization_with_asr(
     diar_segments: List[Dict[str, Any]],
     asr_segments: List[Dict[str, Any]],
     overlap_threshold: float = 0.3,
+    dominant_threshold: float = 0.7,
 ) -> List[Dict[str, Any]]:
-    diar = [normalize_segment(s) for s in diar_segments]
-    asr = [normalize_segment(s) for s in asr_segments]
     aligned: List[Dict[str, Any]] = []
-    
-    for seg in asr:
-        a0, a1 = seg["start"], seg["end"]
-        text = seg.get("text", "")
-        
-        # Find all overlapping speakers
-        overlapping_speakers = []
-        for d in diar:
-            score = _iou(a0, a1, d["start"], d["end"])
-            if score >= overlap_threshold:
-                overlapping_speakers.append({**d, "score": score})
 
-        # PREFERRED: If seg has word-timestamps, use those to create new segments.
-        # (Implementation omitted for brevity, but involves assigning each word to a speaker
-        # and then merging consecutive words from the same speaker.)
+    for seg in asr_segments:
+        a0, a1 = float(seg["start"]), float(seg["end"])
+        text = seg.get("text", "").strip()
+        span_duration = max(a1 - a0, 1e-6)
 
-        # FALLBACK: Proportional splitting for segments without word-timestamps.
-        if not overlapping_speakers:
-            aligned.append({**seg, "speaker": None, "speaker_confidence": 0.0})
-        elif len(overlapping_speakers) == 1:
-            speaker_info = overlapping_speakers[0]
-            aligned.append({**seg, "speaker": speaker_info["speaker"], "speaker_confidence": speaker_info["score"]})
-        else:
-            # MULTIPLE SPEAKERS: Partition the text proportionally.
-            clipped_speakers = []
-            for spk in overlapping_speakers:
-                overlap_start = max(a0, spk["start"])
-                overlap_end = min(a1, spk["end"])
-                if overlap_end > overlap_start:
-                    clipped_speakers.append({
-                        **spk, "start": overlap_start, "end": overlap_end,
-                        "duration": overlap_end - overlap_start
-                    })
-            
-            if not clipped_speakers: # handle edge case
-                aligned.append({**seg, "speaker": None, "speaker_confidence": 0.0})
+        # Collect overlaps with diarization spans
+        overlaps = []
+        for d in diar_segments:
+            overlap_start = max(a0, float(d["start"]))
+            overlap_end = min(a1, float(d["end"]))
+            if overlap_end <= overlap_start:
                 continue
+            overlap = overlap_end - overlap_start
+            iou_score = _iou(a0, a1, float(d["start"]), float(d["end"]))
+            if iou_score >= overlap_threshold:
+                overlaps.append(
+                    {
+                        "speaker": d["speaker"],
+                        "start": overlap_start,
+                        "end": overlap_end,
+                        "duration": overlap,
+                    }
+                )
 
-            clipped_speakers.sort(key=lambda x: x["start"])
+        if not overlaps:
+            aligned.append({**seg, "speaker": None})
+            continue
 
-            words = text.split()
-            total_speaker_duration = sum(c["duration"] for c in clipped_speakers)
-            remaining_words = list(words)
+        overlaps.sort(key=lambda o: o["duration"], reverse=True)
+        dominant = overlaps[0]
 
-            if total_speaker_duration > 0 and remaining_words:
-                # Iterate and assign word chunks to each speaker except the last.
-                for spk in clipped_speakers[:-1]:
-                    proportion = spk["duration"] / total_speaker_duration
-                    num_words_for_speaker = round(len(words) * proportion)
-                    
-                    speaker_words = remaining_words[:num_words_for_speaker]
-                    if not speaker_words: continue
-                    
-                    aligned.append({
-                        "start": spk["start"], "end": spk["end"], "text": " ".join(speaker_words),
-                        "speaker": spk["speaker"], "speaker_confidence": spk["score"]
-                    })
-                    remaining_words = remaining_words[num_words_for_speaker:]
+        if dominant["duration"] >= dominant_threshold * span_duration:
+            # Assign entire segment to dominant speaker
+            aligned.append({**seg, "speaker": dominant["speaker"]})
+            continue
 
-                # Assign all leftover words to the last speaker to ensure no text is lost.
-                last_spk = clipped_speakers[-1]
-                if remaining_words:
-                    aligned.append({
-                        "start": last_spk["start"], "end": last_spk["end"], "text": " ".join(remaining_words),
-                        "speaker": last_spk["speaker"], "speaker_confidence": last_spk["score"]
-                    })
+        # Otherwise, split into at most two chunks (earliest speakers first)
+        overlaps_sorted = sorted(overlaps, key=lambda o: o["start"])
+        total_overlap = sum(o["duration"] for o in overlaps_sorted)
+        if total_overlap <= 0:
+            aligned.append({**seg, "speaker": overlaps_sorted[0]["speaker"]})
+            continue
+
+        words = text.split()
+        if not words:
+            aligned.append({**seg, "speaker": overlaps_sorted[0]["speaker"]})
+            continue
+
+        first = overlaps_sorted[0]
+        second = overlaps_sorted[1] if len(overlaps_sorted) > 1 else overlaps_sorted[0]
+        proportion = min(max(first["duration"] / total_overlap, 0.0), 1.0)
+        split_index = max(1, min(len(words) - 1, round(len(words) * proportion)))
+        split_time = a0 + (a1 - a0) * proportion
+
+        left_words = words[:split_index]
+        right_words = words[split_index:]
+
+        aligned.append(
+            {
+                "start": first["start"],
+                "end": split_time,
+                "text": " ".join(left_words).strip(),
+                "speaker": first["speaker"],
+            }
+        )
+
+        if right_words:
+            aligned.append(
+                {
+                    "start": split_time,
+                    "end": second["end"],
+                    "text": " ".join(right_words).strip(),
+                    "speaker": second["speaker"],
+                }
+            )
+
     return aligned
 ```
 
@@ -329,8 +313,6 @@ def merge_adjacent_same_speaker(aligned: List[Dict[str, Any]]) -> List[Dict[str,
                 cur["text"] = f"{cur['text'].rstrip()} {seg['text'].lstrip()}".strip()
             elif seg.get("text"):
                 cur["text"] = seg["text"]
-            if "speaker_confidence" in cur and "speaker_confidence" in seg:
-                cur["speaker_confidence"] = max(cur["speaker_confidence"], seg["speaker_confidence"]) 
         else:
             merged.append(cur)
             cur = dict(seg)
@@ -382,7 +364,6 @@ Follow Test-Driven Development approach:
 4. **File Structure**: To keep the design minimal, alignment and formatting logic will be co-located with the diarizer.
    - `src/utils/device.py` (if no existing equivalent is found)
    - `src/processors/audio/diarizer.py` (to contain main diarization, alignment, and formatting logic)
-   - `src/processors/audio/timestamp_utils.py`
 
 ## Conclusion
 

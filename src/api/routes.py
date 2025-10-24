@@ -43,7 +43,7 @@ from src.api.dependencies import api_key_guard
 from src.config import settings
 from src.config.logging import get_module_logger, correlation_id as _cid_var
 from src.utils.sanitization import sanitize_filename
-from src.utils.json_utils import safe_json_loads, json_dumps_safe
+from src.utils.json_utils import safe_json_loads
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -72,8 +72,6 @@ def _patch_logging_queue_listener() -> None:
 
 
 _patch_logging_queue_listener()
-
-
 
 
 def check_queue_depth() -> bool:
@@ -203,6 +201,7 @@ def enqueue_job(
 ) -> None:
     """Enqueue processing job to Redis queue (DB 0)."""
     from src.api.dependencies import get_rq_queue
+
     queue = get_rq_queue()
 
     job_func = "src.worker.pipeline.process_audio_task"

@@ -284,8 +284,12 @@ class CleanupSettings(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    @field_validator("audio_cleanup_interval", "log_cleanup_interval", 
-                     "cache_cleanup_interval", "disk_monitor_interval")
+    @field_validator(
+        "audio_cleanup_interval",
+        "log_cleanup_interval",
+        "cache_cleanup_interval",
+        "disk_monitor_interval",
+    )
     @classmethod
     def validate_intervals(cls, value: int) -> int:
         """Ensure cleanup intervals are positive and reasonable (10s to 86400s = 1 day)."""
@@ -304,13 +308,9 @@ class CleanupSettings(BaseModel):
     def validate_retention_days(cls, value: int) -> int:
         """Ensure retention periods are non-negative."""
         if value < 0:
-            raise ValueError(
-                f"Retention days cannot be negative, got {value}"
-            )
+            raise ValueError(f"Retention days cannot be negative, got {value}")
         if value > 365:
-            raise ValueError(
-                f"Retention days should not exceed 365, got {value}"
-            )
+            raise ValueError(f"Retention days should not exceed 365, got {value}")
         return value
 
     @field_validator("disk_threshold_pct")
@@ -328,9 +328,7 @@ class CleanupSettings(BaseModel):
     def validate_check_dir(cls, value: str) -> str:
         """Ensure check_dir is a valid path string."""
         if not value or not isinstance(value, str):
-            raise ValueError(
-                f"check_dir must be a non-empty string, got {value}"
-            )
+            raise ValueError(f"check_dir must be a non-empty string, got {value}")
         return value
 
 

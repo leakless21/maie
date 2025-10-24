@@ -120,7 +120,7 @@ class VersionInfo(TypedDict, total=False):
     device: str  # Device used (cuda, cpu, auto)
     compute_type: str  # Compute/precision type (float16, int8, etc.)
     cpu_threads: Optional[int]  # Number of CPU threads for inference
-    beam_size: Optional[int] # Beam size for decoding
+    beam_size: Optional[int]  # Beam size for decoding
     vad_filter: bool  # Whether VAD filtering is enabled
     condition_on_previous_text: bool  # Whether context conditioning is used
     language: Optional[str]  # Language code for transcription

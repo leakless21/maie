@@ -1,6 +1,5 @@
 """Tests for the types module."""
 
-import pytest
 from src.utils.types import (
     JSONDict,
     ValidationResult,
@@ -17,7 +16,7 @@ from src.utils.types import (
     FORBIDDEN_PATH_CHARS,
     DEFAULT_MIN_LENGTH,
     DEFAULT_MAX_LENGTH,
-    ERROR_CODES
+    ERROR_CODES,
 )
 
 

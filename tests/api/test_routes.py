@@ -335,9 +335,7 @@ class TestFileUploadSecurity:
             for filename in malicious_filenames:
                 with patch("src.api.routes.save_audio_file_streaming") as mock_save:
                     # Mock save to check what path is actually used
-                    mock_save.return_value = Path(
-                        f"/data/audio/{uuid.uuid4()}/raw.wav"
-                    )
+                    mock_save.return_value = Path(f"/data/audio/{uuid.uuid4()}/raw.wav")
 
                     client.post(
                         "/v1/process",

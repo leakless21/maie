@@ -19,6 +19,7 @@ from typing import Any, Dict, Optional
 # Optional torch import (may not be available in test environment)
 try:
     import torch
+
     TORCH_AVAILABLE = True
 except ImportError:
     torch = None  # type: ignore
@@ -41,6 +42,7 @@ from src.api.errors import (
 )
 from src.api.schemas import TaskStatus
 from src.config import settings
+from src.utils.device import has_cuda, select_device
 from src.utils.sanitization import sanitize_metadata
 
 # Create module-bound logger for better debugging
@@ -49,8 +51,6 @@ logger = get_module_logger(__name__)
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
-
 
 
 def _update_status(
@@ -172,7 +172,11 @@ def get_version_metadata(
     """
     # Build ASR metadata variants - ensure all required fields are strings (not None)
     asr_backend = {
-        "name": (asr_result_metadata.get("model_name") or asr_result_metadata.get("name") or "whisper")
+        "name": (
+            asr_result_metadata.get("model_name")
+            or asr_result_metadata.get("name")
+            or "whisper"
+        )
         if asr_result_metadata
         else "unknown",
         "model_variant": (asr_result_metadata.get("model_variant") or "unknown")
@@ -765,11 +769,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         asr_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if (
-                        TORCH_AVAILABLE
-                        and torch is not None
-                        and torch.cuda.is_available()
-                    ):
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
                         torch.cuda.empty_cache()
                         logger.info("ASR model unloaded and GPU cache cleared")
                     else:
@@ -809,6 +809,24 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 raise LLMProcessingError(
                     message="Empty transcript after ASR; no content to process",
                     details={"transcription_length": 0},
+                )
+
+            # Preflight: only proceed if LLM-related features are requested
+            wants_llm = "clean_transcript" in features or "summary" in features
+            if wants_llm and not has_cuda():
+                # Fail gracefully with clear, actionable message
+                raise LLMProcessingError(
+                    message=(
+                        "CUDA is not available. GPU is required for LLM enhancement/summary."
+                    ),
+                    details={
+                        "requested_features": features,
+                        "selected_device": select_device(),
+                        "hint": (
+                            "Install NVIDIA drivers + CUDA, set CUDA_VISIBLE_DEVICES, or run without "
+                            "'clean_transcript'/'summary' features to perform ASR-only."
+                        ),
+                    },
                 )
 
             logger.info("Loading LLM model", task_id=job_id)
@@ -973,11 +991,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         llm_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if (
-                        TORCH_AVAILABLE
-                        and torch is not None
-                        and torch.cuda.is_available()
-                    ):
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
                         torch.cuda.empty_cache()
                         logger.info("LLM model unloaded and GPU cache cleared")
                     else:

@@ -3928,7 +3928,7 @@ packages:
 - pypi: ./
   name: maie
   version: 0.1.0
-  sha256: 1c758cc1223a46659a74a2d5b44209cd6603cef105da1a2c714994265fdf3adc
+  sha256: 228331f8d9e9c97b03a9ef34e0d2d89f2cd9ca90610d90e0e0fd98f8355a9840
   requires_dist:
   - soxr
   - transformers

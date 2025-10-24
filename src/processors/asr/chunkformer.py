@@ -6,10 +6,66 @@ Supports chunkformer-rnnt-large-vie model.
 import os
 import tempfile
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Any
 
 from src import config as cfg
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
+from src.utils.device import ensure_cuda_available
+
+
+# -----------------------------------------------------------------------------
+# Local helpers: normalize timestamps to float seconds
+# Supports formats: float/int seconds, "HH:MM:SS.mm" (centiseconds),
+# "HH:MM:SS.mmm" (milliseconds), optionally wrapped in brackets [ ... ].
+# -----------------------------------------------------------------------------
+def _normalize_timestamp(value: Any) -> Optional[float]:
+    """Normalize ChunkFormer timestamps to float seconds.
+
+    Supported formats:
+    - float/int seconds
+    - strings like "HH:MM:SS.mmm" (optionally wrapped in brackets)
+    Returns None when parsing fails.
+    """
+    if value is None:
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str):
+        s = value.strip().strip("[]")
+        import re
+
+        m = re.match(r"(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})", s)
+        if m:
+            hh, mm, ss, frac = m.groups()
+            base = int(hh) * 3600 + int(mm) * 60 + int(ss)
+            return base + int(frac) / 1000.0
+        try:
+            return float(s)
+        except Exception:
+            return None
+    return None
+
+
+def _normalize_segment(seg: Any) -> dict:
+    """Return a normalized segment dict with float start/end and stripped text.
+
+    Unknown or unparsable timestamps are returned as None.
+    """
+    # Extract text field (decode preferred, else text)
+    if isinstance(seg, dict):
+        text = seg.get("decode", seg.get("text", ""))
+        start_raw = seg.get("start")
+        end_raw = seg.get("end")
+    else:
+        text = getattr(seg, "decode", None) or getattr(seg, "text", "")
+        start_raw = getattr(seg, "start", None)
+        end_raw = getattr(seg, "end", None)
+
+    return {
+        "start": _normalize_timestamp(start_raw),
+        "end": _normalize_timestamp(end_raw),
+        "text": (text or "").strip(),
+    }
 
 
 class ChunkFormerBackend(ASRBackend):
@@ -111,19 +167,15 @@ class ChunkFormerBackend(ASRBackend):
 
         if device == "auto":
             try:
-                import torch as _torch  # type: ignore
-
-                if not _torch.cuda.is_available():
-                    raise RuntimeError(
-                        "CUDA is not available. GPU is required for offline deployment."
-                    )
-                device = "cuda"
+                import torch as _torch  # type: ignore  # noqa: F401
             except ImportError:
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for offline deployment."
                 )
-            except (AttributeError, RuntimeError, OSError) as e:
-                raise RuntimeError(f"Failed to check CUDA availability: {e}") from e
+            ensure_cuda_available(
+                "CUDA is not available. GPU is required for offline deployment."
+            )
+            device = "cuda"
 
         try:
             # Prefer Class.from_pretrained if present
@@ -231,7 +283,7 @@ class ChunkFormerBackend(ASRBackend):
                     )
 
                     # ChunkFormer's endless_decode returns a list of segments directly
-                    # Each segment has: {"start": "[HH:MM:SS.mmm]", "end": "[HH:MM:SS.mmm]", "decode": "text"}
+                    # Each segment may have: start/end as HH:MM:SS.mm/.mmm or float; and "decode" for text
                     if isinstance(result, list):
                         # Direct list of segments from ChunkFormer
                         segments = result
@@ -247,32 +299,7 @@ class ChunkFormerBackend(ASRBackend):
                         # Normalize segments: ChunkFormer uses "decode" field, we need "text" for API consistency
                         normalized_segments = []
                         for seg in segments:
-                            if isinstance(seg, dict):
-                                # Extract text from "decode" field (ChunkFormer's output format)
-                                text = seg.get("decode", seg.get("text", ""))
-                                normalized_segments.append(
-                                    {
-                                        "start": seg.get(
-                                            "start"
-                                        ),  # ChunkFormer format: "[HH:MM:SS.mmm]"
-                                        "end": seg.get(
-                                            "end"
-                                        ),  # ChunkFormer format: "[HH:MM:SS.mmm]"
-                                        "text": text.strip() if text else "",
-                                    }
-                                )
-                            else:
-                                # Handle object-like segments (fallback)
-                                text = getattr(seg, "decode", None) or getattr(
-                                    seg, "text", ""
-                                )
-                                normalized_segments.append(
-                                    {
-                                        "start": getattr(seg, "start", None),
-                                        "end": getattr(seg, "end", None),
-                                        "text": text.strip() if text else "",
-                                    }
-                                )
+                            normalized_segments.append(_normalize_segment(seg))
 
                         segments = normalized_segments
 
@@ -292,15 +319,7 @@ class ChunkFormerBackend(ASRBackend):
                         # Normalize dict segments as well
                         normalized_segments = []
                         for seg in segments:
-                            if isinstance(seg, dict):
-                                text = seg.get("decode", seg.get("text", ""))
-                                normalized_segments.append(
-                                    {
-                                        "start": seg.get("start"),
-                                        "end": seg.get("end"),
-                                        "text": text.strip() if text else "",
-                                    }
-                                )
+                            normalized_segments.append(_normalize_segment(seg))
                         segments = normalized_segments
                     else:
                         # Treat as plain text (fallback for unexpected return type)
@@ -356,31 +375,10 @@ class ChunkFormerBackend(ASRBackend):
                     language = result.get("language", None)
                     confidence = result.get("confidence", None)
 
-                    # Normalize segments: ChunkFormer uses "decode" field
+                    # Normalize segments: timestamps to float seconds, map decode→text
                     normalized_segments = []
                     for seg in segments:
-                        if isinstance(seg, dict):
-                            # Extract text from "decode" field (ChunkFormer's output format)
-                            text = seg.get("decode", seg.get("text", ""))
-                            normalized_segments.append(
-                                {
-                                    "start": seg.get("start"),
-                                    "end": seg.get("end"),
-                                    "text": text.strip() if text else "",
-                                }
-                            )
-                        else:
-                            # Handle object-like segments
-                            text = getattr(seg, "decode", None) or getattr(
-                                seg, "text", ""
-                            )
-                            normalized_segments.append(
-                                {
-                                    "start": getattr(seg, "start", None),
-                                    "end": getattr(seg, "end", None),
-                                    "text": text.strip() if text else "",
-                                }
-                            )
+                        normalized_segments.append(_normalize_segment(seg))
 
                     segments = normalized_segments
 
@@ -405,28 +403,7 @@ class ChunkFormerBackend(ASRBackend):
                         # Normalize segments to list of dicts
                         normalized_segments = []
                         for s in segs:
-                            if isinstance(s, dict):
-                                # Extract text from "decode" or "text" field
-                                text = s.get("decode", s.get("text", ""))
-                                normalized_segments.append(
-                                    {
-                                        "start": s.get("start", None),
-                                        "end": s.get("end", None),
-                                        "text": text.strip() if text else "",
-                                    }
-                                )
-                            else:
-                                # Handle object-like segments
-                                text = getattr(s, "decode", None) or getattr(
-                                    s, "text", ""
-                                )
-                                normalized_segments.append(
-                                    {
-                                        "start": getattr(s, "start", None),
-                                        "end": getattr(s, "end", None),
-                                        "text": text.strip() if text else "",
-                                    }
-                                )
+                            normalized_segments.append(_normalize_segment(s))
 
                         segments = normalized_segments
 

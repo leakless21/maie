@@ -6,6 +6,7 @@ and resource management with comprehensive mocking.
 """
 
 import json
+from types import SimpleNamespace
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -90,17 +91,26 @@ class TestLoadModel:
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_enhance_model = "test-model"
             mock_settings.paths.templates_dir = Path("templates")
-            mock_settings.llm_enhance_temperature = 0.0
-            mock_settings.llm_enhance_top_p = None
-            mock_settings.llm_enhance_top_k = None
-            mock_settings.llm_enhance_max_tokens = None
-            mock_settings.llm_enhance_quantization = None
-            mock_settings.llm_enhance_gpu_memory_utilization = 0.8
-            mock_settings.llm_enhance_max_model_len = 8192
-            mock_settings.llm_enhance_max_num_seqs = 4
-            mock_settings.llm_enhance_max_num_batched_tokens = 2048
-            mock_settings.llm_enhance_max_num_partial_prefills = 2
             mock_settings.verbose_components = False
+            mock_settings.llm_enhance = SimpleNamespace(
+                model="test-model",
+                temperature=0.0,
+                top_p=None,
+                top_k=None,
+                max_tokens=None,
+                quantization=None,
+                gpu_memory_utilization=0.8,
+                max_model_len=8192,
+                max_num_seqs=4,
+                max_num_batched_tokens=2048,
+                max_num_partial_prefills=2,
+            )
+            mock_settings.llm_sum = SimpleNamespace(
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
+            )
 
             with (
                 patch("src.processors.llm.processor.TemplateLoader"),
@@ -183,6 +193,7 @@ class TestExecute:
 
         mock_output = Mock()
         mock_output.outputs = [mock_inner_output]
+        mock_output.prompt_token_ids = [42, 43]
 
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
@@ -249,31 +260,28 @@ class TestEnhanceText:
         """Test successful text enhancement."""
         processor = LLMProcessor()
         processor._model_loaded = True
-
-        # Mock model and outputs
-        mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "Enhanced text with punctuation."
-
-        mock_model = Mock()
-        mock_model.get_default_sampling_params.return_value = Mock()
-        mock_model.generate.return_value = [mock_output]
-        processor.model = mock_model
+        processor.model = Mock()
         processor.model_info = {"model_name": "test"}
 
-        with patch.object(processor.prompt_renderer, "render") as mock_render:
-            mock_render.return_value = "rendered prompt with chat template"
+        enhanced_result = LLMResult(
+            text="Enhanced text with punctuation.",
+            tokens_used=5,
+            model_info={"model_name": "test"},
+            metadata={"task": "enhancement"},
+        )
 
+        with patch.object(
+            processor, "execute", return_value=enhanced_result
+        ) as mock_execute:
             result = processor.enhance_text("test text without punctuation")
 
-            assert result["enhanced_text"] == "Enhanced text with punctuation."
-            assert result["enhancement_applied"] is True
-            assert result["edit_distance"] > 0
-            assert "edit_rate" in result
-            # Template rendering now happens inside execute(), which is called
-            mock_render.assert_called_once_with(
-                "text_enhancement_v1", text_input="test text without punctuation"
-            )
+        assert result["enhanced_text"] == "Enhanced text with punctuation."
+        assert result["enhancement_applied"] is True
+        assert result["edit_distance"] > 0
+        assert "edit_rate" in result
+        mock_execute.assert_called_once_with(
+            "test text without punctuation", task="enhancement"
+        )
 
     def test_enhance_text_prompt_render_error(self):
         """Test enhancement when prompt rendering fails."""
@@ -539,8 +547,9 @@ class TestUnload:
         processor.current_template_id = "test"
         processor.current_schema_hash = "hash"
 
-        with patch("src.processors.llm.processor.torch") as mock_torch:
-            mock_torch.cuda.is_available.return_value = True
+        with patch("src.processors.llm.processor.torch") as mock_torch, patch(
+            "src.processors.llm.processor.has_cuda", return_value=True
+        ):
 
             processor.unload()
 
@@ -565,8 +574,9 @@ class TestUnload:
         processor = LLMProcessor()
         processor.model = Mock()
 
-        with patch("src.processors.llm.processor.torch") as mock_torch:
-            mock_torch.cuda.is_available.return_value = True
+        with patch("src.processors.llm.processor.torch") as mock_torch, patch(
+            "src.processors.llm.processor.has_cuda", return_value=True
+        ):
             mock_torch.cuda.empty_cache.side_effect = Exception("CUDA error")
 
             # Should not raise exception
@@ -588,10 +598,10 @@ class TestGetVersionInfo:
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_enhance_model = "default-model"
-            mock_settings.llm_sum_temperature = 0.7
-            mock_settings.llm_sum_top_p = 0.9
-            mock_settings.llm_sum_top_k = 20
-            mock_settings.llm_sum_max_tokens = 1000
+            mock_settings.llm_enhance = SimpleNamespace(model="default-model")
+            mock_settings.llm_sum = SimpleNamespace(
+                temperature=0.7, top_p=0.9, top_k=20, max_tokens=1000
+            )
 
             info = processor.get_version_info()
 
@@ -609,10 +619,10 @@ class TestGetVersionInfo:
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_enhance_model = "default-model"
-            mock_settings.llm_sum_temperature = 0.7
-            mock_settings.llm_sum_top_p = 0.9
-            mock_settings.llm_sum_top_k = 20
-            mock_settings.llm_sum_max_tokens = 1000
+            mock_settings.llm_enhance = SimpleNamespace(model="default-model")
+            mock_settings.llm_sum = SimpleNamespace(
+                temperature=0.7, top_p=0.9, top_k=20, max_tokens=1000
+            )
 
             info = processor.get_version_info()
 

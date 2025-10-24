@@ -25,7 +25,8 @@ from src.tooling.vllm_utils import (
     calculate_checkpoint_hash,
     get_model_info,
 )
-from src.utils.json_utils import safe_json_loads, validate_llm_output as utils_validate_llm_output
+from src.utils.device import ensure_cuda_available, has_cuda
+from src.utils.json_utils import safe_json_loads
 
 from .schema_validator import (
     load_template_schema,
@@ -140,22 +141,22 @@ class LLMProcessor(LLMBackend):
         try:
             # Enforce GPU-only usage in all environments for vLLM
             try:
-                import torch as _torch  # type: ignore
-
-                if not _torch.cuda.is_available():
-                    from os import getenv as _getenv
-
-                    raise RuntimeError(
-                        "CUDA is not available. GPU is required for vLLM. "
-                        f"CUDA_VISIBLE_DEVICES={_getenv('CUDA_VISIBLE_DEVICES')!r}"
-                    )
+                import torch as _torch  # type: ignore  # noqa: F401
             except ImportError as _imp_err:
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for vLLM."
                 ) from _imp_err
 
+            from os import getenv as _getenv
+
+            ensure_cuda_available(
+                "CUDA is not available. GPU is required for vLLM. "
+                f"CUDA_VISIBLE_DEVICES={_getenv('CUDA_VISIBLE_DEVICES')!r}"
+            )
+
             # Disable vLLM telemetry before importing
             import os
+
             os.environ["VLLM_NO_USAGE_STATS"] = "1"
             os.environ["DO_NOT_TRACK"] = "1"
 
@@ -596,7 +597,7 @@ class LLMProcessor(LLMBackend):
 
         try:
             # Log GPU memory fragmentation before inference (NFR-10)
-            if torch.cuda.is_available():
+            if has_cuda() and torch is not None:
                 try:
                     mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)
                     mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)
@@ -811,7 +812,9 @@ class LLMProcessor(LLMBackend):
                         else:
                             result_metadata["validation"] = "failed"
                             result_metadata["validation_error"] = error_message
-                            logger.warning(f"Summary validation failed: {error_message}")
+                            logger.warning(
+                                f"Summary validation failed: {error_message}"
+                            )
                     else:
                         result_metadata["structured_summary"] = structured_output
                         result_metadata["validation"] = "skipped"
@@ -1250,18 +1253,19 @@ class LLMProcessor(LLMBackend):
             import torch as _torch
         except Exception:
             _torch = None
-        try:
-            torch_module = globals().get("torch", _torch)
-            if (
-                torch_module is not None
-                and hasattr(torch_module, "cuda")
-                and callable(getattr(torch_module.cuda, "is_available", None))
-            ):
-                if torch_module.cuda.is_available():
+
+        torch_module = globals().get("torch", _torch)
+        if (
+            torch_module is not None
+            and hasattr(torch_module, "cuda")
+            and callable(getattr(torch_module.cuda, "empty_cache", None))
+        ):
+            if has_cuda():
+                try:
                     torch_module.cuda.empty_cache()
                     logger.debug("CUDA cache cleared")
-        except Exception as e:
-            logger.warning(f"Failed to clear CUDA cache: {e}")
+                except Exception as e:
+                    logger.warning(f"Failed to clear CUDA cache: {e}")
 
         # Reset state
         self.tokenizer = None
