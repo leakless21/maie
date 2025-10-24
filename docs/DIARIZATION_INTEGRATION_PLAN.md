@@ -38,7 +38,7 @@ Keep device logic minimal and per-feature:
 ### Minimal Device Helper
 
 ```python
-# src/util/device.py
+# src/utils/device.py
 import torch
 
 def get_torch_device(prefer_cuda: bool = True) -> torch.device:
@@ -55,76 +55,101 @@ Use `require_cuda("diarization")` when diarization is configured to require GPU 
 
 ## Diarization Processor (Lean)
 
+The `SpeakerDiarizer` will be initialized with the application's Pydantic settings model for a single source of truth on configuration.
+
 ```python
 # src/processors/audio/diarizer.py
 from pathlib import Path
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from pyannote.audio import Pipeline
 import torch
 
-from src.util.device import get_torch_device, require_cuda
-
-class DiarizationConfig:
-    enabled: bool = True
-    model_path: str = "data/models/speaker-diarization-community-1"
-    require_cuda: bool = True
+# Settings are sourced from a central, Pydantic-based config loader
+from src.config.loader import DiarizationSettings
+from src.utils.device import get_torch_device, require_cuda
 
 class SpeakerDiarizer:
-    def __init__(self, config: DiarizationConfig):
+    def __init__(self, config: DiarizationSettings):
         self.config = config
         self.pipeline = None
-        self.device = get_torch_device()
+        # Device selection is based on config to allow CPU-only operation
+        self.device = get_torch_device(prefer_cuda=self.config.require_cuda)
 
     def _ensure_loaded(self) -> None:
         if self.pipeline is not None:
             return
         if self.config.require_cuda:
             require_cuda("diarization")
+        
         self.pipeline = Pipeline.from_pretrained(
             self.config.model_path,
-            use_auth_token=False,
+            use_auth_token=False, # Required for local-only models
         )
         self.pipeline.to(self.device)
 
-    def diarize(self, audio_path: str, num_speakers: Optional[int] = None):
+    def diarize(self, audio_path: str, num_speakers: Optional[int] = None) -> Optional[List[Dict[str, Any]]]:
         if not self.config.enabled:
             return None
+        
         self._ensure_loaded()
+        
         kwargs = {}
         if num_speakers is not None:
             kwargs["num_speakers"] = num_speakers
-        diar = self.pipeline(audio_path, **kwargs)
-        # Convert diarization to MAIE segments: [{start, end, speaker}]
-        return diar
+        
+        # Get Annotation object from pyannote
+        annotation = self.pipeline(audio_path, **kwargs)
+        
+        # Convert to a simple list of dicts
+        segments = []
+        for turn, _, speaker in annotation.itertracks(yield_label=True):
+            segments.append({
+                "start": turn.start,
+                "end": turn.end,
+                "speaker": str(speaker),
+            })
+        return segments
 
     def unload(self) -> None:
         if self.pipeline is not None:
             del self.pipeline
             self.pipeline = None
-            torch.cuda.empty_cache()
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
 ```
 
 ## Alignment Strategy (Pragmatic IoU/Overlap)
 
-Align diarization speaker segments with ASR segments using simple overlap/IoU heuristics. If Whisper word timestamps are available, prefer word-level alignment for better attribution; otherwise align at the segment level by maximum IoU.
+Align diarization speaker segments with ASR segments using simple overlap/IoU heuristics. The primary goal is to assign a speaker to each ASR segment. When word timestamps are available, alignment is significantly more accurate.
+
+### Text Splitting Strategies
+
+When a single ASR segment contains multiple speakers, the transcript text must be split.
+
+1.  **Word-level Splitting (Preferred):** If the ASR backend provides word-level timestamps (like `faster-whisper`), assign each word to a speaker based on which speaker turn its timestamp falls into. This is the most accurate method.
+2.  **Proportional Splitting (Fallback):** If word timestamps are not available, split the ASR segment's text proportionally. The text (as a sequence of words) is partitioned based on the duration of each speaker's turn within the ASR segment. This is more robust than simple character-based splitting.
+
+### Critical Edge Case: Long ASR Segments with Multiple Speakers
+
+When a long ASR segment contains multiple speakers, we partition the segment to ensure the entire transcript is preserved and correctly attributed.
+
+**Scenario**: ASR segment `[10.0s - 30.0s] "hello there how are you doing today i think we should discuss the project timeline"`
+- Diarization detects: Speaker A `[10.0s - 18.0s]`, Speaker B `[18.5s - 30.0s]`
+
+**Result**: The text is split proportionally. Two sub-segments are created:
+1. `[10.0s - 18.0s] "hello there how are you doing today"` → Speaker A
+2. `[18.5s - 30.0s] "i think we should discuss the project timeline"` → Speaker B
 
 ### ASR Backends and Timestamps (MAIE)
 
 - faster-whisper (WhisperBackend)
   - Start/end timestamps are float seconds per segment.
-  - MAIE enables `word_timestamps=True` by default (see `settings.asr.whisper_word_timestamps`), which improves segment timing accuracy and exposes word timings inside faster-whisper. Our current ASRResult stores segment timings; if we extend it to include words, we will assign speakers per word using word midpoint contained in a diarization segment.
-  - Default alignment: segment-level IoU with diarization segments.
-
+  - MAIE enables `word_timestamps=True` by default, making word-level alignment the primary strategy.
 - ChunkFormer (ChunkFormerBackend)
-  - Timestamps are strings in the format `[HH:MM:SS.mmm]` per segment (e.g., `[00:01:05.500]`).
-  - MAIE sets `chunkformer_return_timestamps=True` by default to include start/end in outputs. The normalization utility below converts bracketed strings to float seconds.
-  - Default alignment: segment-level IoU with diarization segments.
+  - Timestamps are strings `[HH:MM:SS.mmm]`. No word timestamps are available.
+  - Proportional splitting will be used as a fallback.
 
 Recommendation: run ASR and diarization sequentially on the same GPU to avoid contention and reduce OOM risk. Load diarization pipeline once per process and reuse.
-
-Backend-specific caveats:
-- faster-whisper segments are high quality when `word_timestamps=True`; without it, segment times can be skewed (we keep it enabled by default).
-- ChunkFormer segments can sometimes lack timestamps in fallback paths; skip speaker assignment for segments with invalid or missing times.
 
 ## Token‑Efficient, Readable Timestamp Format
 
@@ -148,11 +173,6 @@ Rationale:
 - Float seconds are shorter than HH:MM:SS.mmm and trivial to parse.
 - Keep `speaker` and `text` as full words for readability and likely better tokenization than uncommon abbreviations.
 
-Precision guidelines:
-- Default to 2 decimals (0.01s ≈ 10ms), matching typical diarization resolution.
-- Use 3 decimals only when you need ms‑level precision.
-- Trim trailing zeros when serializing (e.g., 12.30 → 12.3) if desired.
-
 ### Words (Optional)
 
 When word timestamps are available (faster‑whisper), store words compactly under `w` with the same `t` format:
@@ -169,22 +189,9 @@ When word timestamps are available (faster‑whisper), store words compactly und
 }
 ```
 
-### Speaker Labels
-
-- Use short labels like `S1`, `S2`, … for compactness and readability.
-- Keep a mapping in metadata if needed (e.g., `"speakers": {"S1": {...}}`).
-
-### Backend Mappings
-
-- faster‑whisper (float seconds): map `start`/`end` directly to `t`.
-- ChunkFormer (bracket strings): normalize `[HH:MM:SS.mmm]` → float seconds, then map to `t`.
-
-### API Response Modes (Optional)
-
-- Storage/LLM mode (compact): use `t` arrays as above.
-- UI mode (human‑friendly): render `mm:ss.s` strings for display only (do not store as primary).
-
 ### Timestamp Normalization Utilities
+
+The following utilities will be in `src/processors/audio/timestamp_utils.py`.
 
 ```python
 # src/processors/audio/timestamp_utils.py
@@ -212,16 +219,16 @@ def normalize_segment(segment: Dict[str, Any]) -> Dict[str, Any]:
     return out
 ```
 
-### Overlap + Alignment
+### Overlap + Alignment Logic
+
+The alignment logic will be co-located with the `SpeakerDiarizer`. The following functions provide a robust way to assign speakers, handling both single-speaker and multi-speaker ASR segments.
 
 ```python
+# In src/processors/audio/diarizer.py
 from typing import List, Dict, Any
 
-def overlap(a0: float, a1: float, b0: float, b1: float) -> float:
-    return max(0.0, min(a1, b1) - max(a0, b0))
-
-def iou(a0: float, a1: float, b0: float, b1: float) -> float:
-    inter = overlap(a0, a1, b0, b1)
+def _iou(a0: float, a1: float, b0: float, b1: float) -> float:
+    inter = max(0.0, min(a1, b1) - max(a0, b0))
     if inter == 0.0:
         return 0.0
     union = max(a1, b1) - min(a0, b0)
@@ -235,27 +242,77 @@ def align_diarization_with_asr(
     diar = [normalize_segment(s) for s in diar_segments]
     asr = [normalize_segment(s) for s in asr_segments]
     aligned: List[Dict[str, Any]] = []
+    
     for seg in asr:
         a0, a1 = seg["start"], seg["end"]
-        best_speaker, best = None, 0.0
+        text = seg.get("text", "")
+        
+        # Find all overlapping speakers
+        overlapping_speakers = []
         for d in diar:
-            score = iou(a0, a1, d["start"], d["end"])
-            if score > best:
-                best = score
-                best_speaker = d.get("speaker")
-        seg_out = dict(seg)
-        seg_out["speaker"] = best_speaker if best >= overlap_threshold else None
-        seg_out["speaker_confidence"] = best
-        aligned.append(seg_out)
+            score = _iou(a0, a1, d["start"], d["end"])
+            if score >= overlap_threshold:
+                overlapping_speakers.append({**d, "score": score})
+
+        # PREFERRED: If seg has word-timestamps, use those to create new segments.
+        # (Implementation omitted for brevity, but involves assigning each word to a speaker
+        # and then merging consecutive words from the same speaker.)
+
+        # FALLBACK: Proportional splitting for segments without word-timestamps.
+        if not overlapping_speakers:
+            aligned.append({**seg, "speaker": None, "speaker_confidence": 0.0})
+        elif len(overlapping_speakers) == 1:
+            speaker_info = overlapping_speakers[0]
+            aligned.append({**seg, "speaker": speaker_info["speaker"], "speaker_confidence": speaker_info["score"]})
+        else:
+            # MULTIPLE SPEAKERS: Partition the text proportionally.
+            clipped_speakers = []
+            for spk in overlapping_speakers:
+                overlap_start = max(a0, spk["start"])
+                overlap_end = min(a1, spk["end"])
+                if overlap_end > overlap_start:
+                    clipped_speakers.append({
+                        **spk, "start": overlap_start, "end": overlap_end,
+                        "duration": overlap_end - overlap_start
+                    })
+            
+            if not clipped_speakers: # handle edge case
+                aligned.append({**seg, "speaker": None, "speaker_confidence": 0.0})
+                continue
+
+            clipped_speakers.sort(key=lambda x: x["start"])
+
+            words = text.split()
+            total_speaker_duration = sum(c["duration"] for c in clipped_speakers)
+            remaining_words = list(words)
+
+            if total_speaker_duration > 0 and remaining_words:
+                # Iterate and assign word chunks to each speaker except the last.
+                for spk in clipped_speakers[:-1]:
+                    proportion = spk["duration"] / total_speaker_duration
+                    num_words_for_speaker = round(len(words) * proportion)
+                    
+                    speaker_words = remaining_words[:num_words_for_speaker]
+                    if not speaker_words: continue
+                    
+                    aligned.append({
+                        "start": spk["start"], "end": spk["end"], "text": " ".join(speaker_words),
+                        "speaker": spk["speaker"], "speaker_confidence": spk["score"]
+                    })
+                    remaining_words = remaining_words[num_words_for_speaker:]
+
+                # Assign all leftover words to the last speaker to ensure no text is lost.
+                last_spk = clipped_speakers[-1]
+                if remaining_words:
+                    aligned.append({
+                        "start": last_spk["start"], "end": last_spk["end"], "text": " ".join(remaining_words),
+                        "speaker": last_spk["speaker"], "speaker_confidence": last_spk["score"]
+                    })
     return aligned
 ```
 
 Integrated post-processing (required):
-- Merge adjacent ASR segments with the same assigned `speaker` to reduce fragmentation. Preserve boundaries when punctuation or long pauses are meaningful, but by default, contiguous segments with identical speakers are merged.
-- When overlaps are ambiguous (multiple diarization segments partially overlap), you can raise `overlap_threshold` to reduce false attributions.
-- If ASR segments contain `None` or invalid timestamps (possible in ChunkFormer fallbacks), drop those segments or skip speaker assignment after logging.
-
-Reference merging snippet (apply immediately after alignment):
+- Merge adjacent ASR segments with the same assigned `speaker` to reduce fragmentation.
 
 ```python
 def merge_adjacent_same_speaker(aligned: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -265,16 +322,13 @@ def merge_adjacent_same_speaker(aligned: List[Dict[str, Any]]) -> List[Dict[str,
     cur = dict(aligned[0])
     for seg in aligned[1:]:
         same_speaker = cur.get("speaker") is not None and cur.get("speaker") == seg.get("speaker")
-        # Merge only if same speaker and adjacent (no gap) or tiny gap (<100ms)
         contiguous = abs(float(cur["end"]) - float(seg["start"])) <= 0.1
         if same_speaker and contiguous:
-            cur["end"] = float(seg["end"])  # extend
-            # Concatenate text with a space to preserve readability
+            cur["end"] = float(seg["end"])
             if cur.get("text") and seg.get("text"):
                 cur["text"] = f"{cur['text'].rstrip()} {seg['text'].lstrip()}".strip()
             elif seg.get("text"):
                 cur["text"] = seg["text"]
-            # Update speaker_confidence to the min or weighted avg; here we keep max as a simple heuristic
             if "speaker_confidence" in cur and "speaker_confidence" in seg:
                 cur["speaker_confidence"] = max(cur["speaker_confidence"], seg["speaker_confidence"]) 
         else:
@@ -282,10 +336,6 @@ def merge_adjacent_same_speaker(aligned: List[Dict[str, Any]]) -> List[Dict[str,
             cur = dict(seg)
     merged.append(cur)
     return merged
-
-# Usage:
-aligned = align_diarization_with_asr(diar_segments, asr_segments, overlap_threshold=0.3)
-aligned = merge_adjacent_same_speaker(aligned)
 ```
 
 ## Implementation Plan (Lean)
@@ -293,57 +343,47 @@ aligned = merge_adjacent_same_speaker(aligned)
 ### API + Config
 
 - Extend request schema to accept optional feature `speaker_diarization` and optional `num_speakers` hint.
-- Extend transcript segment schema with optional `speaker` field. Responses remain backward compatible when the field is absent.
+- Extend transcript segment schema with optional `speaker` field.
 - Minimal settings (following existing config style):
 
 ```python
 class DiarizationSettings(BaseModel):
-    enabled: bool = True
-    model_path: str = "data/models/speaker-diarization-community-1"
-    overlap_threshold: float = 0.3
-    require_cuda: bool = True
+    enabled: bool = Field(default=True)
+    model_path: str = Field(default="data/models/speaker-diarization-community-1")
+    overlap_threshold: float = Field(default=0.3, ge=0.0, le=1.0)
+    require_cuda: bool = Field(default=True)
+    
+    model_config = ConfigDict(validate_assignment=True)
+```
+
+Add to `AppSettings`:
+```python
+diarization: DiarizationSettings = Field(default_factory=DiarizationSettings)
 ```
 
 ### Worker Integration
 
-After ASR, when both the global setting and the per-request feature are enabled, run diarization and align speakers to ASR segments. If CUDA is unavailable and `require_cuda=True`, skip diarization (log clearly) and continue the pipeline.
+After ASR, if diarization is enabled, run the alignment and merging steps. If CUDA is unavailable and `require_cuda=True`, skip diarization and log a warning.
 
 ### Testing
 
-- Unit: toggle behavior (enabled/disabled), CUDA missing → diarization skipped when required, alignment on mixed timestamp formats.
-- Integration: per-request feature flag runs/omits diarization; responses remain backward compatible.
+- Unit: toggle behavior, CUDA missing, alignment logic on mixed timestamp formats.
+- Integration: per-request feature flag runs/omits diarization.
+- GPU tests: Use `@pytest.mark.gpu` marker for tests requiring CUDA hardware.
+- Mock strategy: Mock `pyannote.audio.Pipeline` to return a fake `Annotation` object.
 
-## References and Research
+## TDD Implementation Strategy
 
-- DER (Diarization Error Rate) is the primary diarization evaluation metric.
-- RTTM is the common ground-truth format for evaluation.
-- IoU/overlap is a practical alignment heuristic for merging diarization with ASR segments; it is not a diarization evaluation metric.
+Follow Test-Driven Development approach:
 
-## Technical Considerations
-
-- Local model usage: `Pipeline.from_pretrained(local_path, use_auth_token=False)` then `.to(device)` works offline with no HF token.
-- Load once per process and reuse to avoid startup overhead.
-- Prefer word timestamps when available for better alignment.
-- MAIE defaults (confirmed):
-  - faster-whisper word timestamps enabled by default for accurate timing: `src/config/model.py:116`
-  - ChunkFormer returns timestamps enabled by default: `src/config/model.py:151`
-
-### Performance Notes
-
-- Alignment is O(N×M); with typical segment counts this overhead is negligible.
-- Defer threshold tuning until DER baselines exist on your data.
-
-## Success Metrics
-
-- Establish a DER baseline on representative data; set targets after measurement.
-- Track diarization overhead relative to ASR-only processing; optimize if regressions occur.
-- Maintain API backward compatibility when diarization is skipped.
-
-## Timeline (Lean)
-
-- Week 1: Implement diarizer + alignment utils; unit tests; extend schemas (optional `speaker`).
-- Week 2: Integrate with worker and per-request flag; add simple timing/DER measurement; document configuration and behavior.
+1. **Unit Tests First**: Write tests for each component before implementation.
+2. **Mock Strategy**: Mock `pyannote.audio.Pipeline` and `torch.cuda` for fast unit tests.
+3. **Integration Tests**: Use a real pyannote model with the `@pytest.mark.gpu` marker.
+4. **File Structure**: To keep the design minimal, alignment and formatting logic will be co-located with the diarizer.
+   - `src/utils/device.py` (if no existing equivalent is found)
+   - `src/processors/audio/diarizer.py` (to contain main diarization, alignment, and formatting logic)
+   - `src/processors/audio/timestamp_utils.py`
 
 ## Conclusion
 
-This integration enhances MAIE's multi-speaker handling with a simple, GPU-aware design: a small device helper, an opt-in diarizer reused per process, and pragmatic overlap-based alignment. We avoid heavy abstractions and global GPU gating, keeping the codebase clean, minimal, and performant.
+This integration enhances MAIE's multi-speaker handling with a simple, GPU-aware design: a small device helper, an opt-in diarizer reused per process, and pragmatic overlap-based alignment. By co-locating related logic, we keep the codebase clean, minimal, and performant.

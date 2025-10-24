@@ -97,7 +97,7 @@ class AsrSettings(BaseModel):
     whisper_language: str | None = Field(default=None)
     whisper_cpu_threads: int | None = Field(default=None)
     whisper_word_timestamps: bool = Field(
-        default=True,
+        default=False,
         description="Enable word-level timestamps. Required for accurate segment timestamps in faster-whisper.",
     )
 
