@@ -97,7 +97,7 @@ class AsrSettings(BaseModel):
     whisper_language: str | None = Field(default=None)
     whisper_cpu_threads: int | None = Field(default=None)
     whisper_word_timestamps: bool = Field(
-        default=False,
+        default=True,
         description="Enable word-level timestamps. Required for accurate segment timestamps in faster-whisper.",
     )
 
@@ -251,6 +251,38 @@ class WorkerSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
 
+class DiarizationSettings(BaseModel):
+    enabled: bool = Field(default=False, description="Enable speaker diarization")
+    model_path: str = Field(
+        default="pyannote/speaker-diarization-3.1",
+        description="HuggingFace model ID for pyannote speaker diarization (pyannote 3.x format)",
+    )
+    overlap_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum IoU threshold for speaker overlap detection",
+    )
+    require_cuda: bool = Field(
+        default=False,
+        description="Require CUDA for diarization; skip gracefully if False and no CUDA",
+    )
+    embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Batch size for speaker embedding model (pyannote 3.x uses config.yaml defaults)",
+    )
+    segmentation_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Batch size for segmentation model (pyannote 3.x uses config.yaml defaults)",
+    )
+
+    model_config = ConfigDict(validate_assignment=True)
+
+
 class CleanupSettings(BaseModel):
     audio_cleanup_interval: int = Field(
         default=3600, description="Interval in seconds between audio cleanup runs"
@@ -349,6 +381,7 @@ class AppSettings(BaseSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     asr: AsrSettings = Field(default_factory=AsrSettings)
     chunkformer: ChunkformerSettings = Field(default_factory=ChunkformerSettings)
+    diarization: DiarizationSettings = Field(default_factory=DiarizationSettings)
     llm_enhance: LlmEnhanceSettings = Field(default_factory=LlmEnhanceSettings)
     llm_sum: LlmSumSettings = Field(default_factory=LlmSumSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)

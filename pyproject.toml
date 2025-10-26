@@ -4,11 +4,11 @@ version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["soxr", "transformers", "flashinfer-cubin", "rq-dashboard", "pyannote-audio"]
+dependencies = ["soxr", "transformers", "flashinfer-cubin", "rq-dashboard", "pyannote-audio==3.4.0", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3"]
 
 
 [dependency-groups]
-dev = ["pytest>=8.4.2,<9", "pytest-timeout>=2.4.0,<3","pytest-mock>=3.15.1,<4", "dead>=2.1.0,<3", "fakeredis>=2.32.0,<3", "deadcode>=2.4.1,<3", "vulture>=2.14,<3",]
+dev = ["pytest>=8.4.2,<9", "pytest-timeout>=2.4.0,<3","pytest-mock>=3.15.1,<4", "dead>=2.1.0,<3", "fakeredis>=2.32.0,<3"]
 
 
 [tool.pytest.ini_options]
@@ -46,18 +46,16 @@ ffmpeg = "*"
 maie = { path = ".", editable = true }
 chunkformer = "*"
 litestar = { version = "*", extras = ["standard"] }
-vllm = "*"
+vllm = ">= 0.11.0"
 pydantic-settings = "*"
 redis = { version = "*", extras = ["hiredis"] }
 rq = "*"
-rq-scheduler = "*"
+rq-scheduler = ">=0.14.0, <0.15"
 huggingface-hub = "*"
 loguru = "*"
 pydantic = "*"
 faster-whisper = "*"
 ctranslate2 = "*"
-torch = "*"
-torchaudio = "*"
 jsonschema = "*"
 python-Levenshtein = "*"
 flashinfer-python = "*"

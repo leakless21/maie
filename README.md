@@ -643,3 +643,13 @@ For licensing inquiries, please contact the development team.
 ---
 
 **MAIE v1.0** - Production-ready audio intelligence platform for enterprise deployment.
+
+## Diarization: Edge-case testing (2025-10-24)
+
+We performed a comprehensive round of hardcore edge-case testing for the diarization feature and applied a small but important fix.
+
+- Tests added: 26 hardcore edge-case unit tests (see `tests/unit/processors/audio/test_diarizer_edge_cases.py`).
+- Total repository tests (after additions): 108 tests — all passing in CI at the time of this note.
+- Bug discovered & fixed: merge logic was previously merging adjacent segments when both had `speaker = None`; this has been fixed so that `None` (uncertain) speaker attributions are not merged.
+
+For a full test report, detailed list of edge cases, and the exact code change, see `docs/archive/diarization/DIARIZATION_EDGE_CASE_TESTING.md`.

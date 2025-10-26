@@ -52,6 +52,9 @@ DEVELOPMENT_PROFILE: ProfileData = {
     "features": {
         "enable_enhancement": False,
     },
+    "diarization": {
+        "enabled": True,
+    },
 }
 
 PRODUCTION_PROFILE: ProfileData = {

@@ -444,6 +444,17 @@ class WhisperBackend(ASRBackend):
                 transcribe_kwargs,
             )
 
+            # DEBUG: Log ASR input metadata
+            import os
+            if os.path.exists(audio_path):
+                file_size = os.path.getsize(audio_path)
+                logger.debug(
+                    "ASR input metadata",
+                    audio_path=audio_path,
+                    file_size_bytes=file_size,
+                    transcribe_kwargs=transcribe_kwargs,
+                )
+
             # faster_whisper returns (segments_generator, info)
             # segments is a generator, not a list
             segments_generator, info = self.model.transcribe(
@@ -472,6 +483,19 @@ class WhisperBackend(ASRBackend):
 
             # Note: faster-whisper doesn't provide a single confidence score
             # Individual segments may have their own scores
+            
+            # DEBUG: Log ASR output preview
+            text_preview = text[:200] + "..." if len(text) > 200 else text
+            logger.debug(
+                "ASR output preview",
+                text_preview=text_preview,
+                segment_count=len(segments_dict),
+                language=language,
+                duration=duration,
+                char_count=len(text),
+                word_count=len(text.split()) if text else 0,
+            )
+            
             return ASRResult(
                 text=text,
                 segments=segments_dict,

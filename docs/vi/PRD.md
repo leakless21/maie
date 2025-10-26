@@ -38,7 +38,7 @@ Tổng quan kiến trúc: Hệ thống sử dụng kiến trúc ba tầng với 
 
   - ❌ Dấu thời gian cấp độ từ → V1.1+ (không yêu cầu bởi số liệu FR-5; cho các tính năng dòng thời gian/phụ đề)
   - ❌ Suy luận hàng loạt → V1.2+ (mâu thuẫn với kiến trúc tuần tự; yêu cầu tải trước mô hình)
-  - ❌ Phân chia người nói → V1.1+ (yêu cầu tích hợp thêm pyannote.audio)
+  - ✅ Phân chia người nói — Đã triển khai; xem `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md` (tích hợp pyannote.audio và logic căn chỉnh đã được áp dụng)
   - ❌ Phiên âm trực tuyến → V1.3+ (yêu cầu API WebSocket và thay đổi kiến trúc)
 
 - FR-3: Nâng cao Văn bản — Nâng cao văn bản là một bước tùy chọn trong quy trình. Nó PHẢI được bỏ qua khi backend ASR được chọn cung cấp đủ dấu câu và cách viết hoa (ví dụ: `whisper` với biến thể `erax-wow-turbo`). Khi được yêu cầu (với các backend thiếu dấu câu; không áp dụng cho mặc định V1.0), quy trình sẽ sử dụng LLM để sửa dấu câu và viết hoa. Lưu ý: ChunkFormer có thể yêu cầu nâng cao văn bản tùy thuộc vào cấu hình mô hình.
@@ -181,7 +181,7 @@ Phiên âm V1.0 chỉ cung cấp dữ liệu **cấp độ phân đoạn**:
 **Hoãn lại cho các bản phát hành trong tương lai:**
 
 - ❌ Dấu thời gian cấp độ từ → V1.1+ (cho các tính năng dòng thời gian/phụ đề)
-- ❌ Nhãn người nói → V1.1+ (yêu cầu phân chia người nói)
+- ✅ Nhãn người nói — Đã triển khai; xem `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md`
 - ❌ Độ tin cậy cấp độ từ → V1.1+ (yêu cầu dấu thời gian cấp độ từ)
 
 Hợp đồng phản hồi trên là hoàn chỉnh cho các yêu cầu V1.0. Các cấu trúc dữ liệu cấp độ từ sẽ được thêm vào trong V1.1 khi các tính năng dòng thời gian và phụ đề được triển khai.

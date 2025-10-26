@@ -11,6 +11,9 @@ from typing import Optional, Any
 from src import config as cfg
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
 from src.utils.device import ensure_cuda_available
+from src.config.logging import get_module_logger
+
+logger = get_module_logger(__name__)
 
 
 # -----------------------------------------------------------------------------
@@ -24,6 +27,7 @@ def _normalize_timestamp(value: Any) -> Optional[float]:
     Supported formats:
     - float/int seconds
     - strings like "HH:MM:SS.mmm" (optionally wrapped in brackets)
+    - strings like "HH:MM:SS:mmm" (ChunkFormer format with colon)
     Returns None when parsing fails.
     """
     if value is None:
@@ -34,11 +38,20 @@ def _normalize_timestamp(value: Any) -> Optional[float]:
         s = value.strip().strip("[]")
         import re
 
+        # Try HH:MM:SS.mmm format (dot separator)
         m = re.match(r"(\d{1,2}):(\d{2}):(\d{2})\.(\d{3})", s)
         if m:
             hh, mm, ss, frac = m.groups()
             base = int(hh) * 3600 + int(mm) * 60 + int(ss)
             return base + int(frac) / 1000.0
+        
+        # Try HH:MM:SS:mmm format (colon separator - ChunkFormer format)
+        m = re.match(r"(\d{1,2}):(\d{2}):(\d{2}):(\d{3})", s)
+        if m:
+            hh, mm, ss, frac = m.groups()
+            base = int(hh) * 3600 + int(mm) * 60 + int(ss)
+            return base + int(frac) / 1000.0
+        
         try:
             return float(s)
         except Exception:
@@ -238,6 +251,17 @@ class ChunkFormerBackend(ASRBackend):
             no_grad_ctx = nullcontext
 
         try:
+            # DEBUG: Log ASR input metadata
+            import os
+            if os.path.exists(audio_path):
+                file_size = os.path.getsize(audio_path)
+                logger.debug(
+                    "ChunkFormer ASR input metadata",
+                    audio_path=audio_path,
+                    file_size_bytes=file_size,
+                    kwargs=kwargs,
+                )
+
             with no_grad_ctx():
                 # Prefer endless_decode (long-form) if available
                 if hasattr(self.model, "endless_decode") and callable(
@@ -269,10 +293,6 @@ class ChunkFormerBackend(ASRBackend):
                     }
                     # Add any additional kwargs
                     params.update(kwargs)
-
-                    from src.config.logging import get_module_logger
-
-                    logger = get_module_logger(__name__)
 
                     result = self.model.endless_decode(audio_path, **params)
 
@@ -354,10 +374,6 @@ class ChunkFormerBackend(ASRBackend):
                     # Add any additional kwargs
                     params.update(kwargs)
 
-                    from src.config.logging import get_module_logger
-
-                    logger = get_module_logger(__name__)
-
                     # Model.decode may accept an iterator/list of chunks or a file path;
                     # pass the path and let the model handle chunking if it supports it.
                     result = self.model.decode(audio_path, **params)
@@ -394,10 +410,6 @@ class ChunkFormerBackend(ASRBackend):
                     if hasattr(self.model, "transcribe") and callable(
                         getattr(self.model, "transcribe")
                     ):
-                        from src.config.logging import get_module_logger
-
-                        logger = get_module_logger(__name__)
-
                         segs, info = self.model.transcribe(audio_path, **kwargs)
 
                         # Normalize segments to list of dicts
@@ -433,6 +445,19 @@ class ChunkFormerBackend(ASRBackend):
                 seg.get("text", "") for seg in segments if seg.get("text", "").strip()
             ]
             text = " ".join(text_parts).strip()
+            
+            # DEBUG: Log ASR output preview
+            text_preview = text[:200] + "..." if len(text) > 200 else text
+            logger.debug(
+                "ChunkFormer ASR output preview",
+                text_preview=text_preview,
+                segment_count=len(segments),
+                language=language,
+                confidence=confidence,
+                char_count=len(text),
+                word_count=len(text.split()) if text else 0,
+            )
+            
             return ASRResult(
                 text=text, segments=segments, language=language, confidence=confidence
             )

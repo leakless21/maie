@@ -244,6 +244,18 @@ class LLMProcessor(LLMBackend):
             self._model_loaded = True
             logger.info(f"LLM model loaded successfully: {model_name}")
 
+            # DEBUG: Log model configuration details
+            from src.utils.device import select_device
+            device = select_device()
+            logger.debug(
+                "LLM model configuration",
+                model_name=model_name,
+                checkpoint_hash=self.checkpoint_hash,
+                quantization=quantization_method,
+                device=device,
+                model_path=str(model_path),
+            )
+
             # NOTE: Tokenizer initialization is deferred to avoid blocking issues
             # with vLLM V1 engine's get_tokenizer() in multi-process mode.
             # The tokenizer will be initialized lazily when first needed.
@@ -340,6 +352,17 @@ class LLMProcessor(LLMBackend):
         logger.info(f"First 200 chars of text: {text[:200]}")
         task = kwargs.get("task", "general")
         retry_hint = kwargs.pop("retry_hint", None)  # Extract retry hint if provided
+
+        # DEBUG: Log LLM input preview
+        input_preview = text[:200] + "..." if len(text) > 200 else text
+        logger.debug(
+            "LLM input preview",
+            task=task,
+            input_preview=input_preview,
+            char_count=len(text),
+            word_count=len(text.split()) if text else 0,
+            kwargs=kwargs,
+        )
 
         # Load model if not already loaded
         if not self._model_loaded:
@@ -449,12 +472,11 @@ class LLMProcessor(LLMBackend):
                 except Exception as e:
                     logger.warning(f"Failed to set up guided decoding: {e}")
         elif task == "enhancement":
-            # Handle enhancement task with template rendering (chat format)
+            # Handle enhancement task with chat API (matching summary pattern)
             try:
-                final_prompt = self.prompt_renderer.render(
-                    "text_enhancement_v1", text_input=text
-                )
-                logger.debug("Rendered enhancement prompt with chat template")
+                # Render system prompt (contains instructions and examples)
+                system_prompt = self.prompt_renderer.render("text_enhancement_v1")
+                logger.debug("Rendered enhancement system prompt")
             except Exception as e:
                 logger.error(f"Failed to render enhancement template: {e}")
                 return LLMResult(
@@ -463,6 +485,18 @@ class LLMProcessor(LLMBackend):
                     model_info=self.model_info or {"model_name": "unknown"},
                     metadata={"task": task, "error": f"Template render failed: {e}"},
                 )
+
+            # Build user message with text to enhance
+            user_message_content = f"Text to enhance:\n{text}"
+
+            # Build messages in OpenAI format
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message_content},
+            ]
+            logger.debug(f"Built messages for enhancement chat API")
+
+            use_chat_api = True
         else:
             # For other tasks, use text as prompt directly
             final_prompt = text
@@ -637,11 +671,12 @@ class LLMProcessor(LLMBackend):
             else:
                 sampling = apply_overrides_to_sampling(base_sampling, overrides)
 
-            # Use chat() API for summary with messages, or generate() for others
-            if task == "summary" and use_chat_api and messages is not None:
+            # Use chat() API for tasks with messages (summary, enhancement), or generate() for others
+            if use_chat_api and messages is not None:
                 logger.debug(
-                    "Using chat() API for summary",
+                    f"Using chat() API for {task}",
                     extra={
+                        "task": task,
                         "messages_count": len(messages),
                         "sampling_params": str(sampling),
                         "model_type": type(self.model).__name__,
@@ -651,7 +686,8 @@ class LLMProcessor(LLMBackend):
                 inference_start = time.time()
                 logger.debug("About to call model.chat()")
                 # Type ignore: our dict[str, str] format is compatible with vLLM's expected message format
-                outputs = self.model.chat(messages=[messages], sampling_params=sampling)  # type: ignore
+                # BUGFIX: Pass messages directly as first positional argument, not wrapped in list
+                outputs = self.model.chat(messages, sampling_params=sampling)  # type: ignore
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -786,8 +822,10 @@ class LLMProcessor(LLMBackend):
                 }
             )
 
-        if task == "summary" and use_chat_api:
+        # Mark method used for both summary and enhancement when chat API is used
+        if use_chat_api:
             result_metadata["method"] = "chat_api"
+        
         if task == "summary":
             template_id = kwargs.get("template_id")
             try:
@@ -827,6 +865,18 @@ class LLMProcessor(LLMBackend):
                 logger.error(f"Summary validation error: {e}")
                 result_metadata["validation"] = "error"
                 result_metadata["error"] = str(e)
+
+        # DEBUG: Log LLM output preview
+        output_text = generated_text or text
+        output_preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
+        logger.debug(
+            "LLM output preview",
+            task=task,
+            output_preview=output_preview,
+            char_count=len(output_text),
+            word_count=len(output_text.split()) if output_text else 0,
+            tokens_used=tokens_used if "tokens_used" in locals() else None,
+        )
 
         return LLMResult(
             text=generated_text or text,

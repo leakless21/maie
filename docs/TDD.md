@@ -486,7 +486,7 @@ The ASR processing system uses a **Factory Pattern** to instantiate backend-spec
 - ✅ Sequential processing pattern (load → execute → unload)
 - ❌ Word-level timestamps → Deferred to V1.1+
 - ❌ Batched inference → Deferred to V1.2+
-- ❌ Speaker diarization → Deferred to V1.1+
+- ✅ Speaker diarization — Implemented; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md`
 
 **Module Structure:**
 
@@ -1204,11 +1204,11 @@ worker:
 
 **Model Inventory (V1.0):**
 
-| Model                 | Size   | Download Source | Local Path                            |
-| --------------------- | ------ | --------------- | ------------------------------------- |
-| EraX-WoW-Turbo V1.1   | ~3GB   | HuggingFace Hub | `/data/models/whisper/erax-wow-turbo` |
-| ChunkFormer RNNT Large | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer-rnnt-large-vie`  |
-| Qwen3-4B-Instruct AWQ | ~2.5GB | HuggingFace Hub | `/data/models/llm/qwen3-4b-awq`       |
+| Model                  | Size   | Download Source | Local Path                                |
+| ---------------------- | ------ | --------------- | ----------------------------------------- |
+| EraX-WoW-Turbo V1.1    | ~3GB   | HuggingFace Hub | `/data/models/whisper/erax-wow-turbo`     |
+| ChunkFormer RNNT Large | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer-rnnt-large-vie` |
+| Qwen3-4B-Instruct AWQ  | ~2.5GB | HuggingFace Hub | `/data/models/llm/qwen3-4b-awq`           |
 
 **Download Strategy:**
 
@@ -1414,18 +1414,18 @@ All system behavior configured via environment variables loaded from `.env` file
 
 **Minimal Configuration (V1.0):**
 
-| Variable                             | Purpose                                | Default                         |
-| ------------------------------------ | -------------------------------------- | ------------------------------- |
-| `PIPELINE_VERSION`                   | Version stamping for NFR-1             | `1.0.0`                         |
-| `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)  |
-| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                          |
-| `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)            |
+| Variable                             | Purpose                                | Default                              |
+| ------------------------------------ | -------------------------------------- | ------------------------------------ |
+| `PIPELINE_VERSION`                   | Version stamping for NFR-1             | `1.0.0`                              |
+| `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)       |
+| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                               |
+| `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)                 |
 | `CHUNKFORMER_MODEL_NAME`             | ChunkFormer model name                 | `khanhld/chunkformer-rnnt-large-vie` |
-| `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`          |
-| `SECRET_API_KEY`                     | API authentication                     | —                               |
-| `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                            |
-| `MAX_FILE_SIZE_MB`                   | Upload size limit                      | `500`                           |
-| `OMP_NUM_THREADS`                    | CPU threads for performance            | `4` (recommended)               |
+| `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`               |
+| `SECRET_API_KEY`                     | API authentication                     | —                                    |
+| `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                                 |
+| `MAX_FILE_SIZE_MB`                   | Upload size limit                      | `500`                                |
+| `OMP_NUM_THREADS`                    | CPU threads for performance            | `4` (recommended)                    |
 
 **Example `.env` (V1.0)**
 
@@ -2388,7 +2388,7 @@ docker-compose exec worker rq requeue --all --url redis://redis:6379/0
 - ❌ Word-level timestamps → V1.1+
 - ❌ Batched inference → V1.2+
 - ❌ Model preloading → V1.2+
-- ❌ Speaker diarization → V1.1+
+- ✅ Speaker diarization — Implemented; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md`
 - ❌ Streaming transcription → V1.3+
 
 **V1.0 Philosophy:** Simple, stable, sequential - one job, one GPU, load → process → unload.
@@ -2490,7 +2490,7 @@ GPU_LLM_DEVICE=cuda:1
 | Distil-Whisper support      | ✅   | ✅   | ✅   | ✅   | Simple model swap                            |
 | Sequential processing       | ✅   | ✅   | ✅   | ✅   | V1.0 architecture                            |
 | **Word-Level Timestamps**   | ❌   | ✅   | ✅   | ✅   | Not in PRD metrics; adds complexity          |
-| **Speaker Diarization**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
+| **Speaker Diarization**     | ✅   | ✅   | ✅   | ✅   | Requires word timestamps                     |
 | **Subtitle Generation**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
 | **Batched Inference**       | ❌   | ❌   | ✅   | ✅   | Contradicts sequential architecture          |
 | **Model Preloading**        | ❌   | ❌   | ✅   | ✅   | Requires >24GB VRAM; deferred per TDD 3.2    |
