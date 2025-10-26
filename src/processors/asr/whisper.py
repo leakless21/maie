@@ -471,6 +471,20 @@ class WhisperBackend(ASRBackend):
                     "end": segment.end,
                     "text": segment.text,
                 }
+                
+                # Capture word-level timestamps if available
+                if hasattr(segment, 'words') and segment.words:
+                    words_list = []
+                    for word in segment.words:
+                        word_dict = {
+                            "start": float(word.start),
+                            "end": float(word.end),
+                            "word": word.word,
+                            "probability": float(word.probability),
+                        }
+                        words_list.append(word_dict)
+                    segment_dict["words"] = words_list
+                
                 segments_dict.append(segment_dict)
                 text_parts.append(segment.text)
 

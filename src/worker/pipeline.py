@@ -44,6 +44,7 @@ from src.api.schemas import TaskStatus
 from src.config import settings
 from src.utils.device import has_cuda, select_device
 from src.utils.sanitization import sanitize_metadata
+from src.processors.audio.diarizer import DiarizedSegment
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -821,35 +822,17 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     diarizer = get_diarizer(
                         model_path=settings.diarization.model_path,
                         require_cuda=settings.diarization.require_cuda,
-                        overlap_threshold=settings.diarization.overlap_threshold,
                         embedding_batch_size=settings.diarization.embedding_batch_size,
                         segmentation_batch_size=settings.diarization.segmentation_batch_size,
                     )
 
                     if diarizer:
-                        # DEBUG: Log diarization input details
-                        logger.debug(
-                            "Diarization input",
-                            task_id=job_id,
-                            audio_path=processing_audio_path,
-                            asr_segments_count=len(asr_result.segments) if asr_result.segments else 0,
-                            audio_duration=audio_duration,
-                        )
-
                         # Run diarization on the processed audio
                         diar_spans = diarizer.diarize(
                             processing_audio_path, num_speakers=None
                         )
 
                         if diar_spans:
-                            # DEBUG: Log ASR segments before conversion
-                            logger.debug("ASR segments before diarization alignment:")
-                            for i, seg in enumerate(asr_result.segments):
-                                start = seg.get("start") if isinstance(seg, dict) else getattr(seg, "start", 0)
-                                end = seg.get("end") if isinstance(seg, dict) else getattr(seg, "end", 0)
-                                text = seg.get("text") if isinstance(seg, dict) else getattr(seg, "text", "")
-                                logger.debug(f"  ASR {i}: {start:.3f}s-{end:.3f}s text='{text[:50]}...'")
-                            
                             # Convert ASR segments to DiarizedSegment format
                             asr_segs_for_diar = []
                             for seg in asr_result.segments:
@@ -858,13 +841,30 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                                         "start": seg.get("start", seg.start) if hasattr(seg, "start") else seg.get("start"),
                                         "end": seg.get("end", seg.end) if hasattr(seg, "end") else seg.get("end"),
                                         "text": seg.get("text", seg.text) if hasattr(seg, "text") else seg.get("text"),
+                                        "words": seg.get("words") if isinstance(seg, dict) else getattr(seg, "words", None),
                                     })()
                                 )
 
-                            # Align diarization with ASR segments
-                            diarized_segs = diarizer.align_diarization_with_asr(
-                                diar_spans, asr_segs_for_diar
-                            )
+                            # Check if word timestamps are available
+                            has_word_timestamps = diarizer.has_word_timestamps(asr_segs_for_diar)
+                            
+                            if has_word_timestamps:
+                                logger.info("Word timestamps available - using WhisperX-style assignment")
+                                # Use WhisperX-style word-level assignment
+                                diarized_segs = diarizer.assign_word_speakers_whisperx_style(
+                                    diar_spans, asr_segs_for_diar
+                                )
+                            else:
+                                logger.warning("No word timestamps available - skipping diarization")
+                                # Skip diarization, keep segments as-is with speaker=None
+                                diarized_segs = []
+                                for seg in asr_segs_for_diar:
+                                    diarized_segs.append(DiarizedSegment(
+                                        start=seg.start,
+                                        end=seg.end,
+                                        text=seg.text,
+                                        speaker=None,
+                                    ))
 
                             # Merge adjacent same-speaker segments
                             merged_segs = diarizer.merge_adjacent_same_speaker(

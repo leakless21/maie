@@ -88,14 +88,24 @@ class TestDiarizationIntegration:
         assert diar_spans[0]["speaker"] == "S1"
         assert diar_spans[1]["speaker"] == "S2"
 
-        # Now test alignment with ASR segments
+        # Now test alignment with ASR segments (with word timestamps)
+        class ASRSeg:
+            def __init__(self, start, end, text, words=None):
+                self.start = start
+                self.end = end
+                self.text = text
+                self.words = words
+
         asr_segments = [
-            Mock(start=0.0, end=0.5, text="hello"),
-            Mock(start=0.5, end=1.5, text="world test"),
-            Mock(start=1.5, end=2.0, text="goodbye"),
+            ASRSeg(0.0, 0.5, "hello", [{"start": 0.0, "end": 0.5, "word": "hello"}]),
+            ASRSeg(0.5, 1.5, "world test", [
+                {"start": 0.5, "end": 1.0, "word": "world"},
+                {"start": 1.0, "end": 1.5, "word": "test"}
+            ]),
+            ASRSeg(1.5, 2.0, "goodbye", [{"start": 1.5, "end": 2.0, "word": "goodbye"}]),
         ]
 
-        aligned = diarizer.align_diarization_with_asr(diar_spans, asr_segments)
+        aligned = diarizer.assign_word_speakers_whisperx_style(diar_spans, asr_segments)
         assert len(aligned) >= 2
 
         # Verify speakers are assigned
@@ -124,19 +134,34 @@ class TestDiarizationIntegration:
         """Test that proportional splitting preserves all text."""
         diarizer = diarizer_class(require_cuda=False)
 
-        asr_segs = [
-            Mock(
-                start=0.0,
-                end=10.0,
-                text="one two three four five six seven eight nine ten",
-            )
+        # Create ASR segments with word timestamps
+        class ASRSeg:
+            def __init__(self, start, end, text, words=None):
+                self.start = start
+                self.end = end
+                self.text = text
+                self.words = words
+
+        words = [
+            {"start": 0.0, "end": 1.0, "word": "one"},
+            {"start": 1.0, "end": 2.0, "word": "two"},
+            {"start": 2.0, "end": 3.0, "word": "three"},
+            {"start": 3.0, "end": 4.0, "word": "four"},
+            {"start": 4.0, "end": 5.0, "word": "five"},
+            {"start": 5.0, "end": 6.0, "word": "six"},
+            {"start": 6.0, "end": 7.0, "word": "seven"},
+            {"start": 7.0, "end": 8.0, "word": "eight"},
+            {"start": 8.0, "end": 9.0, "word": "nine"},
+            {"start": 9.0, "end": 10.0, "word": "ten"},
         ]
+        
+        asr_segs = [ASRSeg(0.0, 10.0, "one two three four five six seven eight nine ten", words)]
         diar_spans = [
             {"start": 0, "end": 5, "speaker": "S1"},
             {"start": 5, "end": 10, "speaker": "S2"},
         ]
 
-        aligned = diarizer.align_diarization_with_asr(diar_spans, asr_segs)
+        aligned = diarizer.assign_word_speakers_whisperx_style(diar_spans, asr_segs)
 
         # All words must be preserved
         combined_text = " ".join([seg.text for seg in aligned])
@@ -171,9 +196,25 @@ class TestDiarizationIntegration:
 
         diarizer = diarizer_class(require_cuda=False)
 
+        # Create ASR segments with word timestamps
+        class ASRSeg:
+            def __init__(self, start, end, text, words=None):
+                self.start = start
+                self.end = end
+                self.text = text
+                self.words = words
+
         asr_segs = [
-            Mock(start=0.0, end=5.0, text="speaker one talking"),
-            Mock(start=5.0, end=10.0, text="speaker two speaking"),
+            ASRSeg(0.0, 5.0, "speaker one talking", [
+                {"start": 0.0, "end": 1.0, "word": "speaker"},
+                {"start": 1.0, "end": 2.0, "word": "one"},
+                {"start": 2.0, "end": 3.0, "word": "talking"}
+            ]),
+            ASRSeg(5.0, 10.0, "speaker two speaking", [
+                {"start": 5.0, "end": 6.0, "word": "speaker"},
+                {"start": 6.0, "end": 7.0, "word": "two"},
+                {"start": 7.0, "end": 8.0, "word": "speaking"}
+            ]),
         ]
 
         diar_spans = [
@@ -181,12 +222,15 @@ class TestDiarizationIntegration:
             {"start": 5, "end": 10, "speaker": "S2"},
         ]
 
-        result = diarizer.align_diarization_with_asr(diar_spans, asr_segs)
+        result = diarizer.assign_word_speakers_whisperx_style(diar_spans, asr_segs)
 
-        # Verify all results are DiarizedSegment with speaker info
+        # Verify all results are DiarizedSegment with speaker info (word-level now)
         assert all(isinstance(seg, DiarizedSegment) for seg in result)
-        assert result[0].speaker == "S1"
-        assert result[1].speaker == "S2"
+        assert len(result) > 2  # More segments due to word-level processing
+        # Check that we have speakers assigned
+        speakers = [seg.speaker for seg in result if seg.speaker is not None]
+        assert "S1" in speakers
+        assert "S2" in speakers
 
 
 @pytest.mark.gpu
@@ -260,7 +304,5 @@ class TestDiarizationWithRealModel:
         assert model is None or model is not None  # Always true, but tests the method
 
     def test_real_model_iou_calculation(self, real_diarizer):
-        """Test IoU calculation with real diarizer instance."""
-        iou = real_diarizer._calculate_iou((0, 10), (5, 15))
-        assert 0 <= iou <= 1
-        assert abs(iou - (5 / 15)) < 1e-6
+        """Test IoU calculation with real diarizer instance - DEPRECATED."""
+        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")

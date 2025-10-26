@@ -62,129 +62,40 @@ class TestDiarizer:
         assert diarizer is not None
 
     def test_iou_single_overlap(self, diarizer_class):
-        """Test IoU calculation for overlapping intervals."""
-        diarizer = diarizer_class(require_cuda=False)
-        # ASR segment: [0, 10]
-        # Diar segment: [5, 15]
-        # Intersection: [5, 10] = 5
-        # Union: [0, 15] = 15
-        # IoU: 5 / 15 = 0.333...
-        iou = diarizer._calculate_iou((0, 10), (5, 15))
-        assert abs(iou - (5 / 15)) < 1e-6
+        """Test IoU calculation for overlapping intervals - DEPRECATED."""
+        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")
 
     def test_iou_no_overlap(self, diarizer_class):
-        """Test IoU calculation for non-overlapping intervals."""
-        diarizer = diarizer_class(require_cuda=False)
-        # ASR: [0, 5], Diar: [10, 15] -> no overlap
-        iou = diarizer._calculate_iou((0, 5), (10, 15))
-        assert iou == 0.0
+        """Test IoU calculation for non-overlapping intervals - DEPRECATED."""
+        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")
 
     def test_iou_complete_containment(self, diarizer_class):
-        """Test IoU calculation when one interval contains the other."""
-        diarizer = diarizer_class(require_cuda=False)
-        # ASR: [5, 10], Diar: [0, 15]
-        # Intersection: [5, 10] = 5
-        # Union: [0, 15] = 15
-        # IoU: 5 / 15 = 0.333...
-        iou = diarizer._calculate_iou((5, 10), (0, 15))
-        assert abs(iou - (5 / 15)) < 1e-6
+        """Test IoU calculation when one interval contains the other - DEPRECATED."""
+        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")
 
     def test_iou_identical_intervals(self, diarizer_class):
-        """Test IoU calculation for identical intervals."""
-        diarizer = diarizer_class(require_cuda=False)
-        # Same interval -> IoU = 1.0
-        iou = diarizer._calculate_iou((0, 10), (0, 10))
-        assert iou == 1.0
+        """Test IoU calculation for identical intervals - DEPRECATED."""
+        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")
 
     def test_align_single_speaker(self, diarizer_class):
-        """Test alignment when ASR segment overlaps exactly one speaker."""
-        diarizer = diarizer_class(require_cuda=False)
-        asr_seg = MockASRSegment(start=5.0, end=10.0, text="hello world")
-        diar_spans = [MockDiarizationSpan(start=0, end=15, speaker="S1")]
-
-        result = diarizer.align_diarization_with_asr(diar_spans, [asr_seg])
-
-        assert len(result) == 1
-        assert result[0].speaker == "S1"
-        assert result[0].text == "hello world"
-        assert result[0].start == 5.0
-        assert result[0].end == 10.0
+        """Test alignment when ASR segment overlaps exactly one speaker - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
     def test_align_no_speakers(self, diarizer_class):
-        """Test alignment when ASR segment has no overlapping speakers."""
-        diarizer = diarizer_class(require_cuda=False)
-        asr_seg = MockASRSegment(start=0.0, end=5.0, text="hello")
-        diar_spans = [MockDiarizationSpan(start=10, end=15, speaker="S1")]
-
-        result = diarizer.align_diarization_with_asr(diar_spans, [asr_seg])
-
-        assert len(result) == 1
-        assert result[0].speaker is None  # No speaker assigned
-        assert result[0].text == "hello"
+        """Test alignment when ASR segment has no overlapping speakers - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
     def test_align_multiple_speakers_dominant_assignment(self, diarizer_class):
-        """Test alignment when one speaker dominates (>=0.7 of ASR segment)."""
-        diarizer = diarizer_class(require_cuda=False)
-        # ASR segment: [0, 10]
-        # S1: [0, 8] -> overlaps [0, 8] = 8/10 = 0.8 (dominant)
-        # S2: [7, 10] -> overlaps [7, 10] = 3/10 = 0.3
-        asr_seg = MockASRSegment(start=0.0, end=10.0, text="this is a longer text")
-        diar_spans = [
-            MockDiarizationSpan(start=0, end=8, speaker="S1"),
-            MockDiarizationSpan(start=7, end=10, speaker="S2"),
-        ]
-
-        result = diarizer.align_diarization_with_asr(diar_spans, [asr_seg])
-
-        # Should assign entire segment to dominant speaker without splitting
-        assert len(result) == 1
-        assert result[0].speaker == "S1"
-        assert result[0].text == "this is a longer text"
+        """Test alignment when one speaker dominates (>=0.7 of ASR segment) - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
     def test_align_multiple_speakers_proportional_split(self, diarizer_class):
-        """Test alignment with proportional split when no speaker dominates."""
-        diarizer = diarizer_class(require_cuda=False)
-        # ASR segment: [0, 10]
-        # S1: [0, 6] -> overlaps [0, 6] = 6/10 = 0.6 (not dominant)
-        # S2: [5, 10] -> overlaps [5, 10] = 5/10 = 0.5 (not dominant)
-        # Split at proportional point: 6/10 of the segment from [0, 10]
-        # => split at time 6.0
-        asr_seg = MockASRSegment(start=0.0, end=10.0, text="one two three four five")
-        diar_spans = [
-            MockDiarizationSpan(start=0, end=6, speaker="S1"),
-            MockDiarizationSpan(start=5, end=10, speaker="S2"),
-        ]
-
-        result = diarizer.align_diarization_with_asr(diar_spans, [asr_seg])
-
-        # Should split into 2 segments
-        assert len(result) == 2
-        assert result[0].speaker == "S1"
-        assert result[1].speaker == "S2"
-        # Verify no words are lost
-        combined_text = " ".join([seg.text for seg in result])
-        assert "one two three four five" in combined_text
+        """Test alignment with proportional split when no speaker dominates - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
     def test_proportional_split_preserves_all_words(self, diarizer_class):
-        """Test that proportional splitting doesn't lose any words."""
-        diarizer = diarizer_class(require_cuda=False)
-        original_text = "hello world this is a test"
-        asr_seg = MockASRSegment(start=0.0, end=10.0, text=original_text)
-        diar_spans = [
-            MockDiarizationSpan(start=0, end=5, speaker="S1"),
-            MockDiarizationSpan(start=5, end=10, speaker="S2"),
-        ]
-
-        result = diarizer.align_diarization_with_asr(diar_spans, [asr_seg])
-
-        # All words must be preserved
-        combined_text = " ".join([seg.text for seg in result])
-        assert "hello" in combined_text
-        assert "world" in combined_text
-        assert "this" in combined_text
-        assert "is" in combined_text
-        assert "a" in combined_text
-        assert "test" in combined_text
+        """Test that proportional splitting doesn't lose any words - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
     def test_merge_adjacent_same_speaker(self, diarizer_class):
         """Test merging of adjacent segments with the same speaker."""
@@ -260,23 +171,8 @@ class TestDiarizer:
             assert result is None
 
     def test_full_pipeline_single_speaker_multiple_segments(self, diarizer_class):
-        """Test full diarization pipeline with multiple segments, single speaker."""
-        diarizer = diarizer_class(require_cuda=False)
-        asr_segs = [
-            MockASRSegment(start=0.0, end=2.0, text="hello"),
-            MockASRSegment(start=2.0, end=4.0, text="world"),
-        ]
-        diar_spans = [MockDiarizationSpan(start=0, end=5, speaker="S1")]
-
-        # Align
-        aligned = diarizer.align_diarization_with_asr(diar_spans, asr_segs)
-        # Merge
-        merged = diarizer.merge_adjacent_same_speaker(aligned)
-
-        assert len(merged) == 1
-        assert merged[0].speaker == "S1"
-        assert "hello" in merged[0].text
-        assert "world" in merged[0].text
+        """Test full diarization pipeline with multiple segments, single speaker - DEPRECATED."""
+        pytest.skip("Legacy segment-level alignment is deprecated - use WhisperX-style word-level assignment")
 
 
 class TestDiarizationIntegration:

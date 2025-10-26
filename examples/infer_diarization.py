@@ -125,7 +125,6 @@ def main():
             diarizer = get_diarizer(
                 model_path=args.model_path,
                 require_cuda=False,
-                overlap_threshold=0.3,
             )
 
             if diarizer:
@@ -138,43 +137,57 @@ def main():
                     if asr_result.segments:
                         for seg in asr_result.segments:
                             class ASRSeg:
-                                def __init__(self, start, end, text):
+                                def __init__(self, start, end, text, words=None):
                                     self.start = start
                                     self.end = end
                                     self.text = text
+                                    self.words = words
 
                             asr_segs_for_diar.append(
-                                ASRSeg(seg["start"], seg["end"], seg["text"])
+                                ASRSeg(seg["start"], seg["end"], seg["text"], seg.get("words"))
                             )
 
-                        # Align diarization with ASR
-                        diarized_segs = diarizer.align_diarization_with_asr(
+                    # Check if word timestamps are available
+                    has_word_timestamps = diarizer.has_word_timestamps(asr_segs_for_diar)
+                    
+                    if has_word_timestamps:
+                        # Use WhisperX-style word-level assignment
+                        diarized_segs = diarizer.assign_word_speakers_whisperx_style(
                             diar_spans, asr_segs_for_diar
                         )
-
-                        # Merge adjacent same-speaker segments
-                        merged_segs = diarizer.merge_adjacent_same_speaker(diarized_segs)
-
-                        print(f"      ✓ Diarization complete")
-                        print(f"      - Speaker segments: {len(merged_segs)}")
-                        print(
-                            f"      - Unique speakers: {len(set(s.speaker for s in merged_segs if s.speaker))}"
-                        )
-
-                        # Display diarized transcript
-                        print()
-                        print("Speaker-attributed transcript:")
-                        print("-" * 80)
-                        for i, seg in enumerate(merged_segs, 1):
-                            speaker = seg.speaker or "Unknown"
-                            start_min, start_sec = divmod(seg.start, 60)
-                            end_min, end_sec = divmod(seg.end, 60)
-                            print(
-                                f"[{i:2d}] {start_min:02.0f}:{start_sec:05.2f}-{end_min:02.0f}:{end_sec:05.2f} "
-                                f"{speaker:>8}: {seg.text}"
-                            )
                     else:
-                        print("      ✗ No ASR segments available for diarization")
+                        # Skip diarization, keep segments as-is with speaker=None
+                        from src.processors.audio.diarizer import DiarizedSegment
+                        diarized_segs = []
+                        for seg in asr_segs_for_diar:
+                            diarized_segs.append(DiarizedSegment(
+                                start=seg.start,
+                                end=seg.end,
+                                text=seg.text,
+                                speaker=None,
+                            ))
+
+                    # Merge adjacent same-speaker segments
+                    merged_segs = diarizer.merge_adjacent_same_speaker(diarized_segs)
+
+                    print(f"      ✓ Diarization complete")
+                    print(f"      - Speaker segments: {len(merged_segs)}")
+                    print(
+                        f"      - Unique speakers: {len(set(s.speaker for s in merged_segs if s.speaker))}"
+                    )
+
+                    # Display diarized transcript
+                    print()
+                    print("Speaker-attributed transcript:")
+                    print("-" * 80)
+                    for i, seg in enumerate(merged_segs, 1):
+                        speaker = seg.speaker or "Unknown"
+                        start_min, start_sec = divmod(seg.start, 60)
+                        end_min, end_sec = divmod(seg.end, 60)
+                        print(
+                            f"[{i:2d}] {start_min:02.0f}:{start_sec:05.2f}-{end_min:02.0f}:{end_sec:05.2f} "
+                            f"{speaker:>8}: {seg.text}"
+                        )
                 else:
                     print("      ✗ Diarization returned no speakers")
             else:

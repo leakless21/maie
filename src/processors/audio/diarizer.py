@@ -6,8 +6,7 @@ with graceful fallback when GPU is unavailable.
 
 Features:
 - Speaker segmentation via pyannote.audio
-- IoU-based alignment with ASR segments
-- Proportional splitting without word-level timestamps
+- WhisperX-style word-level speaker assignment using temporal overlap
 - Segment merging for readability
 - Graceful CUDA handling
 """
@@ -44,7 +43,6 @@ class Diarizer:
     Attributes:
         model_path: Path to the pyannote speaker diarization model
         require_cuda: Whether to fail if CUDA is unavailable
-        overlap_threshold: Minimum IoU threshold for segment overlap (0.0-1.0)
         embedding_batch_size: Batch size for embedding model (controls memory usage)
         segmentation_batch_size: Batch size for segmentation model (controls memory usage)
         model: Lazy-loaded pyannote model instance
@@ -54,7 +52,6 @@ class Diarizer:
         self,
         model_path: str = "data/models/speaker-diarization-community-1",
         require_cuda: bool = False,
-        overlap_threshold: float = 0.3,
         embedding_batch_size: int = 32,
         segmentation_batch_size: int = 32,
     ):
@@ -64,13 +61,11 @@ class Diarizer:
         Args:
             model_path: Path to the speaker diarization model
             require_cuda: If True, raise when CUDA unavailable. If False, skip diarization gracefully.
-            overlap_threshold: Minimum IoU for considering overlap (default 0.3 = 30%)
             embedding_batch_size: Batch size for speaker embedding model (default 32 per official docs)
             segmentation_batch_size: Batch size for segmentation model (default 32 per official docs)
         """
         self.model_path = model_path
         self.require_cuda = require_cuda
-        self.overlap_threshold = overlap_threshold
         self.embedding_batch_size = embedding_batch_size
         self.segmentation_batch_size = segmentation_batch_size
         self.model = None
@@ -164,34 +159,6 @@ class Diarizer:
             logger.error(f"Failed to load diarization model: {e}", exc_info=True)
             return None
 
-    @staticmethod
-    def _calculate_iou(interval_a: tuple[float, float], interval_b: tuple[float, float]) -> float:
-        """
-        Calculate Intersection over Union (IoU) for two time intervals.
-
-        Args:
-            interval_a: (start, end) tuple for first interval
-            interval_b: (start, end) tuple for second interval
-
-        Returns:
-            IoU value between 0.0 and 1.0
-        """
-        start_a, end_a = interval_a
-        start_b, end_b = interval_b
-
-        # Calculate intersection
-        intersection_start = max(start_a, start_b)
-        intersection_end = min(end_a, end_b)
-        intersection = max(0.0, intersection_end - intersection_start)
-
-        # Calculate union
-        union_start = min(start_a, start_b)
-        union_end = max(end_a, end_b)
-        union = union_end - union_start
-
-        # Calculate IoU
-        iou = intersection / union if union > 0 else 0.0
-        return iou
 
     def diarize(
         self, audio_path: str, num_speakers: Optional[int] = None
@@ -218,18 +185,6 @@ class Diarizer:
                 f"embedding={self.embedding_batch_size}, segmentation={self.segmentation_batch_size}"
             )
 
-            # DEBUG: Log diarization input details
-            import os
-            if os.path.exists(audio_path):
-                file_size = os.path.getsize(audio_path)
-                logger.debug(
-                    "Diarization input details",
-                    audio_path=audio_path,
-                    file_size_bytes=file_size,
-                    num_speakers=num_speakers,
-                    embedding_batch_size=self.embedding_batch_size,
-                    segmentation_batch_size=self.segmentation_batch_size,
-                )
 
             # Run diarization
             # NOTE: Batch sizes should have been configured during model load in _load_pyannote_model()
@@ -252,234 +207,113 @@ class Diarizer:
 
             logger.info(f"Diarization complete: {len(spans)} speaker segments")
             
-            # DEBUG: Log diarization output details
-            speaker_count = len(set(span["speaker"] for span in spans))
-            logger.debug(
-                "Diarization output details",
-                span_count=len(spans),
-                speaker_count=speaker_count,
-                speakers=list(set(span["speaker"] for span in spans)),
-                total_duration=sum(span["end"] - span["start"] for span in spans) if spans else 0,
-            )
-            
-            # DEBUG: Log first few diarization spans for analysis
-            if spans:
-                logger.debug("First 5 diarization spans:")
-                for i, span in enumerate(spans[:5]):
-                    logger.debug(f"  Span {i}: {span['start']:.3f}s-{span['end']:.3f}s speaker={span['speaker']}")
-                logger.debug("Last 5 diarization spans:")
-                for i, span in enumerate(spans[-5:], len(spans)-5):
-                    logger.debug(f"  Span {i}: {span['start']:.3f}s-{span['end']:.3f}s speaker={span['speaker']}")
-            
             return spans
 
         except Exception as e:
             logger.error(f"Diarization failed: {e}")
             return None
 
-    def align_diarization_with_asr(
+    def has_word_timestamps(self, asr_segments: list) -> bool:
+        """
+        Check if ASR segments contain word-level timestamps.
+        
+        Args:
+            asr_segments: List of ASR segments to check
+            
+        Returns:
+            True if word-level timestamps are available, False otherwise
+        """
+        if not asr_segments:
+            return False
+        
+        first_seg = asr_segments[0]
+        words = getattr(first_seg, 'words', None)
+        if not words and isinstance(first_seg, dict):
+            words = first_seg.get('words')
+        
+        return words is not None and len(words) > 0
+
+    def assign_word_speakers_whisperx_style(
         self, diar_spans: list, asr_segments: list
     ) -> list[DiarizedSegment]:
         """
-        Align diarization spans with ASR segments using IoU-based matching.
-
-        Algorithm:
-        1. For each ASR segment, find overlapping diarization spans (IoU >= threshold)
-        2. If no speakers: keep segment with speaker=None
-        3. If one speaker: assign entire segment to that speaker
-        4. If multiple speakers:
-           a. If one speaker covers >=0.7 of segment: assign entire segment to that speaker
-           b. Otherwise: split proportionally at the dominant speaker boundary
-
+        Assign speakers to words using WhisperX-style temporal overlap.
+        
+        This method replicates WhisperX's approach:
+        1. For each word, find the diarization segment with maximum temporal overlap
+        2. Assign the speaker from that segment to the word
+        3. If no overlap exists, leave speaker as None
+        
         Args:
             diar_spans: List of diarization spans from pyannote
-            asr_segments: List of ASR segments to align
-
+            asr_segments: List of ASR segments with word-level timestamps
+            
         Returns:
-            List of DiarizedSegment with speaker attribution
+            List of DiarizedSegment with speaker attribution at word level
         """
-        # DEBUG: Log alignment input details
-        logger.debug(
-            "Diarization alignment input",
-            diar_spans_count=len(diar_spans),
-            asr_segments_count=len(asr_segments),
-            overlap_threshold=self.overlap_threshold,
-        )
-        
-        # DEBUG: Log first few ASR segments for analysis
-        if asr_segments:
-            logger.debug("First 3 ASR segments:")
-            for i, seg in enumerate(asr_segments[:3]):
-                logger.debug(f"  ASR {i}: {seg.start:.3f}s-{seg.end:.3f}s text='{seg.text[:50]}...'")
-            logger.debug("Last 3 ASR segments:")
-            for i, seg in enumerate(asr_segments[-3:], len(asr_segments)-3):
-                logger.debug(f"  ASR {i}: {seg.start:.3f}s-{seg.end:.3f}s text='{seg.text[:50]}...'")
-        
         result = []
-
+        
         for asr_idx, asr_seg in enumerate(asr_segments):
-            asr_interval = (asr_seg.start, asr_seg.end)
-            asr_duration = asr_seg.end - asr_seg.start
-
-            # DEBUG: Log processing of each ASR segment
-            logger.debug(f"Processing ASR segment {asr_idx}: {asr_seg.start:.3f}s-{asr_seg.end:.3f}s (duration: {asr_duration:.3f}s)")
-
-            # Find overlapping diarization spans
-            overlaps = []
-            overlap_candidates = []
+            # Get words from the segment
+            words = getattr(asr_seg, 'words', None)
+            if not words and isinstance(asr_seg, dict):
+                words = asr_seg.get('words')
             
-            for diar_idx, diar in enumerate(diar_spans):
-                # Handle both dict and dataclass diarization spans
-                diar_start = (
-                    diar["start"] if isinstance(diar, dict) else diar.start
-                )
-                diar_end = diar["end"] if isinstance(diar, dict) else diar.end
-                diar_speaker = (
-                    diar["speaker"] if isinstance(diar, dict) else diar.speaker
-                )
-
-                diar_interval = (diar_start, diar_end)
-                iou = self._calculate_iou(asr_interval, diar_interval)
+            if not words:
+                logger.warning(f"ASR segment {asr_idx} has no word timestamps, skipping")
+                continue
+            
+            # Process each word individually
+            for word in words:
+                word_start = word.get('start', 0) if isinstance(word, dict) else getattr(word, 'start', 0)
+                word_end = word.get('end', 0) if isinstance(word, dict) else getattr(word, 'end', 0)
+                word_text = word.get('word', '') if isinstance(word, dict) else getattr(word, 'word', '')
                 
-                # Calculate overlap duration and percentage
-                overlap_duration = min(asr_seg.end, diar_end) - max(asr_seg.start, diar_start)
-                overlap_pct = overlap_duration / asr_duration if asr_duration > 0 else 0
+                # Find the diarization segment with maximum temporal overlap
+                best_speaker = None
+                max_overlap_duration = 0
                 
-                # Track all candidates for debugging
-                overlap_candidates.append({
-                    "diar_idx": diar_idx,
-                    "speaker": diar_speaker,
-                    "start": diar_start,
-                    "end": diar_end,
-                    "overlap_duration": overlap_duration,
-                    "overlap_pct": overlap_pct,
-                    "iou": iou,
-                })
-
-                if iou >= self.overlap_threshold:
-                    overlaps.append(
-                        {
-                            "speaker": diar_speaker,
-                            "start": diar_start,
-                            "end": diar_end,
-                            "overlap_pct": overlap_pct,
-                            "iou": iou,
-                        }
-                    )
-            
-            # DEBUG: Log overlap analysis for this ASR segment
-            logger.debug(f"ASR {asr_idx} overlap analysis:")
-            logger.debug(f"  Found {len(overlaps)} overlaps above threshold {self.overlap_threshold}")
-            logger.debug(f"  Total candidates checked: {len(overlap_candidates)}")
-            
-            # Log top 5 candidates by IoU for debugging
-            top_candidates = sorted(overlap_candidates, key=lambda x: x["iou"], reverse=True)[:5]
-            logger.debug(f"  Top 5 candidates by IoU:")
-            for i, cand in enumerate(top_candidates):
-                logger.debug(f"    {i+1}. IoU={cand['iou']:.4f} overlap={cand['overlap_pct']:.3f} speaker={cand['speaker']} {cand['start']:.3f}s-{cand['end']:.3f}s")
-
-            # Decide how to handle overlaps
-            if not overlaps:
-                # No speakers: keep segment with speaker=None
-                logger.debug(f"ASR {asr_idx}: No overlaps found, assigning speaker=None")
-                result.append(
-                    DiarizedSegment(
-                        start=asr_seg.start,
-                        end=asr_seg.end,
-                        text=asr_seg.text,
-                        speaker=None,
-                    )
-                )
-            elif len(overlaps) == 1:
-                # Single speaker: assign entire segment
-                logger.debug(f"ASR {asr_idx}: Single overlap found, assigning speaker={overlaps[0]['speaker']}")
-                result.append(
-                    DiarizedSegment(
-                        start=asr_seg.start,
-                        end=asr_seg.end,
-                        text=asr_seg.text,
-                        speaker=overlaps[0]["speaker"],
-                    )
-                )
-            else:
-                # Multiple speakers: check for dominant speaker
-                max_overlap = max(ovlp["overlap_pct"] for ovlp in overlaps)
-                if max_overlap >= 0.7:
-                    # Dominant speaker (>=70% coverage)
-                    dominant = next(
-                        ovlp for ovlp in overlaps if ovlp["overlap_pct"] == max_overlap
-                    )
-                    result.append(
-                        DiarizedSegment(
-                            start=asr_seg.start,
-                            end=asr_seg.end,
-                            text=asr_seg.text,
-                            speaker=dominant["speaker"],
-                        )
-                    )
-                else:
-                    # No dominant speaker: proportional split
-                    # Sort overlaps by start time to determine split order
-                    overlaps_sorted = sorted(
-                        overlaps, key=lambda x: x["start"]
-                    )
-
-                    # Find the proportional split point based on max overlap
-                    max_overlap_speaker = overlaps_sorted[0]
-                    split_point = min(asr_seg.end, max_overlap_speaker["end"])
-
-                    # Split text proportionally
-                    split_ratio = (split_point - asr_seg.start) / asr_duration
-                    words = asr_seg.text.split()
-
-                    if words:
-                        split_word_idx = max(1, int(len(words) * split_ratio))
-                        first_text = " ".join(words[:split_word_idx])
-                        second_text = " ".join(words[split_word_idx:])
-
-                        # Add first segment
-                        result.append(
-                            DiarizedSegment(
-                                start=asr_seg.start,
-                                end=split_point,
-                                text=first_text,
-                                speaker=max_overlap_speaker["speaker"],
-                            )
-                        )
-
-                        # Add second segment with next speaker
-                        if second_text.strip():
-                            next_speaker = (
-                                overlaps_sorted[1]["speaker"]
-                                if len(overlaps_sorted) > 1
-                                else max_overlap_speaker["speaker"]
-                            )
-                            result.append(
-                                DiarizedSegment(
-                                    start=split_point,
-                                    end=asr_seg.end,
-                                    text=second_text,
-                                    speaker=next_speaker,
-                                )
-                            )
+                for diar in diar_spans:
+                    # Handle both dict and object formats
+                    if isinstance(diar, dict):
+                        diar_start = diar.get("start", 0)
+                        diar_end = diar.get("end", 0)
+                        diar_speaker = diar.get("speaker")
                     else:
-                        # Empty text, keep as-is
-                        result.append(
-                            DiarizedSegment(
-                                start=asr_seg.start,
-                                end=asr_seg.end,
-                                text=asr_seg.text,
-                                speaker=max_overlap_speaker["speaker"],
-                            )
-                        )
-
+                        diar_start = getattr(diar, "start", 0)
+                        diar_end = getattr(diar, "end", 0)
+                        diar_speaker = getattr(diar, "speaker", None)
+                    
+                    if not diar_speaker:
+                        continue
+                    
+                    # Check for temporal overlap
+                    if word_start < diar_end and word_end > diar_start:
+                        # Calculate overlap duration
+                        overlap_start = max(word_start, diar_start)
+                        overlap_end = min(word_end, diar_end)
+                        overlap_duration = overlap_end - overlap_start
+                        
+                        if overlap_duration > max_overlap_duration:
+                            max_overlap_duration = overlap_duration
+                            best_speaker = diar_speaker
+                
+                # Create word segment with assigned speaker
+                result.append(DiarizedSegment(
+                    start=word_start,
+                    end=word_end,
+                    text=word_text,
+                    speaker=best_speaker,
+                ))
+        
         return result
+
 
     def merge_adjacent_same_speaker(
         self, segments: list[DiarizedSegment],
     ) -> list[DiarizedSegment]:
         """
-        Merge adjacent segments with the same speaker.
+        Merge adjacent segments with the same speaker, including intelligent Unknown handling.
 
         Args:
             segments: List of diarized segments
@@ -487,22 +321,15 @@ class Diarizer:
         Returns:
             List of merged segments
         """
-        # DEBUG: Log merge input details
-        logger.debug(
-            "Diarization merge input",
-            input_segments_count=len(segments),
-            speakers=list(set(seg.speaker for seg in segments if seg.speaker)),
-        )
-        
         if not segments:
             return []
 
+        # First pass: merge same speakers
         merged = []
         current = segments[0]
 
         for next_seg in segments[1:]:
             # Merge if same speaker (not None) and adjacent (or very close)
-            # Don't merge None speakers as they represent uncertainty
             if (
                 current.speaker is not None
                 and current.speaker == next_seg.speaker
@@ -512,7 +339,7 @@ class Diarizer:
                 current = DiarizedSegment(
                     start=current.start,
                     end=next_seg.end,
-                    text=f"{current.text} {next_seg.text}",
+                    text=self._merge_text(current.text, next_seg.text),
                     speaker=current.speaker,
                 )
             else:
@@ -523,21 +350,119 @@ class Diarizer:
         # Add last segment
         merged.append(current)
 
-        # DEBUG: Log merge output details
-        logger.debug(
-            "Diarization merge output",
-            output_segments_count=len(merged),
-            speakers=list(set(seg.speaker for seg in merged if seg.speaker)),
-            reduction_ratio=len(segments) / len(merged) if merged else 0,
-        )
+        # Second pass: intelligently assign Unknown segments to adjacent speakers
+        return self._merge_unknown_segments(merged)
 
-        return merged
+    def _merge_unknown_segments(self, segments: list[DiarizedSegment]) -> list[DiarizedSegment]:
+        """
+        Intelligently merge Unknown (None) segments with adjacent identified speakers.
+        
+        This helps reduce fragmentation by assigning Unknown segments to the most likely speaker
+        based on temporal proximity and context.
+        
+        Args:
+            segments: List of segments after initial same-speaker merging
+            
+        Returns:
+            List of segments with Unknown segments intelligently assigned
+        """
+        if not segments:
+            return []
+            
+        result = []
+        i = 0
+        
+        while i < len(segments):
+            current = segments[i]
+            
+            # If current segment has a speaker, keep it as-is
+            if current.speaker is not None:
+                result.append(current)
+                i += 1
+                continue
+                
+            # Current segment is Unknown - try to assign it intelligently
+            assigned_speaker = None
+            
+            # Look at previous segment
+            if result and result[-1].speaker is not None:
+                prev_speaker = result[-1].speaker
+                prev_end = result[-1].end
+                
+                # If gap is small (< 0.5s), likely same speaker
+                if abs(prev_end - current.start) < 0.5:
+                    assigned_speaker = prev_speaker
+            
+            # Look at next segment
+            if assigned_speaker is None and i + 1 < len(segments):
+                next_seg = segments[i + 1]
+                if next_seg.speaker is not None:
+                    next_speaker = next_seg.speaker
+                    next_start = next_seg.start
+                    
+                    # If gap is small (< 0.5s), likely same speaker
+                    if abs(current.end - next_start) < 0.5:
+                        assigned_speaker = next_speaker
+            
+            # If we found a likely speaker, assign it
+            if assigned_speaker is not None:
+                # Merge with previous segment if it's the same speaker
+                if result and result[-1].speaker == assigned_speaker:
+                    result[-1] = DiarizedSegment(
+                        start=result[-1].start,
+                        end=current.end,
+                        text=self._merge_text(result[-1].text, current.text),
+                        speaker=assigned_speaker,
+                    )
+                else:
+                    # Create new segment with assigned speaker
+                    result.append(DiarizedSegment(
+                        start=current.start,
+                        end=current.end,
+                        text=current.text,
+                        speaker=assigned_speaker,
+                    ))
+            else:
+                # Keep as Unknown if no clear assignment
+                result.append(current)
+                
+            i += 1
+            
+        return result
+
+    def _merge_text(self, text1: str, text2: str) -> str:
+        """
+        Intelligently merge two text segments, avoiding double spaces.
+        
+        Args:
+            text1: First text segment
+            text2: Second text segment
+            
+        Returns:
+            Merged text with proper spacing
+        """
+        if not text1:
+            return text2
+        if not text2:
+            return text1
+            
+        # Strip whitespace from both texts
+        text1 = text1.strip()
+        text2 = text2.strip()
+        
+        # If either text is empty after stripping, return the non-empty one
+        if not text1:
+            return text2
+        if not text2:
+            return text1
+            
+        # Join with a single space
+        return f"{text1} {text2}"
 
 
 def get_diarizer(
     model_path: str = "data/models/speaker-diarization-community-1",
     require_cuda: bool = False,
-    overlap_threshold: float = 0.1,
     embedding_batch_size: int = 32,
     segmentation_batch_size: int = 32,
 ) -> Optional[Diarizer]:
@@ -549,7 +474,6 @@ def get_diarizer(
     Args:
         model_path: Path to the diarization model
         require_cuda: If True, returns None when CUDA unavailable
-        overlap_threshold: IoU threshold for overlap detection
         embedding_batch_size: Batch size for speaker embedding (default 32 per official pyannote.audio docs)
         segmentation_batch_size: Batch size for segmentation (default 32 per official pyannote.audio docs)
 
@@ -564,7 +488,6 @@ def get_diarizer(
         diarizer = Diarizer(
             model_path=model_path,
             require_cuda=require_cuda,
-            overlap_threshold=overlap_threshold,
             embedding_batch_size=embedding_batch_size,
             segmentation_batch_size=segmentation_batch_size,
         )
