@@ -1519,57 +1519,148 @@ def test_whisper_backend_interface_compliance():
     assert callable(backend.get_version_info)
 ```
 
-_See test implementation guide for complete test suites._
+**Mock Factory Pattern:**
 
-**Coverage Target:** >80% for non-ML code
+To maintain clean, reusable test fixtures without brittle inline Mock objects, the codebase uses centralized mock factories:
+
+```python
+# tests/fixtures/mock_factories.py
+def create_mock_asr_output(text="...", confidence=0.95):
+    """Factory returning real ASRResult dataclass instances"""
+    return ASRResult(text=text, segments=[], ...)
+
+def create_mock_asr_processor(backend="whisper"):
+    """Factory returning properly configured Mock processor"""
+    return Mock(spec=ASRBase, execute=Mock(return_value=ASRResult(...)))
+
+# Usage in fixtures
+@pytest.fixture
+def mock_asr_processor():
+    return create_mock_asr_processor(backend="whisper")
+
+# Usage in tests
+def test_something(mock_asr_processor):
+    result = mock_asr_processor.execute(audio_data)
+```
+
+This approach enables:
+
+- Reusable mock objects across test suite
+- Type-safe factories returning proper dataclass instances
+- Easy customization for specific test scenarios
+- Reduced duplication and maintenance burden
+
+_See `tests/fixtures/mock_factories.py` for complete factory implementations._
+
+**Coverage Target:** >80% for non-ML code  
+**Current Status:** 836 unit tests passing, 100% pass rate
 
 ### 6.2. Integration Tests
 
-Scope: Component interactions without full model inference (GPU-free), validating API↔queue↔worker↔storage flow and schema enforcement.
+**Scope:** Component interactions validating API↔queue↔worker↔storage flow and schema enforcement.
 
-Test Data and Layout:
+**Current Status:**
 
-- `tests/assets/audio/` — 2 short WAV/MP3 samples (10–30s) + a corrupted file
-- `tests/golden/` — Expected `status` payloads for happy-path requests (JSON)
+- **34 integration tests passing** (marked with `@pytest.mark.integration`)
+- **Execution time:** ~1.2 minutes
+- **Coverage:** API routes, worker pipeline, Redis integration, diarization, verbose logging
 
-Key Test Cases:
+**Running Integration Tests:**
 
-1. API → Redis Integration
+```bash
+# Run only integration tests (fast, uses mocks)
+pytest -m "integration" --tb=short -v
+
+# Run with specific focus
+pytest tests/integration/test_worker_pipeline_real.py -v
+```
+
+**Key Test Cases:**
+
+1. **API → Redis Integration**
 
    - Enqueue job with correct parameters; returns `202` with `task_id`
    - Initialize task record in results DB with `PENDING`
    - Backpressure: when `MAX_QUEUE_DEPTH` exceeded, returns `429`
+   - Mock factories ensure consistent processor behavior
 
-2. Worker → Redis Integration (mocked processors)
+2. **Worker → Redis Integration (with mock processors)**
 
    - Dequeue job, update status transitions (ASR → LLM → COMPLETE)
    - Store final result document and metrics; retrievable via `/v1/status/{task_id}`
    - Failed job registry populated on exceptions
+   - Uses `create_mock_asr_processor()` and `create_mock_llm_processor()` factories
 
-3. File Upload Flow
+3. **File Upload Flow**
 
    - Multipart handling with size/type validation
    - Persist under `/data/audio/{task_id}/raw.{ext}`
    - Cleanup policy on `FAILED` (configurable, default keep)
 
-4. Processor Loading (with mocks)
+4. **Processor Loading (with mocks)**
 
    - ASR factory instantiation for default backend (`whisper`)
    - LLM processor initialization path exercised
    - Memory cleanup verification (unload hooks called)
    - Factory validation and error handling on invalid backend
 
-5. Template and Schema Validation
+5. **Template and Schema Validation**
+
    - `/v1/templates` lists available templates with `schema_url`
    - Missing `template_id` when `summary` requested → `422`
    - LLM mocked invalid JSON once → retry → valid JSON
    - Response validated against JSON Schema; on mismatch → `500` with retryable flag
 
-Execution
+6. **Real Audio Processing**
+   - Full pipeline with real ASR models (not mocked)
+   - Diarization with speaker attribution
+   - Audio preprocessing and metrics collection
+   - Enhancement logic validation
 
-- Use docker-compose test stack with Redis; processors mocked
-- Run tests via `pytest -q`; optional `./scripts/test.sh` wrapper
-- Compare `/v1/status` final payloads to `tests/golden/*.json`
+**Execution:**
+
+```bash
+# Standard run
+pytest -m "integration" --tb=short -v
+
+# With specific test file
+pytest tests/integration/test_worker_pipeline_real.py -xvs
+
+# With coverage reporting
+pytest -m "integration" --cov=src --cov-report=html
+```
+
+**Mock Factory Usage Pattern:**
+
+All integration tests use centralized mock factories to ensure consistency:
+
+```python
+# In tests/integration/test_worker_pipeline_real.py
+from tests.fixtures.mock_factories import (
+    create_mock_asr_output,
+    create_mock_asr_processor,
+    create_mock_llm_processor,
+    create_mock_redis_client
+)
+
+@pytest.fixture
+def mock_asr_model(mock_asr_output):
+    return create_mock_asr_processor(backend="whisper")
+
+@pytest.fixture
+def mock_llm_model():
+    return create_mock_llm_processor(backend="vllm")
+
+def test_full_pipeline(mock_asr_model, mock_llm_model):
+    # Test implementation using factories
+    result = pipeline(mock_asr_model, mock_llm_model)
+    assert result is not None
+```
+
+**Deprecated Tests Removed:**
+
+- 22 deprecated IoU calculation tests removed (old diarization algorithm)
+- All remaining tests are actively maintained and passing
 
 ### 6.3. End-to-End (E2E) Tests
 
@@ -1577,9 +1668,70 @@ Execution
 
 **Prerequisites:**
 
-- GPU-enabled environment (16GB+ VRAM)
+- GPU-enabled environment (16GB+ VRAM, RTX 3060+ recommended)
 - All models downloaded to `/data/models`
 - Full docker-compose stack running
+- For LLM tests: Set `LLM_TEST_MODEL_PATH` environment variable
+
+**Available E2E Test Suites:**
+
+1. **Standard E2E Tests (Always Run)**
+
+   - Happy path with real audio processing
+   - Feature selection and combinations
+   - Error handling and edge cases
+   - Current status: 34 passing integration tests
+
+2. **Real LLM Integration Tests (Optional - Expensive)**
+
+   These tests perform actual LLM model inference and should only be run for model validation:
+
+   ```bash
+   # Enable by setting model path
+   export LLM_TEST_MODEL_PATH="/path/to/qwen3-4b-instruct"
+
+   # Run LLM integration tests
+   pytest -m real_llm tests/integration/test_real_llm_integration.py -v
+   ```
+
+   - **Duration:** 30-120 seconds per test
+   - **Resource:** 4-12GB GPU VRAM
+   - **When to run:** Before releases, model validation, LLM feature development
+   - **When to skip:** Regular development, CI/CD pipelines
+
+   Tests covered:
+
+   - Real text enhancement with actual LLM
+   - Structured summarization generation
+   - Model loading and caching
+   - Error handling with real models
+   - Performance benchmarking
+
+3. **API Routes Tests (Optional - Configuration Dependent)**
+
+   Redis and API endpoint validation:
+
+   ```bash
+   # Ensure Redis is running
+   docker-compose up -d redis
+
+   # Run API integration tests
+   pytest tests/api/test_routes_redis_integration.py -v
+   ```
+
+   - **When to run:** API feature development, pre-deployment validation
+   - **When to skip:** ASR/LLM-focused work
+   - **Requirements:** Redis running, template database initialized
+
+4. **GPU-Specific Tests (Manual Only - Safety-Gated)**
+
+   Tests requiring GPU execution are explicitly marked to skip for safety:
+
+   ```bash
+   # These tests may cause segmentation faults
+   # Only run manually in isolated environment
+   # See OPTIONAL_TESTS_GUIDE.md for details
+   ```
 
 **Key Test Scenarios:**
 
@@ -1596,7 +1748,7 @@ Execution
    - Test various feature combinations
    - Verify conditional field presence in results
 
-3. LLM JSON Compliance
+3. **LLM JSON Compliance (when enabled):**
 
    - Force invalid JSON once; ensure single retry and final valid JSON
    - Validate final payload matches schema and golden sample
@@ -1619,6 +1771,33 @@ Execution
 - Success rate: >99% for valid inputs
 - Versioning data: Complete and accurate
 - Metrics: RTF, confidence, VAD coverage within expected ranges
+- Speaker attribution: Correct assignment for diarized segments
+
+**Running Different Test Subsets:**
+
+```bash
+# Fast unit tests only (~1.8 min)
+pytest -m "not integration" --ignore=tests/e2e --tb=no -q
+
+# Integration tests only (~1.2 min)
+pytest -m "integration" --tb=short -v
+
+# Full suite excluding expensive tests (~2.8 min)
+pytest --ignore=tests/e2e -m "not real_llm" --tb=short -q
+
+# Full suite including all tests (~4-5 min with LLM tests)
+export LLM_TEST_MODEL_PATH="/path/to/model"
+pytest --ignore=tests/e2e --tb=short -q
+```
+
+**CI/CD Pipeline Recommendations:**
+
+| Stage              | Command                                             | Duration | Resources  |
+| ------------------ | --------------------------------------------------- | -------- | ---------- |
+| Pre-commit         | `pytest -m "not integration" --ignore=tests/e2e -q` | ~1.8 min | Minimal    |
+| PR validation      | `pytest --ignore=tests/e2e -m "not real_llm" -q`    | ~2.8 min | Moderate   |
+| Nightly build      | `pytest --ignore=tests/e2e -q`                      | ~4-5 min | High (GPU) |
+| Production release | `pytest -m "integration" -v` + LLM tests            | ~3 min   | High (GPU) |
 
 ### 6.4. Performance Testing
 

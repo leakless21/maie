@@ -302,7 +302,3 @@ class TestDiarizationWithRealModel:
         # If model is not None, it successfully loaded
         # Either way, no exception should be raised
         assert model is None or model is not None  # Always true, but tests the method
-
-    def test_real_model_iou_calculation(self, real_diarizer):
-        """Test IoU calculation with real diarizer instance - DEPRECATED."""
-        pytest.skip("IoU calculation is deprecated - WhisperX uses temporal overlap")

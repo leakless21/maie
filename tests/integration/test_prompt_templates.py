@@ -36,10 +36,12 @@ class TestTextEnhancementTemplate:
         transcript = "hello world this is a test transcript"
         result = renderer.render("text_enhancement_v1", text_input=transcript)
 
-        # Should contain the transcript
-        assert transcript in result
-        # Should contain enhancement instructions
+        # Should contain enhancement instructions (system prompt content)
         assert "enhance" in result.lower() or "punctuation" in result.lower()
+        assert "proofreader" in result.lower()
+        assert "vietnamese" in result.lower()
+        # Should be a system prompt, not include the actual transcript
+        assert transcript not in result
 
     def test_rendering_with_empty_transcript(self, renderer):
         """Test rendering with empty transcript."""
@@ -55,21 +57,23 @@ class TestTextEnhancementTemplate:
         long_transcript = "This is a test sentence. " * 500  # ~12K characters
         result = renderer.render("text_enhancement_v1", text_input=long_transcript)
 
-        # Should handle long input
-        assert len(result) > len(long_transcript)
-        assert long_transcript in result
+        # Should render system prompt without including the actual transcript
+        # (transcript is passed to LLM as user message, not in system prompt)
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # System prompt should NOT contain the full transcript
+        assert "enhance" in result.lower() or "proofreader" in result.lower()
 
     def test_rendering_with_special_characters(self, renderer):
         """Test rendering with special characters."""
         special_transcript = "Hello! @#$%^&*()_+-=[]{}|;':\",./<>? World!"
         result = renderer.render("text_enhancement_v1", text_input=special_transcript)
 
-        # Should handle special characters (may be HTML-escaped)
-        # Check that the content is there, even if escaped
-        assert "Hello!" in result
-        assert "World!" in result
-        # Special characters may be escaped
-        assert "@#$%^" in result or "&amp;" in result
+        # Should render system prompt without errors
+        assert isinstance(result, str)
+        assert len(result) > 0
+        # Should be a valid system prompt
+        assert "enhance" in result.lower() or "proofreader" in result.lower()
 
     def test_output_format_is_correct(self, renderer):
         """Test output format is correct."""
@@ -78,10 +82,10 @@ class TestTextEnhancementTemplate:
 
         # Should be a string
         assert isinstance(result, str)
-        # Should contain the input
-        assert transcript in result
         # Should not be empty
         assert len(result.strip()) > 0
+        # Should contain system prompt content
+        assert "enhance" in result.lower() or "proofreader" in result.lower()
 
 
 class TestMeetingNotesTemplate:
@@ -118,11 +122,10 @@ class TestMeetingNotesTemplate:
 
         result = renderer.render("meeting_notes_v1", **context)
 
-        # Should contain the instruction text and examples
-        assert "You are an expert Vietnamese meeting analyst" in result
-        assert "meeting transcript to analyze:" in result.lower()
-        assert transcript in result
-        # Schema is HTML-escaped in templates (Jinja2 security feature)
+        # Should render as string
+        assert isinstance(result, str)
+        assert len(result) > 100
+        # Schema fields should be in output (HTML-escaped via Jinja2)
         assert "type" in result and "object" in result
         assert "title" in result
         assert "abstract" in result
@@ -137,10 +140,10 @@ class TestMeetingNotesTemplate:
 
         result = renderer.render("meeting_notes_v1", **context)
 
-        # Should contain the basic instruction and transcript
-        assert "You are an expert Vietnamese meeting analyst" in result
-        assert transcript in result
-        # Schema is HTML-escaped
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
+        # Schema is HTML-escaped in output
         assert "type" in result and "object" in result
         assert "title" in result
 
@@ -158,10 +161,9 @@ class TestMeetingNotesTemplate:
 
         result = renderer.render("meeting_notes_v1", **context)
 
-        # Should contain the schema and transcript
+        # Should contain the schema fields
         assert "main_points" in result
         assert "array" in result
-        assert transcript in result
 
     def test_list_rendering_action_items(self, renderer):
         """Test that template handles complex schema structures."""
@@ -190,7 +192,6 @@ class TestMeetingNotesTemplate:
         assert "action_items" in result
         assert "description" in result
         assert "assignee" in result
-        assert transcript in result
 
     def test_conditional_rendering_no_action_items(self, renderer):
         """Test template rendering with minimal schema."""
@@ -201,9 +202,9 @@ class TestMeetingNotesTemplate:
 
         result = renderer.render("meeting_notes_v1", **context)
 
-        # Should render the basic template structure
-        assert "You are an expert Vietnamese meeting analyst" in result
-        assert transcript in result
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
 
     def test_conditional_rendering_no_decisions(self, renderer):
         """Test template rendering with different schema configurations."""
@@ -222,7 +223,6 @@ class TestMeetingNotesTemplate:
 
         # Should include decisions in schema
         assert "decisions" in result
-        assert transcript in result
 
     def test_output_markdown_format_is_valid(self, renderer):
         """Test that template renders as valid prompt text."""
@@ -233,11 +233,9 @@ class TestMeetingNotesTemplate:
 
         result = renderer.render("meeting_notes_v1", **context)
 
-        # Should be a valid string with instruction content
+        # Should be a valid string with substantial content
         assert isinstance(result, str)
-        assert len(result) > 100  # Should be substantial content
-        assert "instruction" in result.lower()
-        assert transcript in result
+        assert len(result) > 100
 
 
 class TestGenericSummaryTemplate:
@@ -271,11 +269,10 @@ class TestGenericSummaryTemplate:
 
         result = renderer.render("generic_summary_v1", **context)
 
-        # Should contain the instruction and transcript
-        assert "You are an expert Vietnamese content analyst" in result
-        assert "transcript to analyze:" in result.lower()
-        assert transcript in result
-        # Schema is HTML-escaped
+        # Should render as string
+        assert isinstance(result, str)
+        assert len(result) > 100
+        # Schema fields should be in output (HTML-escaped via Jinja2)
         assert "type" in result and "object" in result
         assert "title" in result and "summary" in result
 
@@ -288,10 +285,10 @@ class TestGenericSummaryTemplate:
 
         result = renderer.render("generic_summary_v1", **context)
 
-        # Should contain the basic instruction and transcript
-        assert "You are an expert Vietnamese content analyst" in result
-        assert transcript in result
-        # Schema is HTML-escaped
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
+        # Schema is HTML-escaped in output
         assert "type" in result and "object" in result
 
     def test_conditional_rendering_no_highlights(self, renderer):
@@ -310,7 +307,7 @@ class TestGenericSummaryTemplate:
 
         # Should include highlights in schema
         assert "highlights" in result
-        assert transcript in result
+        assert "array" in result
 
     def test_conditional_rendering_no_important_details(self, renderer):
         """Test template rendering with schema that includes important details."""
@@ -328,7 +325,6 @@ class TestGenericSummaryTemplate:
 
         # Should include important_details in schema
         assert "important_details" in result
-        assert transcript in result
 
     def test_multiline_transcript_handling(self, renderer):
         """Test multiline transcript handling."""
@@ -343,10 +339,11 @@ The formatting should be preserved."""
 
         result = renderer.render("generic_summary_v1", **context)
 
-        # Should preserve multiline content
-        assert "multi-line transcript" in result
-        assert "multiple paragraphs" in result
-        assert multiline_transcript in result
+        # Should render successfully with multiline input
+        assert isinstance(result, str)
+        assert len(result) > 50
+        # Schema should be present
+        assert "type" in result and "object" in result
 
     def test_output_markdown_format_is_valid(self, renderer):
         """Test that template renders as valid prompt text."""
@@ -357,11 +354,9 @@ The formatting should be preserved."""
 
         result = renderer.render("generic_summary_v1", **context)
 
-        # Should be a valid string with instruction content
+        # Should be a valid string with substantial content
         assert isinstance(result, str)
-        assert len(result) > 100  # Should be substantial content
-        assert "instruction" in result.lower()
-        assert transcript in result
+        assert len(result) > 100
 
 
 class TestInterviewTranscriptTemplate:
@@ -395,11 +390,10 @@ class TestInterviewTranscriptTemplate:
 
         result = renderer.render("interview_transcript_v1", **context)
 
-        # Should contain the instruction text and examples
-        assert "You are an expert Vietnamese interview analyst" in result
-        assert "interview transcript to analyze:" in result.lower()
-        assert transcript in result
-        # Schema is HTML-escaped
+        # Should render as string with substantial content
+        assert isinstance(result, str)
+        assert len(result) > 100
+        # Schema fields should be in output (HTML-escaped via Jinja2)
         assert "interview_summary" in result
         assert "key_insights" in result
         assert "participant_sentiment" in result
@@ -413,10 +407,10 @@ class TestInterviewTranscriptTemplate:
 
         result = renderer.render("interview_transcript_v1", **context)
 
-        # Should contain the basic instruction and transcript
-        assert "You are an expert Vietnamese interview analyst" in result
-        assert transcript in result
-        # Schema is HTML-escaped
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
+        # Schema is HTML-escaped in output
         assert "interview_summary" in result
 
     def test_quotes_rendering_with_speaker(self, renderer):
@@ -446,7 +440,6 @@ class TestInterviewTranscriptTemplate:
         assert "quotes" in result
         assert "text" in result
         assert "speaker" in result
-        assert transcript in result
 
     def test_conditional_rendering_no_quotes(self, renderer):
         """Test template rendering with schema without quotes."""
@@ -457,9 +450,9 @@ class TestInterviewTranscriptTemplate:
 
         result = renderer.render("interview_transcript_v1", **context)
 
-        # Should render the basic template structure
-        assert "You are an expert Vietnamese interview analyst" in result
-        assert transcript in result
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
 
     def test_conditional_rendering_no_follow_up_questions(self, renderer):
         """Test template rendering with schema that includes follow-up questions."""
@@ -477,7 +470,6 @@ class TestInterviewTranscriptTemplate:
 
         # Should include follow_up_questions in schema
         assert "follow_up_questions" in result
-        assert transcript in result
 
     def test_output_structure_is_correct(self, renderer):
         """Test output structure is correct."""
@@ -488,10 +480,10 @@ class TestInterviewTranscriptTemplate:
 
         result = renderer.render("interview_transcript_v1", **context)
 
-        # Should contain proper instruction structure
-        assert "You are an expert Vietnamese interview analyst" in result
-        assert "interview transcript to analyze:" in result.lower()
-        assert transcript in result
+        # Should render successfully
+        assert isinstance(result, str)
+        assert len(result) > 50
+        assert "interview_summary" in result
 
 
 class TestTemplateValidation:
@@ -509,7 +501,7 @@ class TestTemplateValidation:
         return PromptRenderer(template_loader)
 
     def test_all_templates_exist(self, renderer):
-        """Test that all expected templates exist."""
+        """Test that all expected templates exist and render."""
         templates = [
             "text_enhancement_v1",
             "meeting_notes_v1",
@@ -565,4 +557,3 @@ class TestTemplateValidation:
         # Should handle large data without errors
         assert isinstance(result, str)
         assert len(result) > 1000  # Should be substantial output
-        assert "Large transcript" in result

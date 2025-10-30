@@ -27,6 +27,12 @@ import pytest
 from src.api.schemas import TaskStatus
 from src.config import settings
 from src.worker.pipeline import process_audio_task
+from tests.fixtures.mock_factories import (
+    create_mock_asr_output,
+    create_mock_asr_processor,
+    create_mock_llm_processor,
+    create_mock_redis_client,
+)
 
 # Test fixtures
 
@@ -62,93 +68,17 @@ def northern_female_audio():
 @pytest.fixture
 def mock_asr_model():
     """Mock ASR model that returns realistic results without loading actual models."""
-    mock_model = Mock()
-    mock_model.execute.return_value = Mock(
-        transcript="This is a test transcription from the audio file.",
-        segments=[
-            {
-                "start": 0.0,
-                "end": 2.5,
-                "text": "This is a test",
-            },
-            {
-                "start": 2.5,
-                "end": 5.0,
-                "text": "transcription from the audio file.",
-            },
-        ],
-        language="en",
-        confidence_avg=0.95,
-        vad_coverage=0.88,
-        duration_ms=5000,
-        model_name="whisper-large-v3",
-        checkpoint_hash="mock_hash_abc123",
-    )
-    mock_model.unload.return_value = None
-    mock_model.get_version_info.return_value = {
-        "backend": "whisper",
-        "model_variant": "large-v3",
-        "model_path": "/data/models/whisper/large-v3",
-        "checkpoint_hash": "mock_hash_abc123",
-        "compute_type": "float16",
-        "decoding_params": {
-            "beam_size": 5,
-            "vad_filter": True,
-        },
-    }
-    return mock_model
+    return create_mock_asr_processor(backend="whisper")
 
 
 @pytest.fixture
 def mock_llm_model():
     """Mock LLM model that returns realistic results without loading vLLM."""
-    mock_model = Mock()
-
-    # Mock enhance_text
-    mock_model.enhance_text.return_value = {
-        "enhanced_text": "This is a test transcription from the audio file.",
-        "enhancement_applied": False,  # Whisper has native punctuation
-        "edit_rate": 0.0,
-        "edit_distance": 0,
-    }
-
-    # Mock generate_summary
-    mock_model.generate_summary.return_value = {
-        "summary": {
-            "title": "Test Audio Transcription",
-            "main_points": [
-                "Audio file contains test transcription",
-                "Quality is good",
-            ],
-            "tags": ["test", "audio", "transcription"],
-        },
-        "retry_count": 0,
-        "model_info": {
-            "model_name": "qwen3-4b-instruct",
-            "checkpoint_hash": "mock_llm_hash_xyz",
-        },
-    }
-
-    # Mock needs_enhancement
-    mock_model.needs_enhancement.return_value = False  # Whisper variant
-
-    # Mock unload
-    mock_model.unload.return_value = None
-
-    # Mock get_version_info
-    mock_model.get_version_info.return_value = {
-        "model_name": "qwen3-4b-instruct",
-        "checkpoint_hash": "mock_llm_hash_xyz",
-        "backend": "vllm",
-        "quantization": "awq-4bit",
-    }
-
-    return mock_model
+    return create_mock_llm_processor(backend="vllm")
 
 
 # Integration Tests
-
-
+@pytest.mark.integration
 class TestFullPipelineWithRealComponents:
     """Test complete pipeline with real components and mocked models."""
 
@@ -202,7 +132,9 @@ class TestFullPipelineWithRealComponents:
         assert "results" in result
 
         # Verify versions
-        assert result["versions"]["asr_backend"]["name"] == "whisper-large-v3"
+        # Note: 'name' field contains model_variant (e.g., "large-v3"), not full model name
+        assert result["versions"]["asr_backend"]["model_variant"] == "large-v3"
+        assert result["versions"]["asr_backend"]["name"] == "large-v3"  # model_name from variant
         assert result["versions"]["llm"]["model_name"] == "qwen3-4b-instruct"
         assert result["versions"]["pipeline_version"] == settings.pipeline_version
 
@@ -310,6 +242,7 @@ class TestFullPipelineWithRealComponents:
         mock_llm_model.generate_summary.assert_called_once()
 
 
+@pytest.mark.integration
 class TestAudioPreprocessingIntegration:
     """Test real AudioPreprocessor integration."""
 
@@ -394,6 +327,7 @@ class TestAudioPreprocessingIntegration:
             assert result.get("status") != "error"
 
 
+@pytest.mark.integration
 class TestRedisIntegration:
     """Test fake Redis integration for status tracking."""
 
@@ -492,6 +426,7 @@ class TestRedisIntegration:
         assert "error" in task_data
 
 
+@pytest.mark.integration
 class TestEnhancementLogic:
     """Test enhancement logic with different ASR backends."""
 

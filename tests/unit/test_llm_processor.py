@@ -198,6 +198,8 @@ class TestExecute:
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
         mock_model.generate.return_value = [mock_output]
+        # Add chat() method that returns list for proper len() support
+        mock_model.chat.return_value = [mock_output]
         processor.model = mock_model
 
         with patch(
@@ -209,7 +211,7 @@ class TestExecute:
 
             assert result.text == "generated text"
             assert result.metadata["task"] == "enhancement"
-            mock_model.generate.assert_called_once()
+            mock_model.chat.assert_called_once()
 
     def test_execute_generation_error(self):
         """Test execution when generation fails."""

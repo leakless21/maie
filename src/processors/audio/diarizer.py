@@ -159,6 +159,36 @@ class Diarizer:
             logger.error(f"Failed to load diarization model: {e}", exc_info=True)
             return None
 
+    def _normalize_speaker_label(self, speaker: str) -> str:
+        """
+        Convert pyannote speaker labels to token-efficient format.
+        
+        Args:
+            speaker: Speaker label from pyannote (e.g., "SPEAKER_00", "SPEAKER_01")
+            
+        Returns:
+            Normalized speaker label (e.g., "S0", "S1")
+        """
+        if not speaker:
+            return speaker
+            
+        # Convert SPEAKER_00 -> S0, SPEAKER_01 -> S1, etc.
+        if speaker.startswith("SPEAKER_"):
+            try:
+                # Extract the number from SPEAKER_XX and convert to int to remove leading zeros
+                speaker_num_str = speaker.split("_")[1]
+                speaker_num = int(speaker_num_str)
+                return f"S{speaker_num}"
+            except (IndexError, ValueError):
+                # If parsing fails, return original
+                return speaker
+        
+        # Handle special cases
+        if speaker == "Unknown":
+            return "S?"
+        
+        # If already in S0, S1 format or other format, return as-is
+        return speaker
 
     def diarize(
         self, audio_path: str, num_speakers: Optional[int] = None
@@ -201,7 +231,7 @@ class Diarizer:
                     {
                         "start": float(segment.start),
                         "end": float(segment.end),
-                        "speaker": speaker,
+                        "speaker": self._normalize_speaker_label(speaker),
                     }
                 )
 
@@ -296,7 +326,7 @@ class Diarizer:
                         
                         if overlap_duration > max_overlap_duration:
                             max_overlap_duration = overlap_duration
-                            best_speaker = diar_speaker
+                            best_speaker = self._normalize_speaker_label(diar_speaker)
                 
                 # Create word segment with assigned speaker
                 result.append(DiarizedSegment(
@@ -329,11 +359,11 @@ class Diarizer:
         current = segments[0]
 
         for next_seg in segments[1:]:
-            # Merge if same speaker (not None) and adjacent (or very close)
+            # Merge if same speaker (not None) and gap < 0.5s (allows natural speech pauses)
             if (
                 current.speaker is not None
                 and current.speaker == next_seg.speaker
-                and abs(current.end - next_seg.start) < 0.01
+                and abs(current.end - next_seg.start) < 0.5
             ):
                 # Merge by extending current segment
                 current = DiarizedSegment(

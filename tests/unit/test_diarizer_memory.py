@@ -17,7 +17,6 @@ class TestDiarizerMemoryConfiguration:
         diarizer = Diarizer(
             model_path="data/models/speaker-diarization-community-1",
             require_cuda=False,
-            overlap_threshold=0.3,
             embedding_batch_size=16,
             segmentation_batch_size=8,
         )
@@ -37,7 +36,6 @@ class TestDiarizerMemoryConfiguration:
         diarizer = get_diarizer(
             model_path="data/models/speaker-diarization-community-1",
             require_cuda=False,
-            overlap_threshold=0.3,
             embedding_batch_size=32,
             segmentation_batch_size=16,
         )
@@ -130,7 +128,6 @@ class TestDiarizerMemoryIntegration:
         diarizer = get_diarizer(
             model_path="data/models/speaker-diarization-community-1",
             require_cuda=False,
-            overlap_threshold=0.4,
             embedding_batch_size=12,
             segmentation_batch_size=10,
         )
@@ -138,7 +135,6 @@ class TestDiarizerMemoryIntegration:
         assert diarizer is not None
         assert diarizer.embedding_batch_size == 12
         assert diarizer.segmentation_batch_size == 10
-        assert diarizer.overlap_threshold == 0.4
         assert diarizer.require_cuda is False
 
 

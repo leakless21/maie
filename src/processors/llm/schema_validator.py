@@ -132,7 +132,23 @@ def validate_llm_output(
         )
 
         # Then validate against schema using the consolidated utility
-        is_valid, validation_error = validate_json_schema(parsed_data, schema)
+        try:
+            is_valid, validation_error = validate_json_schema(parsed_data, schema)
+        except Exception as e:
+            # Handle unexpected errors during validation
+            error_msg = f"Unexpected validation error: {str(e)}"
+            logger.error(
+                "Unexpected validation error",
+                extra={
+                    "error_type": "unexpected_validation_error",
+                    "error_message": str(e),
+                    "raw_output": output.strip(),
+                    "output_preview": output_preview,
+                    "parsed_data": parsed_data,
+                },
+            )
+            return None, error_msg
+
         if not is_valid:
             # Enhanced logging for schema validation failures
             error_msg = f"Schema validation failed: {validation_error.get('error', 'Unknown validation error') if validation_error else 'Unknown validation error'}"

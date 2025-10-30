@@ -128,7 +128,7 @@ class TestCalculateMetrics:
 
         # RTF = 5.0 / 60.0 = 0.083
         expected_rtf = 5.0 / 60.0
-        assert abs(metrics["total_rtf"] - expected_rtf) < 0.01
+        assert abs(metrics["rtf"] - expected_rtf) < 0.01
 
     def test_rtf_handles_zero_audio_duration(self):
         """Test that zero audio duration doesn't cause division by zero."""

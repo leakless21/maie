@@ -86,11 +86,12 @@ def extract_validation_error(validation_error: ValidationError) -> Dict[str, Any
         ...     validate(instance=123, schema={"type": "string"})
         ... except ValidationError as e:
         ...     extract_validation_error(e)
-        {'error': "123 is not of type 'string'", 'path': [], 'schema_path': [], 'validator': 'type', 'validator_value': 'string', 'instance': 123, 'schema': {'type': 'string'}}
+        {'error': "123 is not of type 'string'", 'path': [], 'absolute_path': [], 'schema_path': [], 'validator': 'type', 'validator_value': 'string', 'instance': 123, 'schema': {'type': 'string'}}
     """
     return {
         "error": validation_error.message,
         "path": list(validation_error.absolute_path),
+        "absolute_path": list(validation_error.absolute_path),
         "schema_path": list(validation_error.schema_path),
         "validator": validation_error.validator,
         "validator_value": validation_error.validator_value,

@@ -297,6 +297,8 @@ class TestLLMIntegration:
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
         mock_model.generate.return_value = [mock_output]
+        # Add chat() method that returns a list for proper len() support
+        mock_model.chat.return_value = [mock_output]
 
         with patch("vllm.LLM") as mock_llm_class:
             mock_llm_class.return_value = mock_model
@@ -359,11 +361,19 @@ class TestLLMIntegration:
             outer.prompt_token_ids = [7, 8, 9]
             return [outer]
 
+        chat_outputs = [
+            make_output("First enhanced text"),
+            make_output("Second enhanced text"),
+            make_output("Third enhanced text"),
+        ]
+        
         mock_model.generate.side_effect = [
             make_output("First enhanced text"),
             make_output("Second enhanced text"),
             make_output("Third enhanced text"),
         ]
+        # Add chat() method with same outputs
+        mock_model.chat.side_effect = chat_outputs
 
         with patch("vllm.LLM") as mock_llm_class:
             mock_llm_class.return_value = mock_model
@@ -402,7 +412,7 @@ class TestLLMIntegration:
 
                         # Model should only be loaded once
                         assert mock_llm_class.call_count == 1
-                        assert mock_model.generate.call_count == 3
+                        assert mock_model.chat.call_count == 3
 
     @pytest.mark.integration
     def test_error_handling_and_recovery(self, tmp_path):
@@ -447,6 +457,8 @@ class TestLLMIntegration:
             mock_model = Mock()
             mock_model.get_default_sampling_params.return_value = Mock()
             mock_model.generate.side_effect = Exception("Generation error")
+            # Also mock chat to raise the same error
+            mock_model.chat.side_effect = Exception("Generation error")
 
             with patch("vllm.LLM") as mock_llm_class:
                 mock_llm_class.return_value = mock_model
@@ -614,7 +626,7 @@ class TestLLMIntegration:
         enhancement_template = templates_dir / "text_enhancement_v1.jinja"
         enhancement_template.write_text("{{ text_input }}")
 
-        # Mock model loading
+        # Mock model loading with proper list support for chat()
         inner = Mock()
         inner.text = "test"
         inner.token_ids = [1, 2]
@@ -626,6 +638,8 @@ class TestLLMIntegration:
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
         mock_model.generate.return_value = [outer]
+        # Mock chat() to return a list-like object for proper len() support
+        mock_model.chat.return_value = [outer]
 
         with patch("vllm.LLM") as mock_llm_class:
             mock_llm_class.return_value = mock_model

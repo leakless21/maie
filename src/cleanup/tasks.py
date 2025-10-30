@@ -7,6 +7,8 @@ replacing shell scripts with proper error handling and integration.
 
 from __future__ import annotations
 
+import shutil
+import time
 from pathlib import Path
 from typing import Any, Dict
 
@@ -202,8 +204,6 @@ def cleanup_logs(dry_run: bool = False) -> Dict[str, Any]:
 
     # Find log files older than retention period
     try:
-        import time
-
         cutoff_time = time.time() - (retention_days * 24 * 3600)
 
         for file_path in log_dir.glob("*.log*"):
@@ -269,7 +269,6 @@ def cleanup_cache(dry_run: bool = False) -> Dict[str, Any]:
     )
 
     from ..config.loader import settings
-    import time
 
     try:
         # Results DB connection (store results)
@@ -396,8 +395,6 @@ def disk_monitor() -> Dict[str, Any]:
     threshold_pct = settings.cleanup.disk_threshold_pct
 
     try:
-        import shutil
-
         disk_usage = shutil.disk_usage(check_dir)
         usage_pct = round((disk_usage.used / disk_usage.total) * 100, 2)
         usage_gb = round(disk_usage.used / (1024**3), 2)  # Convert to GB

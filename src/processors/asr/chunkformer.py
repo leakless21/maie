@@ -516,4 +516,11 @@ class ChunkFormerBackend(ASRBackend):
         except Exception:
             info["checkpoint_hash"] = ""
 
+        # Add ChunkFormer-specific architecture parameters for reproducibility
+        info["chunk_size"] = cfg.settings.chunkformer.chunkformer_chunk_size
+        info["left_context_size"] = cfg.settings.chunkformer.chunkformer_left_context_size
+        info["right_context_size"] = cfg.settings.chunkformer.chunkformer_right_context_size
+        info["total_batch_duration"] = cfg.settings.chunkformer.chunkformer_total_batch_duration
+        info["return_timestamps"] = cfg.settings.chunkformer.chunkformer_return_timestamps
+
         return info

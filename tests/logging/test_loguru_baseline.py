@@ -85,23 +85,27 @@ def test_load_model_generation_config_logs_and_parses(tmp_path, monkeypatch):
     assert any("Loaded model config" in r["message"] for r in dummy.records)
 
 
-def test_validate_llm_output_schema_failure_logs(monkeypatch):
-    dummy = DummyLogger()
-    monkeypatch.setattr(schema_validator, "logger", dummy)
-
-    schema = {
-        "type": "object",
-        "properties": {"title": {"type": "string"}},
-        "required": ["title"],
-    }
-    # Provide valid JSON that does not satisfy schema (missing 'title')
-    parsed, error = schema_validator.validate_llm_output('{"other": "x"}', schema)
-    assert parsed is None
-    assert error is not None and "Schema validation failed" in error
-    assert any(
-        r["level"] == "WARNING" and "Schema validation failed" in r["message"]
-        for r in dummy.records
-    )
+def test_validate_llm_output_schema_failure_logs(monkeypatch, caplog):
+    """Test that schema validation failures are logged properly."""
+    import logging
+    
+    # Set up logging to capture logs
+    with caplog.at_level(logging.ERROR):
+        schema = {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+            "required": ["title"],
+        }
+        # Provide valid JSON that does not satisfy schema (missing 'title')
+        parsed, error = schema_validator.validate_llm_output('{"other": "x"}', schema)
+        assert parsed is None
+        assert error is not None and "Schema validation failed" in error
+        
+        # Check that validation error was logged
+        assert any(
+            record.levelno == logging.ERROR and "Validation error:" in record.message
+            for record in caplog.records
+        )
 
 
 def test_apply_overrides_to_sampling_logs_on_missing_vllm(monkeypatch):

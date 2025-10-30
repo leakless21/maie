@@ -1022,7 +1022,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
                     # DEBUG: Log LLM enhancement input preview
                     enhancement_input_preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
-                    has_speaker_attribution = any(line.startswith(("S1:", "S2:", "S3:", "S4:", "S5:", "SPEAKER_")) for line in transcription.split('\n'))
+                    has_speaker_attribution = any(line.startswith(("S0:", "S1:", "S2:", "S3:", "S4:", "S5:")) for line in transcription.split('\n'))
                     logger.debug(
                         "LLM enhancement input preview",
                         task_id=job_id,

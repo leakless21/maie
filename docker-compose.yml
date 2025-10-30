@@ -9,18 +9,56 @@
 # - redis: Dual-DB Redis (queue + results with AOF persistence)
 # - rq-dashboard: Queue monitoring
 # - jaeger: Distributed tracing (optional)
+#
+# Usage:
+#   docker-compose up -d          # Start all services
+#   docker-compose logs -f api    # Follow API logs
+#   docker-compose down           # Stop all services
 
 version: "3.8"
+
+# Define networks for service isolation
+networks:
+  maie-internal:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.28.0.0/16
+
+  maie-external:
+    driver: bridge
+
+# Define named volumes for data persistence
+volumes:
+  redis_data:
+    driver: local
+  audio_data:
+    driver: local
+  model_data:
+    driver: local
+  jaeger_data:
+    driver: local
 
 services:
   # Redis - Job queue (DB 0) + Results store (DB 1)
   redis:
-    image: redis:7-alpine
+    image: redis:8.2-alpine
     container_name: maie-redis
     restart: unless-stopped
-    command: redis-server --appendonly yes --appendfsync everysec --databases 2
+    networks:
+      - maie-internal
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --databases 2
+      --maxmemory 2gb
+      --maxmemory-policy allkeys-lru
+      --save 900 1
+      --save 300 10
+      --save 60 10000
     volumes:
-      - ./data/redis:/data # AOF persistence for results DB
+      - redis_data:/data
     ports:
       - "6379:6379"
     healthcheck:
@@ -29,22 +67,43 @@ services:
       timeout: 5s
       retries: 5
       start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
 
   # API Server - Stateless HTTP endpoint
   api:
     build:
       context: .
       target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-1.0.0}
+    image: maie:${VERSION:-1.0.0}
     container_name: maie-api
     restart: unless-stopped
+    networks:
+      - maie-internal
+      - maie-external
     depends_on:
       redis:
         condition: service_healthy
     ports:
       - "8000:8000"
     volumes:
-      - ./data/audio:/data/audio:rw # Audio uploads
-      - ./templates:/app/templates:ro # Template schemas
+      - audio_data:/data/audio
+      - ./templates:/app/templates:ro
     environment:
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_DIR=/data/audio
@@ -53,7 +112,7 @@ services:
       - SECRET_API_KEY=${SECRET_API_KEY}
       - DEBUG=${DEBUG:-false}
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      # Loguru opt-in and configuration flags (Phase 1 - opt-in safe defaults)
+      # Loguru configuration
       - ENABLE_LOGURU=${ENABLE_LOGURU:-false}
       - LOG_CONSOLE_SERIALIZE=${LOG_CONSOLE_SERIALIZE:-true}
       - LOGURU_DIAGNOSE=${LOGURU_DIAGNOSE:-false}
@@ -83,21 +142,42 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    read_only: true
+    tmpfs:
+      - /tmp
+      - /app/.cache
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 4G
+        reservations:
+          cpus: "1.0"
+          memory: 2G
 
   # GPU Worker - Sequential AI model processing
   worker:
     build:
       context: .
       target: production
+      args:
+        BUILD_DATE: ${BUILD_DATE:-}
+        VCS_REF: ${VCS_REF:-}
+        VERSION: ${VERSION:-1.0.0}
+    image: maie:${VERSION:-1.0.0}
     container_name: maie-worker
     restart: unless-stopped
+    networks:
+      - maie-internal
     depends_on:
       redis:
         condition: service_healthy
     volumes:
-      - ./data/audio:/data/audio:ro # Audio files (read-only)
-      - ./data/models:/data/models:ro # AI models (read-only)
-      - ./templates:/app/templates:ro # Template schemas
+      - audio_data:/data/audio:ro
+      - model_data:/data/models:ro
+      - ./templates:/app/templates:ro
     environment:
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_DIR=/data/audio
@@ -114,7 +194,7 @@ services:
       - WHISPER_CONDITION_ON_PREVIOUS_TEXT=true
       - WHISPER_LANGUAGE=
       - OMP_NUM_THREADS=4
-      - LD_LIBRARY_PATH=/usr/local/lib/python3.11/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.11/site-packages/nvidia/cudnn/lib
+      - LD_LIBRARY_PATH=/usr/local/lib/python3.12/site-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/site-packages/nvidia/cudnn/lib
       - LLM_CONTEXT_LENGTH=${LLM_CONTEXT_LENGTH:-4096}
       - MAX_MODEL_LEN=${MAX_MODEL_LEN:-32768}
       - TEMPERATURE=${TEMPERATURE:-0.7}
@@ -122,7 +202,7 @@ services:
       - TOP_P=${TOP_P:-0.9}
       - GPU_MEMORY_UTILIZATION=${GPU_MEMORY_UTILIZATION:-0.9}
       - DEBUG=${DEBUG:-false}
-      # Loguru opt-in and configuration flags (Phase 1 - opt-in safe defaults)
+      # Loguru configuration
       - ENABLE_LOGURU=${ENABLE_LOGURU:-false}
       - LOG_CONSOLE_SERIALIZE=${LOG_CONSOLE_SERIALIZE:-true}
       - LOGURU_DIAGNOSE=${LOGURU_DIAGNOSE:-false}
@@ -135,9 +215,6 @@ services:
       - WORKER_NAME=maie-worker
       - JOB_TIMEOUT=600
       - RESULT_TTL=86400
-      - WHISPER_BEAM_SIZE=5
-      - WHISPER_VAD_FILTER=True
-      - WHISPER_COMPUTE_TYPE=int8_float16
       - LLM_MODEL_NAME=cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit
       - LLM_GPU_MEMORY_UTILIZATION=0.9
       - LLM_MAX_MODEL_LEN=32768
@@ -146,45 +223,81 @@ services:
       - LLM_TOP_K=20
       - LLM_MAX_TOKENS=4096
     command: ["pixi", "run", "python", "-m", "src.worker.main"]
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              device_ids: ["0"]
-              capabilities: [gpu]
     healthcheck:
       test:
         [
           "CMD",
           "python3",
           "-c",
-          "import torch; print('GPU available:', torch.cuda.is_available())",
+          "import torch; exit(0 if torch.cuda.is_available() else 1)",
         ]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          memory: 24G
+        reservations:
+          devices:
+            - driver: nvidia
+              device_ids: ["${GPU_DEVICE_ID:-0}"]
+              capabilities: [gpu]
+          memory: 16G
 
   # RQ Dashboard - Queue monitoring
   rq-dashboard:
     image: eoranged/rq-dashboard:latest
     container_name: maie-rq-dashboard
     restart: unless-stopped
+    networks:
+      - maie-internal
+      - maie-external
     depends_on:
-      - redis
+      redis:
+        condition: service_healthy
     ports:
       - "9181:9181"
     environment:
       - RQ_DASHBOARD_REDIS_URL=redis://redis:6379/0
       - RQ_DASHBOARD_POLL_INTERVAL=2000
     command: ["rq-dashboard", "-H", "redis", "-p", "9181", "-P", "6379"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:9181",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    security_opt:
+      - no-new-privileges:true
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
 
   # Jaeger - Distributed tracing (optional)
   jaeger:
     image: jaegertracing/all-in-one:latest
     container_name: maie-jaeger
     restart: unless-stopped
+    networks:
+      - maie-internal
+      - maie-external
     ports:
       - "16686:16686" # UI
       - "4318:4318" # OTLP HTTP
@@ -192,14 +305,18 @@ services:
     environment:
       - COLLECTOR_OTLP_ENABLED=true
     volumes:
-      - ./data/jaeger:/tmp/jaeger
-
-volumes:
-  redis_data:
-    driver: local
-  audio_data:
-    driver: local
-  model_data:
-    driver: local
-  template_data:
-    driver: local
+      - jaeger_data:/tmp/jaeger
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "wget",
+          "--no-verbose",
+          "--tries=1",
+          "--spider",
+          "http://localhost:16686",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
