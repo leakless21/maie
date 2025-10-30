@@ -190,12 +190,13 @@ X-API-Key: your_api_key_here
 
 **Form Parameters:**
 
-| Parameter     | Type   | Required    | Description                                                          |
-| ------------- | ------ | ----------- | -------------------------------------------------------------------- |
-| `file`        | binary | Yes         | Audio file to process                                                |
-| `features`    | array  | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
-| `template_id` | string | Conditional | Template ID for summary format (required if `summary` in features)   |
-| `asr_backend` | string | No          | ASR backend selection (default: `"chunkformer"`)                         |
+| Parameter            | Type    | Required    | Description                                                          |
+| -------------------- | ------- | ----------- | -------------------------------------------------------------------- |
+| `file`               | binary  | Yes         | Audio file to process                                                |
+| `features`           | array   | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
+| `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)   |
+| `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                     |
+| `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |                         |
 
 **Features Options:**
 
@@ -208,6 +209,10 @@ X-API-Key: your_api_key_here
 
 - `chunkformer` - ChunkFormer ASR model (default)
 - `whisper` - OpenAI Whisper model
+
+**Speaker Diarization:**
+
+When `enable_diarization=true`, the system will automatically identify and label different speakers in the audio using pyannote.audio. The diarization process runs after ASR transcription and segments the output by speaker boundaries. This is particularly useful for meetings, interviews, and multi-speaker content.
 
 #### Request Body Examples
 
@@ -243,6 +248,18 @@ curl -X POST 'http://localhost:8000/v1/process' \
   -F 'features=enhancement_metrics' \
   -F 'template_id=meeting_notes_v1' \
   -F 'asr_backend=chunkformer'
+```
+
+**With Speaker Diarization (Multi-speaker):**
+
+```bash
+curl -X POST 'http://localhost:8000/v1/process' \
+  -H 'X-API-Key: your_api_key_here' \
+  -F 'file=@meeting_recording.wav' \
+  -F 'features=clean_transcript' \
+  -F 'features=summary' \
+  -F 'template_id=meeting_notes_v1' \
+  -F 'enable_diarization=true'
 ```
 
 **Python Client Example:**

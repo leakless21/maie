@@ -3,7 +3,7 @@
 [![Phiên bản](https://img.shields.io/badge/version-1.0.0-blue.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12+-green.svg)]()
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)]()
-[![Bài kiểm tra](https://img.shields.io/badge/tests-70%2F70-green.svg)]()
+[![Bài kiểm tra](https://img.shields.io/badge/tests-880-green.svg)]()
 
 **AI C500 (Hệ thống Phân tích Âm thanh Thông minh)** là một giải pháp toàn diện, sẵn sàng cho doanh nghiệp, được thiết kế để chuyển đổi các tệp âm thanh phi cấu trúc thành dữ liệu có cấu trúc, thông minh và có thể hành động. Trong bối cảnh ngày càng nhiều thông tin được trao đổi qua âm thanh—từ các cuộc họp, phỏng vấn, đến các cuộc gọi hỗ trợ khách hàng—AI C500 cung cấp các công cụ mạnh mẽ để tự động hóa việc trích xuất thông tin chi tiết có giá trị.
 

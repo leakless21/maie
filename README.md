@@ -3,7 +3,7 @@
 [![Version](https://img.shields.io/badge/version-1.0.0-blue.svg)]()
 [![Python](https://img.shields.io/badge/python-3.12+-green.svg)]()
 [![Docker](https://img.shields.io/badge/docker-ready-blue.svg)]()
-[![Tests](https://img.shields.io/badge/tests-70%2F70-green.svg)]()
+[![Tests](https://img.shields.io/badge/tests-880-green.svg)]()
 
 A production-ready, on-premises audio processing system that provides comprehensive audio intelligence capabilities through a well-architected API designed for enterprise deployment.
 
@@ -15,10 +15,11 @@ MAIE (Modular Audio Intelligence Engine) is a sophisticated audio processing pla
 
 - **Multi-format Audio Support**: WAV, MP3, M4A, FLAC processing
 - **Dual ASR Backends**: Whisper and ChunkFormer for optimal accuracy
+- **Speaker Diarization**: Automatic speaker identification and segmentation
 - **Intelligent Summary**: Template-driven content summary
 - **GPU Acceleration**: Optimized for 16-24GB VRAM deployments
 - **Enterprise Ready**: Comprehensive monitoring, logging, and health checks
-- **Production Tested**: 70/70 test suite passing
+- **Production Tested**: 880/880 test suite passing
 
 ## ⚡ Quick Start
 
@@ -110,6 +111,7 @@ curl -X POST "http://localhost:8000/v1/process" \
 - **Dual ASR Backends**:
   - Whisper: Industry-standard speech recognition
   - ChunkFormer: Advanced long-form audio processing
+- **Speaker Diarization**: Automatic speaker identification with pyannote.audio for multi-speaker content
 - **LLM Integration**: VLLM-powered text enhancement and summary
 - **Template System**: Customizable output formats (meeting notes, interview transcripts, etc.)
 
@@ -246,6 +248,21 @@ curl -X POST "http://localhost:8000/v1/process" \
   -F "template_id=interview_transcript_v1" \
   -F "asr_backend=chunkformer"
 ```
+
+### Speaker Diarization (Multi-speaker Audio)
+
+```bash
+# Process meeting with speaker identification
+curl -X POST "http://localhost:8000/v1/process" \
+  -H "X-API-Key: your-api-key" \
+  -F "file=@meeting_recording.wav" \
+  -F "features=clean_transcript" \
+  -F "features=summary" \
+  -F "template_id=meeting_notes_v1" \
+  -F "enable_diarization=true"
+```
+
+The response will include speaker-segmented transcripts with speaker labels for each segment, enabling clear identification of different speakers in the audio.
 
 ### Batch Processing
 
