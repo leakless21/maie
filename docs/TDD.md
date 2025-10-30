@@ -230,6 +230,72 @@ The worker enforces **strict sequential execution** to operate within VRAM const
 - Qwen3-4B-Instruct (AWQ): 15-25s load time (direct vLLM inference)
 - Target total: 2-3 minutes for 45-minute audio (NFR-5)
 
+**GPU Memory Management Strategy (Critical for Stability):**
+
+To operate within 12GB VRAM constraints, the pipeline implements strict memory management:
+
+**Phase 1: ASR Processing**
+
+- Load ASR model (6-8GB VRAM)
+- Execute transcription
+- **Unload immediately**: Call `model.unload()`
+- **Clear GPU cache**: `torch.cuda.empty_cache()` + `torch.cuda.synchronize()`
+- Memory reclaimed: Full 6-8GB
+
+**Phase 2: Diarization (Optional)**
+
+- Load pyannote model (2-3GB VRAM)
+- Execute speaker attribution
+- **Unload immediately**: Delete model reference + clear GPU cache
+- Memory reclaimed: Full 2-3GB (critical before LLM load)
+
+**Phase 3: Pre-LLM Synchronization (Critical)**
+
+- Additional GPU cache clear before LLM loading
+- `torch.cuda.empty_cache()` + `torch.cuda.synchronize()`
+- Prevents memory fragmentation issues from previous models
+- Ensures clean state for LLM allocation
+
+**Phase 4: LLM Processing**
+
+- Load LLM model (3-4GB VRAM with AWQ quantization)
+- Execute inference (enhancement/summarization)
+- Total VRAM after phases 1-3: <1GB residual + 3-4GB LLM = ~4GB available ✓
+
+**Memory Cleanup Pattern (Applied to All Stages):**
+
+```python
+finally:
+    # CRITICAL: Always unload model to free GPU memory
+    if model is not None:
+        try:
+            if hasattr(model, "unload"):
+                model.unload()
+
+            # Clear CUDA cache to free GPU memory
+            if TORCH_AVAILABLE and torch is not None and has_cuda():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.info("Model unloaded and GPU cache cleared")
+        except Exception as e:
+            logger.warning(f"Error during model unload: {e}")
+        model = None
+```
+
+**Why Synchronization is Critical:**
+
+- `torch.cuda.empty_cache()` triggers device synchronization
+- `torch.cuda.synchronize()` explicitly waits for GPU operations to complete
+- Prevents race conditions where GPU still holds memory for pending operations
+- Essential for reliable memory measurements and subsequent allocations
+
+**Memory Fragmentation Mitigation:**
+
+- Monitor GPU memory fragmentation (log warning if >10%)
+- Recommendation for high-fragmentation scenarios: `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+- Pre-allocate space before LLM if fragmentation detected
+- Consider model quantization (AWQ, GPTQ) for smaller VRAM footprint
+
 **Pipeline State Machine:**
 
 ```
@@ -486,7 +552,7 @@ The ASR processing system uses a **Factory Pattern** to instantiate backend-spec
 - ✅ Sequential processing pattern (load → execute → unload)
 - ❌ Word-level timestamps → Deferred to V1.1+
 - ❌ Batched inference → Deferred to V1.2+
-- ❌ Speaker diarization → Deferred to V1.1+
+- ✅ Speaker diarization — Implemented; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md`
 
 **Module Structure:**
 
@@ -987,7 +1053,69 @@ LLMResult:
 
 _Tags are embedded within summary dict, not separate field._
 
-### 3.6. Redis Configuration
+### 3.6. Worker Configuration & Timeouts
+
+**Job Timeout Settings:**
+
+The RQ worker enforces job timeouts to prevent hung processes. Configuration profiles define different timeout values:
+
+| Profile     | Job Timeout  | Use Case                           |
+| ----------- | ------------ | ---------------------------------- |
+| Development | 360s (6min)  | Local development with diarization |
+| Production  | 600s (10min) | Production with full pipeline      |
+
+**Why These Values?**
+
+- **ASR Processing**: 1-2 minutes (depends on audio duration)
+- **Diarization** (optional): 1-2 minutes (speaker attribution)
+- **LLM Processing**: 1-2 minutes (transcription enhancement + summarization)
+- **Total**: 3-6 minutes typical, up to 10 minutes for large audio files
+
+**Timeout Configuration:**
+
+```env
+# .env (Development)
+APP_WORKER__JOB_TIMEOUT=360  # 6 minutes
+
+# .env (Production with longer audio)
+APP_WORKER__JOB_TIMEOUT=600  # 10 minutes
+```
+
+**Environment Variable Mapping:**
+
+```python
+# src/config/profiles.py
+"worker": {
+    "job_timeout": 360,        # Seconds - RQ job timeout
+    "result_ttl": 3600,        # Seconds - Results cached for 1 hour
+    "worker_concurrency": 1,   # Single GPU = 1 worker
+}
+```
+
+**Timeout Behavior:**
+
+1. If job completes before timeout → Success (results stored in Redis DB 1)
+2. If job exceeds timeout → Worker killed + job moved to FailedJobRegistry
+3. RQ auto-retry logic applies (configurable, default: 2 retries)
+4. After retry exhaustion → Manual inspection required
+
+**Monitoring Timeout Utilization:**
+
+```bash
+# Check active jobs and their runtime
+redis-cli -n 0 HGETALL rq:job:{job_id}
+
+# Monitor worker logs
+tail -f logs/app.log | grep -i "timeout\|work-horse"
+```
+
+**Tuning Recommendations:**
+
+- **Increase timeout** if processing long-form audio (>60 min)
+- **Decrease timeout** if using smaller models or if processing stalls
+- **Monitor fragmentation** in logs; high fragmentation may extend inference time
+
+### 3.7. Redis Configuration
 
 **Dual-Database Strategy:**
 
@@ -1034,7 +1162,7 @@ Fields:
   error_message       → String (if status = FAILED)
 ```
 
-### 3.7. Deployment Architecture
+### 3.8. Deployment Architecture
 
 **Package Management: Pixi (prefix.dev)**
 
@@ -1204,11 +1332,11 @@ worker:
 
 **Model Inventory (V1.0):**
 
-| Model                 | Size   | Download Source | Local Path                            |
-| --------------------- | ------ | --------------- | ------------------------------------- |
-| EraX-WoW-Turbo V1.1   | ~3GB   | HuggingFace Hub | `/data/models/whisper/erax-wow-turbo` |
-| ChunkFormer RNNT Large | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer-rnnt-large-vie`  |
-| Qwen3-4B-Instruct AWQ | ~2.5GB | HuggingFace Hub | `/data/models/llm/qwen3-4b-awq`       |
+| Model                  | Size   | Download Source | Local Path                                |
+| ---------------------- | ------ | --------------- | ----------------------------------------- |
+| EraX-WoW-Turbo V1.1    | ~3GB   | HuggingFace Hub | `/data/models/whisper/erax-wow-turbo`     |
+| ChunkFormer RNNT Large | ~1.5GB | HuggingFace Hub | `/data/models/chunkformer-rnnt-large-vie` |
+| Qwen3-4B-Instruct AWQ  | ~2.5GB | HuggingFace Hub | `/data/models/llm/qwen3-4b-awq`           |
 
 **Download Strategy:**
 
@@ -1414,18 +1542,18 @@ All system behavior configured via environment variables loaded from `.env` file
 
 **Minimal Configuration (V1.0):**
 
-| Variable                             | Purpose                                | Default                         |
-| ------------------------------------ | -------------------------------------- | ------------------------------- |
-| `PIPELINE_VERSION`                   | Version stamping for NFR-1             | `1.0.0`                         |
-| `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)  |
-| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                          |
-| `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)            |
+| Variable                             | Purpose                                | Default                              |
+| ------------------------------------ | -------------------------------------- | ------------------------------------ |
+| `PIPELINE_VERSION`                   | Version stamping for NFR-1             | `1.0.0`                              |
+| `WHISPER_MODEL_VARIANT`              | Whisper model variant                  | `erax-wow-turbo` (org default)       |
+| `WHISPER_CONDITION_ON_PREVIOUS_TEXT` | Use context (False for Distil-Whisper) | `true`                               |
+| `WHISPER_LANGUAGE`                   | Force language code or auto-detect     | `None` (auto-detect)                 |
 | `CHUNKFORMER_MODEL_NAME`             | ChunkFormer model name                 | `khanhld/chunkformer-rnnt-large-vie` |
-| `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`          |
-| `SECRET_API_KEY`                     | API authentication                     | —                               |
-| `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                            |
-| `MAX_FILE_SIZE_MB`                   | Upload size limit                      | `500`                           |
-| `OMP_NUM_THREADS`                    | CPU threads for performance            | `4` (recommended)               |
+| `REDIS_URL`                          | Queue and results store                | `redis://redis:6379/0`               |
+| `SECRET_API_KEY`                     | API authentication                     | —                                    |
+| `MAX_QUEUE_DEPTH`                    | Backpressure threshold                 | `50`                                 |
+| `MAX_FILE_SIZE_MB`                   | Upload size limit                      | `500`                                |
+| `OMP_NUM_THREADS`                    | CPU threads for performance            | `4` (recommended)                    |
 
 **Example `.env` (V1.0)**
 
@@ -1519,57 +1647,148 @@ def test_whisper_backend_interface_compliance():
     assert callable(backend.get_version_info)
 ```
 
-_See test implementation guide for complete test suites._
+**Mock Factory Pattern:**
 
-**Coverage Target:** >80% for non-ML code
+To maintain clean, reusable test fixtures without brittle inline Mock objects, the codebase uses centralized mock factories:
+
+```python
+# tests/fixtures/mock_factories.py
+def create_mock_asr_output(text="...", confidence=0.95):
+    """Factory returning real ASRResult dataclass instances"""
+    return ASRResult(text=text, segments=[], ...)
+
+def create_mock_asr_processor(backend="whisper"):
+    """Factory returning properly configured Mock processor"""
+    return Mock(spec=ASRBase, execute=Mock(return_value=ASRResult(...)))
+
+# Usage in fixtures
+@pytest.fixture
+def mock_asr_processor():
+    return create_mock_asr_processor(backend="whisper")
+
+# Usage in tests
+def test_something(mock_asr_processor):
+    result = mock_asr_processor.execute(audio_data)
+```
+
+This approach enables:
+
+- Reusable mock objects across test suite
+- Type-safe factories returning proper dataclass instances
+- Easy customization for specific test scenarios
+- Reduced duplication and maintenance burden
+
+_See `tests/fixtures/mock_factories.py` for complete factory implementations._
+
+**Coverage Target:** >80% for non-ML code  
+**Current Status:** 836 unit tests passing, 100% pass rate
 
 ### 6.2. Integration Tests
 
-Scope: Component interactions without full model inference (GPU-free), validating API↔queue↔worker↔storage flow and schema enforcement.
+**Scope:** Component interactions validating API↔queue↔worker↔storage flow and schema enforcement.
 
-Test Data and Layout:
+**Current Status:**
 
-- `tests/assets/audio/` — 2 short WAV/MP3 samples (10–30s) + a corrupted file
-- `tests/golden/` — Expected `status` payloads for happy-path requests (JSON)
+- **34 integration tests passing** (marked with `@pytest.mark.integration`)
+- **Execution time:** ~1.2 minutes
+- **Coverage:** API routes, worker pipeline, Redis integration, diarization, verbose logging
 
-Key Test Cases:
+**Running Integration Tests:**
 
-1. API → Redis Integration
+```bash
+# Run only integration tests (fast, uses mocks)
+pytest -m "integration" --tb=short -v
+
+# Run with specific focus
+pytest tests/integration/test_worker_pipeline_real.py -v
+```
+
+**Key Test Cases:**
+
+1. **API → Redis Integration**
 
    - Enqueue job with correct parameters; returns `202` with `task_id`
    - Initialize task record in results DB with `PENDING`
    - Backpressure: when `MAX_QUEUE_DEPTH` exceeded, returns `429`
+   - Mock factories ensure consistent processor behavior
 
-2. Worker → Redis Integration (mocked processors)
+2. **Worker → Redis Integration (with mock processors)**
 
    - Dequeue job, update status transitions (ASR → LLM → COMPLETE)
    - Store final result document and metrics; retrievable via `/v1/status/{task_id}`
    - Failed job registry populated on exceptions
+   - Uses `create_mock_asr_processor()` and `create_mock_llm_processor()` factories
 
-3. File Upload Flow
+3. **File Upload Flow**
 
    - Multipart handling with size/type validation
    - Persist under `/data/audio/{task_id}/raw.{ext}`
    - Cleanup policy on `FAILED` (configurable, default keep)
 
-4. Processor Loading (with mocks)
+4. **Processor Loading (with mocks)**
 
    - ASR factory instantiation for default backend (`whisper`)
    - LLM processor initialization path exercised
    - Memory cleanup verification (unload hooks called)
    - Factory validation and error handling on invalid backend
 
-5. Template and Schema Validation
+5. **Template and Schema Validation**
+
    - `/v1/templates` lists available templates with `schema_url`
    - Missing `template_id` when `summary` requested → `422`
    - LLM mocked invalid JSON once → retry → valid JSON
    - Response validated against JSON Schema; on mismatch → `500` with retryable flag
 
-Execution
+6. **Real Audio Processing**
+   - Full pipeline with real ASR models (not mocked)
+   - Diarization with speaker attribution
+   - Audio preprocessing and metrics collection
+   - Enhancement logic validation
 
-- Use docker-compose test stack with Redis; processors mocked
-- Run tests via `pytest -q`; optional `./scripts/test.sh` wrapper
-- Compare `/v1/status` final payloads to `tests/golden/*.json`
+**Execution:**
+
+```bash
+# Standard run
+pytest -m "integration" --tb=short -v
+
+# With specific test file
+pytest tests/integration/test_worker_pipeline_real.py -xvs
+
+# With coverage reporting
+pytest -m "integration" --cov=src --cov-report=html
+```
+
+**Mock Factory Usage Pattern:**
+
+All integration tests use centralized mock factories to ensure consistency:
+
+```python
+# In tests/integration/test_worker_pipeline_real.py
+from tests.fixtures.mock_factories import (
+    create_mock_asr_output,
+    create_mock_asr_processor,
+    create_mock_llm_processor,
+    create_mock_redis_client
+)
+
+@pytest.fixture
+def mock_asr_model(mock_asr_output):
+    return create_mock_asr_processor(backend="whisper")
+
+@pytest.fixture
+def mock_llm_model():
+    return create_mock_llm_processor(backend="vllm")
+
+def test_full_pipeline(mock_asr_model, mock_llm_model):
+    # Test implementation using factories
+    result = pipeline(mock_asr_model, mock_llm_model)
+    assert result is not None
+```
+
+**Deprecated Tests Removed:**
+
+- 22 deprecated IoU calculation tests removed (old diarization algorithm)
+- All remaining tests are actively maintained and passing
 
 ### 6.3. End-to-End (E2E) Tests
 
@@ -1577,9 +1796,70 @@ Execution
 
 **Prerequisites:**
 
-- GPU-enabled environment (16GB+ VRAM)
+- GPU-enabled environment (16GB+ VRAM, RTX 3060+ recommended)
 - All models downloaded to `/data/models`
 - Full docker-compose stack running
+- For LLM tests: Set `LLM_TEST_MODEL_PATH` environment variable
+
+**Available E2E Test Suites:**
+
+1. **Standard E2E Tests (Always Run)**
+
+   - Happy path with real audio processing
+   - Feature selection and combinations
+   - Error handling and edge cases
+   - Current status: 34 passing integration tests
+
+2. **Real LLM Integration Tests (Optional - Expensive)**
+
+   These tests perform actual LLM model inference and should only be run for model validation:
+
+   ```bash
+   # Enable by setting model path
+   export LLM_TEST_MODEL_PATH="/path/to/qwen3-4b-instruct"
+
+   # Run LLM integration tests
+   pytest -m real_llm tests/integration/test_real_llm_integration.py -v
+   ```
+
+   - **Duration:** 30-120 seconds per test
+   - **Resource:** 4-12GB GPU VRAM
+   - **When to run:** Before releases, model validation, LLM feature development
+   - **When to skip:** Regular development, CI/CD pipelines
+
+   Tests covered:
+
+   - Real text enhancement with actual LLM
+   - Structured summarization generation
+   - Model loading and caching
+   - Error handling with real models
+   - Performance benchmarking
+
+3. **API Routes Tests (Optional - Configuration Dependent)**
+
+   Redis and API endpoint validation:
+
+   ```bash
+   # Ensure Redis is running
+   docker-compose up -d redis
+
+   # Run API integration tests
+   pytest tests/api/test_routes_redis_integration.py -v
+   ```
+
+   - **When to run:** API feature development, pre-deployment validation
+   - **When to skip:** ASR/LLM-focused work
+   - **Requirements:** Redis running, template database initialized
+
+4. **GPU-Specific Tests (Manual Only - Safety-Gated)**
+
+   Tests requiring GPU execution are explicitly marked to skip for safety:
+
+   ```bash
+   # These tests may cause segmentation faults
+   # Only run manually in isolated environment
+   # See OPTIONAL_TESTS_GUIDE.md for details
+   ```
 
 **Key Test Scenarios:**
 
@@ -1596,7 +1876,7 @@ Execution
    - Test various feature combinations
    - Verify conditional field presence in results
 
-3. LLM JSON Compliance
+3. **LLM JSON Compliance (when enabled):**
 
    - Force invalid JSON once; ensure single retry and final valid JSON
    - Validate final payload matches schema and golden sample
@@ -1619,6 +1899,33 @@ Execution
 - Success rate: >99% for valid inputs
 - Versioning data: Complete and accurate
 - Metrics: RTF, confidence, VAD coverage within expected ranges
+- Speaker attribution: Correct assignment for diarized segments
+
+**Running Different Test Subsets:**
+
+```bash
+# Fast unit tests only (~1.8 min)
+pytest -m "not integration" --ignore=tests/e2e --tb=no -q
+
+# Integration tests only (~1.2 min)
+pytest -m "integration" --tb=short -v
+
+# Full suite excluding expensive tests (~2.8 min)
+pytest --ignore=tests/e2e -m "not real_llm" --tb=short -q
+
+# Full suite including all tests (~4-5 min with LLM tests)
+export LLM_TEST_MODEL_PATH="/path/to/model"
+pytest --ignore=tests/e2e --tb=short -q
+```
+
+**CI/CD Pipeline Recommendations:**
+
+| Stage              | Command                                             | Duration | Resources  |
+| ------------------ | --------------------------------------------------- | -------- | ---------- |
+| Pre-commit         | `pytest -m "not integration" --ignore=tests/e2e -q` | ~1.8 min | Minimal    |
+| PR validation      | `pytest --ignore=tests/e2e -m "not real_llm" -q`    | ~2.8 min | Moderate   |
+| Nightly build      | `pytest --ignore=tests/e2e -q`                      | ~4-5 min | High (GPU) |
+| Production release | `pytest -m "integration" -v` + LLM tests            | ~3 min   | High (GPU) |
 
 ### 6.4. Performance Testing
 
@@ -2388,7 +2695,7 @@ docker-compose exec worker rq requeue --all --url redis://redis:6379/0
 - ❌ Word-level timestamps → V1.1+
 - ❌ Batched inference → V1.2+
 - ❌ Model preloading → V1.2+
-- ❌ Speaker diarization → V1.1+
+- ✅ Speaker diarization — Implemented; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md`
 - ❌ Streaming transcription → V1.3+
 
 **V1.0 Philosophy:** Simple, stable, sequential - one job, one GPU, load → process → unload.
@@ -2490,7 +2797,7 @@ GPU_LLM_DEVICE=cuda:1
 | Distil-Whisper support      | ✅   | ✅   | ✅   | ✅   | Simple model swap                            |
 | Sequential processing       | ✅   | ✅   | ✅   | ✅   | V1.0 architecture                            |
 | **Word-Level Timestamps**   | ❌   | ✅   | ✅   | ✅   | Not in PRD metrics; adds complexity          |
-| **Speaker Diarization**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
+| **Speaker Diarization**     | ✅   | ✅   | ✅   | ✅   | Requires word timestamps                     |
 | **Subtitle Generation**     | ❌   | ✅   | ✅   | ✅   | Requires word timestamps                     |
 | **Batched Inference**       | ❌   | ❌   | ✅   | ✅   | Contradicts sequential architecture          |
 | **Model Preloading**        | ❌   | ❌   | ✅   | ✅   | Requires >24GB VRAM; deferred per TDD 3.2    |

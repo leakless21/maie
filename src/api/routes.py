@@ -42,6 +42,8 @@ from src.api.schemas import (
 from src.api.dependencies import api_key_guard
 from src.config import settings
 from src.config.logging import get_module_logger, correlation_id as _cid_var
+from src.utils.sanitization import sanitize_filename
+from src.utils.json_utils import safe_json_loads
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -70,39 +72,6 @@ def _patch_logging_queue_listener() -> None:
 
 
 _patch_logging_queue_listener()
-
-
-def sanitize_filename(filename: str) -> str:
-    """
-    Sanitize filename to prevent path traversal attacks.
-
-    Removes directory separators, parent directory references, and other
-    potentially malicious characters.
-
-    Args:
-        filename: Original filename from user input
-
-    Returns:
-        Sanitized filename safe for file system operations
-    """
-    if not filename:
-        return "unnamed"
-
-    # Remove path components - just keep the base filename
-    filename = Path(filename).name
-
-    # Remove any remaining path traversal attempts
-    filename = filename.replace("..", "").replace("/", "").replace("\\", "")
-
-    # Remove potentially dangerous characters but keep extension
-    # Allow: letters, numbers, dots, dashes, underscores
-    filename = re.sub(r"[^a-zA-Z0-9._-]", "_", filename)
-
-    # Ensure filename isn't empty after sanitization
-    if not filename or filename == ".":
-        return "unnamed"
-
-    return filename
 
 
 def check_queue_depth() -> bool:
@@ -232,6 +201,7 @@ def enqueue_job(
 ) -> None:
     """Enqueue processing job to Redis queue (DB 0)."""
     from src.api.dependencies import get_rq_queue
+
     queue = get_rq_queue()
 
     job_func = "src.worker.pipeline.process_audio_task"
@@ -242,6 +212,7 @@ def enqueue_job(
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
         "asr_backend": request_params.get("asr_backend", "chunkformer"),
+        "enable_diarization": request_params.get("enable_diarization", False),
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_db": settings.redis.results_db,
@@ -285,6 +256,10 @@ class ProcessController(Controller):
             "- **asr_backend** (optional, string): ASR backend selection\n"
             "  - Available: `whisper` (default), `chunkformer`\n"
             "  - Use `/v1/models` to get available backends\n\n"
+            "- **enable_diarization** (optional, boolean): Enable speaker diarization\n"
+            "  - Default: `false`\n"
+            "  - When enabled, identifies and labels different speakers in the audio\n"
+            "  - Requires word-level timestamps from ASR (automatically enabled with Whisper)\n\n"
             "**Examples:**\n\n"
             "Basic processing (default settings):\n"
             "```bash\n"
@@ -313,6 +288,17 @@ class ProcessController(Controller):
             "  -F 'features=enhancement_metrics' \\\n"
             "  -F 'template_id=meeting_notes_v1' \\\n"
             "  -F 'asr_backend=chunkformer'\n"
+            "```\n\n"
+            "With speaker diarization enabled:\n"
+            "```bash\n"
+            "curl -X POST 'http://localhost:8000/v1/process' \\\n"
+            "  -H 'X-API-Key: <your_api_key>' \\\n"
+            "  -F 'file=@/path/to/meeting.wav' \\\n"
+            "  -F 'features=clean_transcript' \\\n"
+            "  -F 'features=summary' \\\n"
+            "  -F 'template_id=meeting_notes_v1' \\\n"
+            "  -F 'asr_backend=whisper' \\\n"
+            "  -F 'enable_diarization=true'\n"
             "```\n\n"
             "**Response:**\n\n"
             "Returns HTTP 202 Accepted with a task ID for tracking the processing status.\n\n"
@@ -345,18 +331,14 @@ class ProcessController(Controller):
         """
         prepared_data = dict(data)
         features_value = prepared_data.get("features")
+        # Use consolidated JSON utility for safe JSON parsing with fallback handling
         if isinstance(features_value, str):
             # Handle JSON string format
             if features_value.startswith("[") and features_value.endswith("]"):
-                try:
-                    import json
-
-                    parsed = json.loads(features_value)
-                    if isinstance(parsed, list):
-                        prepared_data["features"] = parsed
-                    else:
-                        prepared_data["features"] = [features_value]
-                except json.JSONDecodeError:
+                parsed = safe_json_loads(features_value, default=[features_value])
+                if isinstance(parsed, list):
+                    prepared_data["features"] = parsed
+                else:
                     prepared_data["features"] = [features_value]
             else:
                 prepared_data["features"] = [features_value]
@@ -367,14 +349,9 @@ class ProcessController(Controller):
             and features_value[0].startswith("[")
         ):
             # Handle case where multipart parser wraps JSON string in a list
-            try:
-                import json
-
-                parsed = json.loads(features_value[0])
-                if isinstance(parsed, list):
-                    prepared_data["features"] = parsed
-            except json.JSONDecodeError:
-                pass
+            parsed = safe_json_loads(features_value[0], default=None)
+            if parsed is not None and isinstance(parsed, list):
+                prepared_data["features"] = parsed
         try:
             payload = ProcessRequestSchema.model_validate(prepared_data)
         except ValidationError as exc:
@@ -414,10 +391,8 @@ class ProcessController(Controller):
             and features_raw.startswith("[")
             and features_raw.endswith("]")
         ):
-            try:
-                features_raw = json.loads(features_raw)
-            except json.JSONDecodeError:
-                features_raw = [features_raw]
+            # Use consolidated JSON utility for safe parsing with a sensible fallback
+            features_raw = safe_json_loads(features_raw, default=[features_raw])
         elif not isinstance(features_raw, list):
             features_raw = [features_raw] if features_raw else []
 
@@ -550,6 +525,7 @@ class ProcessController(Controller):
             "template_id": template_id,
             "file_path": str(file_path),
             "asr_backend": asr_backend,
+            "enable_diarization": payload.enable_diarization,
         }
         await create_task_in_redis(task_id, request_params)
 
@@ -571,13 +547,10 @@ async def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
         if not task_data:
             return None
 
-        # Deserialize JSON fields
+        # Deserialize JSON fields using consolidated utils
         for field in ["features", "results", "metrics", "versions"]:
             if field in task_data and task_data[field]:
-                try:
-                    task_data[field] = json.loads(task_data[field])
-                except (json.JSONDecodeError, TypeError):
-                    pass
+                task_data[field] = safe_json_loads(task_data[field], default=None)
 
         return task_data
     finally:

@@ -42,6 +42,8 @@ from src.api.errors import (
 )
 from src.api.schemas import TaskStatus
 from src.config import settings
+from src.utils.device import has_cuda, select_device
+from src.utils.sanitization import sanitize_metadata
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -49,71 +51,6 @@ logger = get_module_logger(__name__)
 # =============================================================================
 # Helper Functions
 # =============================================================================
-
-
-def _sanitize_metadata(value: Any, _seen: Optional[set[int]] = None) -> Any:
-    """
-    Convert metadata into JSON-serializable primitives.
-
-    Handles nested dicts/lists and falls back to string representation for
-    complex objects (e.g., MagicMock instances in tests).
-
-    Args:
-        value: The value to sanitize
-        _seen: Internal set to track object IDs and prevent recursion
-
-    Returns:
-        JSON-serializable representation of the value
-    """
-    # Initialize recursion tracking
-    if _seen is None:
-        _seen = set()
-
-    # Handle MagicMock and other test objects early
-    if hasattr(value, "_mock_name") or hasattr(value, "_mock_parent"):
-        return f"[Mock object: {type(value).__name__}]"
-
-    # Check for recursion using object identity
-    obj_id = id(value)
-    if obj_id in _seen:
-        return f"[Recursive reference to {type(value).__name__}]"
-
-    # Add current object to seen set
-    _seen.add(obj_id)
-
-    try:
-        if isinstance(value, dict):
-            return {str(k): _sanitize_metadata(v, _seen) for k, v in value.items()}
-        if isinstance(value, (list, tuple, set)):
-            return [_sanitize_metadata(v, _seen) for v in value]
-        if isinstance(value, (str, int, float, bool)) or value is None:
-            return value
-        if hasattr(value, "dict") and callable(value.dict):
-            try:
-                return _sanitize_metadata(value.dict(), _seen)
-            except (AttributeError, TypeError, ValueError) as e:
-                logger.debug(
-                    "Failed to serialize object with dict() method",
-                    error=str(e),
-                    object_type=type(value).__name__,
-                )
-                return str(value)
-        if hasattr(value, "__iter__") and not isinstance(
-            value, (bytes, bytearray, str)
-        ):
-            try:
-                return [_sanitize_metadata(v, _seen) for v in list(value)]
-            except (TypeError, ValueError) as e:
-                logger.debug(
-                    "Failed to iterate over object",
-                    error=str(e),
-                    object_type=type(value).__name__,
-                )
-                return str(value)
-        return str(value)
-    finally:
-        # Clean up tracking for this branch
-        _seen.discard(obj_id)
 
 
 def _update_status(
@@ -142,7 +79,7 @@ def _update_status(
         # Serialize complex objects (dicts, lists) to JSON strings
         for key, value in details.items():
             if isinstance(value, (dict, list)):
-                update_data[key] = json.dumps(_sanitize_metadata(value))
+                update_data[key] = json.dumps(sanitize_metadata(value))
             else:
                 update_data[key] = value
 
@@ -235,7 +172,11 @@ def get_version_metadata(
     """
     # Build ASR metadata variants - ensure all required fields are strings (not None)
     asr_backend = {
-        "name": (asr_result_metadata.get("name") or "whisper")
+        "name": (
+            asr_result_metadata.get("model_name")
+            or asr_result_metadata.get("name")
+            or "whisper"
+        )
         if asr_result_metadata
         else "unknown",
         "model_variant": (asr_result_metadata.get("model_variant") or "unknown")
@@ -416,6 +357,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     features = task_params.get("features", ["clean_transcript", "summary"])
     template_id = task_params.get("template_id")
     config = task_params.get("config", {})
+    enable_diarization = task_params.get("enable_diarization", False)
 
     # Connect to Redis results database (DB 1 per TDD.md section 3.6)
     redis_host = task_params.get("redis_host", "localhost")
@@ -536,6 +478,18 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 sample_rate=metadata.get("sample_rate"),
                 channels=metadata.get("channels"),
                 normalized=metadata.get("normalized_path") is not None,
+            )
+
+            # DEBUG: Log audio metadata for ASR input
+            logger.debug(
+                "ASR input audio metadata",
+                task_id=job_id,
+                sample_rate=metadata.get("sample_rate"),
+                duration=metadata.get("duration"),
+                channels=metadata.get("channels"),
+                format=metadata.get("format"),
+                normalized_path=metadata.get("normalized_path"),
+                processing_audio_path=processing_audio_path,
             )
         except ValueError as e:
             # Audio validation errors (too short, etc.)
@@ -766,6 +720,21 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     processing_time=processing_time,
                 )
 
+                # DEBUG: Log ASR output preview
+                transcript_preview = (
+                    result.text[:200] + "..." if len(result.text) > 200 else result.text
+                )
+                logger.debug(
+                    "ASR output preview",
+                    task_id=job_id,
+                    transcript_preview=transcript_preview,
+                    segment_count=segment_count,
+                    language=result.language,
+                    confidence=result.confidence,
+                    char_count=char_count,
+                    word_count=word_count,
+                )
+
                 # Phase 1: Return full ASRResult object directly from backend
                 # Backends (ChunkFormer, Whisper) already return proper ASRResult with segments
                 asr_result = result
@@ -828,11 +797,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         asr_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if (
-                        TORCH_AVAILABLE
-                        and torch is not None
-                        and torch.cuda.is_available()
-                    ):
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
                         torch.cuda.empty_cache()
                         logger.info("ASR model unloaded and GPU cache cleared")
                     else:
@@ -844,6 +809,211 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         "Unexpected error during ASR model unload", error=str(e)
                     )
                 asr_model = None
+
+        # =====================================================================
+        # Stage 2.5: DIARIZATION - Speaker attribution (optional enhancement)
+        # =====================================================================
+        diarizer = None  # Track loaded diarizer model for cleanup
+        try:
+            # Apply diarization if enabled globally AND requested for this task
+            if settings.diarization.enabled and enable_diarization:
+                logger.info("Starting speaker diarization")
+                try:
+                    from src.processors.audio.diarizer import get_diarizer
+
+                    # Get diarizer instance (returns None gracefully if unavailable)
+                    diarizer = get_diarizer(
+                        model_path=settings.diarization.model_path,
+                        require_cuda=settings.diarization.require_cuda,
+                        embedding_batch_size=settings.diarization.embedding_batch_size,
+                        segmentation_batch_size=settings.diarization.segmentation_batch_size,
+                    )
+
+                    if diarizer:
+                        # Run diarization on the processed audio
+                        diar_spans = diarizer.diarize(
+                            processing_audio_path, num_speakers=None
+                        )
+
+                        if diar_spans:
+                            # Convert ASR segments to DiarizedSegment format
+                            asr_segs_for_diar = []
+                            for seg in asr_result.segments:
+                                asr_segs_for_diar.append(
+                                    type(
+                                        "ASRSeg",
+                                        (),
+                                        {
+                                            "start": seg.get("start", seg.start)
+                                            if hasattr(seg, "start")
+                                            else seg.get("start"),
+                                            "end": seg.get("end", seg.end)
+                                            if hasattr(seg, "end")
+                                            else seg.get("end"),
+                                            "text": seg.get("text", seg.text)
+                                            if hasattr(seg, "text")
+                                            else seg.get("text"),
+                                            "words": seg.get("words")
+                                            if isinstance(seg, dict)
+                                            else getattr(seg, "words", None),
+                                        },
+                                    )()
+                                )
+
+                            # Check if word timestamps are available
+                            has_word_timestamps = diarizer.has_word_timestamps(
+                                asr_segs_for_diar
+                            )
+
+                            if has_word_timestamps:
+                                logger.info(
+                                    "Word timestamps available - using WhisperX-style assignment"
+                                )
+                                # Use WhisperX-style word-level assignment
+                                diarized_segs = (
+                                    diarizer.assign_word_speakers_whisperx_style(
+                                        diar_spans, asr_segs_for_diar
+                                    )
+                                )
+
+                                # Merge adjacent same-speaker segments
+                                merged_segs = diarizer.merge_adjacent_same_speaker(
+                                    diarized_segs
+                                )
+
+                                # Update ASR result segments with speaker info
+                                updated_segments = []
+                                for seg in merged_segs:
+                                    updated_segments.append(
+                                        {
+                                            "start": seg.start,
+                                            "end": seg.end,
+                                            "text": seg.text,
+                                            "speaker": seg.speaker,
+                                        }
+                                    )
+
+                                asr_result.segments = updated_segments
+
+                                # Render speaker-attributed transcript for LLM input
+                                try:
+                                    from src.processors.prompt.diarization import (
+                                        render_speaker_attributed_transcript,
+                                    )
+
+                                    speaker_transcript = (
+                                        render_speaker_attributed_transcript(
+                                            updated_segments
+                                        )
+                                    )
+
+                                    # Use speaker-attributed transcript for LLM
+                                    transcription = speaker_transcript
+                                    logger.info(
+                                        "Using speaker-attributed transcript for LLM",
+                                        transcript_length=len(speaker_transcript),
+                                        speaker_count=len(
+                                            set(
+                                                s.get("speaker")
+                                                for s in updated_segments
+                                                if s.get("speaker")
+                                            )
+                                        ),
+                                    )
+
+                                    # DEBUG: Log diarization output preview
+                                    speaker_transcript_preview = (
+                                        speaker_transcript[:200] + "..."
+                                        if len(speaker_transcript) > 200
+                                        else speaker_transcript
+                                    )
+                                    speaker_count = len(
+                                        set(
+                                            s.get("speaker")
+                                            for s in updated_segments
+                                            if s.get("speaker")
+                                        )
+                                    )
+                                    logger.debug(
+                                        "Diarization output preview",
+                                        task_id=job_id,
+                                        speaker_transcript_preview=speaker_transcript_preview,
+                                        speaker_count=speaker_count,
+                                        segment_count=len(updated_segments),
+                                        transcript_length=len(speaker_transcript),
+                                    )
+                                except Exception as render_error:
+                                    logger.warning(
+                                        "Failed to render speaker-attributed transcript; using plain transcript",
+                                        error=str(render_error),
+                                    )
+
+                                logger.info(
+                                    "Diarization applied successfully",
+                                    segment_count=len(updated_segments),
+                                    speaker_count=len(
+                                        set(
+                                            s.get("speaker")
+                                            for s in updated_segments
+                                            if s.get("speaker")
+                                        )
+                                    ),
+                                )
+                            else:
+                                logger.warning(
+                                    "No word timestamps available - skipping diarization"
+                                )
+                                # Keep using the original plain transcript without speaker attribution
+                                logger.info(
+                                    "Continuing with plain transcript (no speaker labels)",
+                                    transcript_length=len(transcription),
+                                )
+                        else:
+                            logger.warning(
+                                "Diarization returned no spans; continuing without speaker info"
+                            )
+                    else:
+                        logger.warning("Diarizer unavailable; skipping diarization")
+
+                except Exception as diar_error:
+                    logger.warning(
+                        "Diarization failed; continuing without speaker info",
+                        error=str(diar_error),
+                    )
+            else:
+                logger.debug("Diarization not enabled; skipping speaker attribution")
+
+        except Exception as diar_stage_error:
+            logger.warning(
+                "Unexpected error in diarization stage; continuing pipeline",
+                error=str(diar_stage_error),
+            )
+        finally:
+            # CRITICAL: Always unload diarization model to free GPU memory
+            if diarizer is not None:
+                try:
+                    logger.info("Unloading diarization model")
+                    # Pyannote models don't have an explicit unload method,
+                    # but we can delete the model reference and clear GPU cache
+                    if diarizer.model is not None:
+                        del diarizer.model
+                        diarizer.model = None
+
+                    # Critical: Clear CUDA cache to free GPU memory
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        torch.cuda.empty_cache()
+                        logger.info("Diarization model unloaded and GPU cache cleared")
+                    else:
+                        logger.info("Diarization model unloaded")
+                except (AttributeError, RuntimeError, OSError) as e:
+                    logger.warning(
+                        "Error during diarization model unload", error=str(e)
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Unexpected error during diarization model unload", error=str(e)
+                    )
+                diarizer = None
 
         # =====================================================================
         # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summary)
@@ -874,7 +1044,35 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     details={"transcription_length": 0},
                 )
 
+            # Preflight: only proceed if LLM-related features are requested
+            wants_llm = "clean_transcript" in features or "summary" in features
+            if wants_llm and not has_cuda():
+                # Fail gracefully with clear, actionable message
+                raise LLMProcessingError(
+                    message=(
+                        "CUDA is not available. GPU is required for LLM enhancement/summary."
+                    ),
+                    details={
+                        "requested_features": features,
+                        "selected_device": select_device(),
+                        "hint": (
+                            "Install NVIDIA drivers + CUDA, set CUDA_VISIBLE_DEVICES, or run without "
+                            "'clean_transcript'/'summary' features to perform ASR-only."
+                        ),
+                    },
+                )
+
             logger.info("Loading LLM model", task_id=job_id)
+
+            # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
+            # This prevents fragmentation issues from previous models
+            if TORCH_AVAILABLE and torch is not None and has_cuda():
+                try:
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()  # Wait for all operations to complete
+                    logger.info("GPU cache cleared before LLM load")
+                except Exception as cache_error:
+                    logger.warning(f"Could not clear GPU cache: {cache_error}")
 
             # Step 3a: Load LLM model using LLMProcessor directly
             from src.processors.llm import LLMProcessor
@@ -901,6 +1099,25 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
                     logger.info(
                         f"=== LLM INPUT: Text enhancement | {input_char_count:,} chars | {input_word_count:,} words ===",
+                        char_count=input_char_count,
+                        word_count=input_word_count,
+                    )
+
+                    # DEBUG: Log LLM enhancement input preview
+                    enhancement_input_preview = (
+                        transcription[:200] + "..."
+                        if len(transcription) > 200
+                        else transcription
+                    )
+                    has_speaker_attribution = any(
+                        line.startswith(("S0:", "S1:", "S2:", "S3:", "S4:", "S5:"))
+                        for line in transcription.split("\n")
+                    )
+                    logger.debug(
+                        "LLM enhancement input preview",
+                        task_id=job_id,
+                        enhancement_input_preview=enhancement_input_preview,
+                        has_speaker_attribution=has_speaker_attribution,
                         char_count=input_char_count,
                         word_count=input_word_count,
                     )
@@ -966,6 +1183,21 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         word_count=transcript_word_count,
                         preview=clean_transcript[:200]
                         + ("..." if len(clean_transcript) > 200 else ""),
+                    )
+
+                    # DEBUG: Log LLM summarization input preview
+                    summary_input_preview = (
+                        clean_transcript[:200] + "..."
+                        if len(clean_transcript) > 200
+                        else clean_transcript
+                    )
+                    logger.debug(
+                        "LLM summarization input preview",
+                        task_id=job_id,
+                        summary_input_preview=summary_input_preview,
+                        template_id=template_id,
+                        char_count=transcript_char_count,
+                        word_count=transcript_word_count,
                     )
 
                     summary_result = llm_model.generate_summary(
@@ -1036,11 +1268,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         llm_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if (
-                        TORCH_AVAILABLE
-                        and torch is not None
-                        and torch.cuda.is_available()
-                    ):
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
                         torch.cuda.empty_cache()
                         logger.info("LLM model unloaded and GPU cache cleared")
                     else:

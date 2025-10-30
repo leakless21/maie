@@ -38,7 +38,7 @@ Architecture Overview: The system uses a three-tier architecture with API server
 
   - ❌ Word-level timestamps → V1.1+ (not required by FR-5 metrics; for timeline/subtitle features)
   - ❌ Batched inference → V1.2+ (contradicts sequential architecture; requires model preloading)
-  - ❌ Speaker diarization → V1.1+ (requires additional pyannote.audio integration)
+  - ✅ Speaker diarization — Implemented; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md` for implementation details and verification.
   - ❌ Streaming transcription → V1.3+ (requires WebSocket API and architectural changes)
 
 - FR-3: Text Enhancement — Text enhancement is an optional pipeline step. It MUST be bypassed when the selected ASR backend provides adequate punctuation and casing (e.g., `whisper` with `erax-wow-turbo` variant). When required (with backends that lack punctuation; not applicable to V1.0 default), the pipeline will use the LLM for punctuation and capitalization correction. Note: ChunkFormer may require text enhancement depending on model configuration.
@@ -181,7 +181,7 @@ V1.0 transcription provides **segment-level** data only:
 **Deferred to Future Releases:**
 
 - ❌ Word-level timestamps → V1.1+ (for timeline/subtitle features)
-- ❌ Speaker labels → V1.1+ (requires diarization)
+  - ✅ Speaker labels — Supported when diarization is enabled; see `docs/archive/diarization/DIARIZATION_FINAL_STATUS.md` for details.
 - ❌ Word-level confidence → V1.1+ (requires word timestamps)
 
 The above response contract is complete for V1.0 requirements. Word-level data structures will be added in V1.1 when timeline and subtitle features are implemented.

@@ -29,6 +29,7 @@ from typing import Any, Dict, Optional
 from src import config as cfg
 from src.config.logging import get_module_logger
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
+from src.utils.device import ensure_cuda_available
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -184,18 +185,15 @@ class WhisperBackend(ASRBackend):
         # Check GPU availability and raise error if not available
         if device == "auto" or device.startswith("cuda"):
             try:
-                import torch as _torch
-
-                if not _torch.cuda.is_available():
-                    raise RuntimeError(
-                        "CUDA is not available. GPU is required for offline deployment."
-                    )
-            except ImportError:
+                import torch as _torch  # type: ignore  # noqa: F401
+            except ImportError as exc:
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for offline deployment."
-                )
-            except (AttributeError, RuntimeError, OSError) as e:
-                raise RuntimeError(f"Failed to check CUDA availability: {e}") from e
+                ) from exc
+
+            ensure_cuda_available(
+                "CUDA is not available. GPU is required for offline deployment."
+            )
 
         # Ensure device is set to cuda if auto was specified
         if device == "auto":
@@ -349,7 +347,7 @@ class WhisperBackend(ASRBackend):
                 "on",
             }
         else:
-            word_timestamps = getattr(cfg.settings.asr, "whisper_word_timestamps", True)
+            word_timestamps = getattr(cfg.settings.asr, "whisper_word_timestamps", False)
         transcribe_kwargs["word_timestamps"] = word_timestamps
 
         # Apply VAD filter settings (env overrides config)
@@ -446,6 +444,17 @@ class WhisperBackend(ASRBackend):
                 transcribe_kwargs,
             )
 
+            # DEBUG: Log ASR input metadata
+            import os
+            if os.path.exists(audio_path):
+                file_size = os.path.getsize(audio_path)
+                logger.debug(
+                    "ASR input metadata",
+                    audio_path=audio_path,
+                    file_size_bytes=file_size,
+                    transcribe_kwargs=transcribe_kwargs,
+                )
+
             # faster_whisper returns (segments_generator, info)
             # segments is a generator, not a list
             segments_generator, info = self.model.transcribe(
@@ -462,6 +471,20 @@ class WhisperBackend(ASRBackend):
                     "end": segment.end,
                     "text": segment.text,
                 }
+                
+                # Capture word-level timestamps if available
+                if hasattr(segment, 'words') and segment.words:
+                    words_list = []
+                    for word in segment.words:
+                        word_dict = {
+                            "start": float(word.start),
+                            "end": float(word.end),
+                            "word": word.word,
+                            "probability": float(word.probability),
+                        }
+                        words_list.append(word_dict)
+                    segment_dict["words"] = words_list
+                
                 segments_dict.append(segment_dict)
                 text_parts.append(segment.text)
 
@@ -474,6 +497,19 @@ class WhisperBackend(ASRBackend):
 
             # Note: faster-whisper doesn't provide a single confidence score
             # Individual segments may have their own scores
+            
+            # DEBUG: Log ASR output preview
+            text_preview = text[:200] + "..." if len(text) > 200 else text
+            logger.debug(
+                "ASR output preview",
+                text_preview=text_preview,
+                segment_count=len(segments_dict),
+                language=language,
+                duration=duration,
+                char_count=len(text),
+                word_count=len(text.split()) if text else 0,
+            )
+            
             return ASRResult(
                 text=text,
                 segments=segments_dict,

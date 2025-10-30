@@ -21,7 +21,7 @@ class TestEnhancedSchemaValidationLogging:
             # Should return None and error
             assert data is None
             assert error is not None
-            assert "Invalid JSON format" in error
+            assert "JSON decode error" in error
 
             # Verify enhanced logging was called with detailed context
             mock_logger.error.assert_called_once()
@@ -84,7 +84,7 @@ class TestEnhancedSchemaValidationLogging:
             # Should return None and error
             assert data is None
             assert error is not None
-            assert "Invalid JSON format" in error
+            assert "JSON decode error" in error
 
             # Verify empty output is logged properly
             mock_logger.error.assert_called_once()
@@ -106,7 +106,7 @@ class TestEnhancedSchemaValidationLogging:
             # Should return None and error
             assert data is None
             assert error is not None
-            assert "Invalid JSON format" in error
+            assert "JSON decode error" in error
 
             # Verify output preview is truncated
             mock_logger.error.assert_called_once()
@@ -141,7 +141,7 @@ class TestEnhancedSchemaValidationLogging:
 
         # Mock jsonschema.validate to raise an unexpected error
         with patch(
-            "src.processors.llm.schema_validator.jsonschema.validate"
+            "src.utils.json_utils.validate"
         ) as mock_validate:
             mock_validate.side_effect = Exception("Unexpected error")
 

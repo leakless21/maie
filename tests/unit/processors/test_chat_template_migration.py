@@ -1,8 +1,8 @@
 """
-Tests for chat template formatted Jinja templates.
+Tests for Jinja template rendering.
 
-This tests that our templates now output properly formatted chat prompts
-with Qwen3's special tokens.
+This tests that our templates output proper system prompts for use with
+the LLM processor's OpenAI-format message building.
 """
 
 import json
@@ -14,8 +14,8 @@ from src.processors.prompt.renderer import PromptRenderer
 from src.processors.prompt.template_loader import TemplateLoader
 
 
-class TestChatFormattedTemplates:
-    """Test that templates output chat-formatted prompts."""
+class TestTemplateRendering:
+    """Test that templates output proper system prompts."""
 
     @pytest.fixture
     def renderer(self):
@@ -23,8 +23,8 @@ class TestChatFormattedTemplates:
         loader = TemplateLoader(settings.paths.templates_dir / "prompts")
         return PromptRenderer(loader)
 
-    def test_meeting_notes_template_has_chat_tokens(self, renderer):
-        """Test meeting_notes_v1 template outputs Qwen3 chat format."""
+    def test_meeting_notes_template_renders_system_prompt(self, renderer):
+        """Test meeting_notes_v1 template outputs proper system prompt."""
         schema = {"type": "object", "properties": {}}
         transcript = "test meeting transcript"
 
@@ -34,18 +34,19 @@ class TestChatFormattedTemplates:
             schema=json.dumps(schema, indent=2),
         )
 
-        # Check for Qwen3 special tokens
-        assert "<|im_start|>system" in output
-        assert "<|im_end|>" in output
-        assert "<|im_start|>user" in output
-        assert "<|im_start|>assistant" in output
+        # Check that it's a plain system prompt (no ChatML tokens)
+        assert "<|im_start|>system" not in output
+        assert "<|im_end|>" not in output
+        assert "<|im_start|>user" not in output
+        assert "<|im_start|>assistant" not in output
 
-        # Check content is present
-        assert transcript in output
+        # Check content is present (system prompt content, not transcript)
         assert "meeting analyst" in output.lower()
+        assert "vietnamese" in output.lower()
+        assert "json" in output.lower()
 
-    def test_generic_summary_template_has_chat_tokens(self, renderer):
-        """Test generic_summary_v1 template outputs chat format."""
+    def test_generic_summary_template_renders_system_prompt(self, renderer):
+        """Test generic_summary_v1 template outputs proper system prompt."""
         schema = {"type": "object", "properties": {}}
         transcript = "test content to summarize"
 
@@ -55,18 +56,19 @@ class TestChatFormattedTemplates:
             schema=json.dumps(schema, indent=2),
         )
 
-        # Check for chat tokens
-        assert "<|im_start|>system" in output
-        assert "<|im_end|>" in output
-        assert "<|im_start|>user" in output
-        assert "<|im_start|>assistant" in output
+        # Check that it's a plain system prompt (no ChatML tokens)
+        assert "<|im_start|>system" not in output
+        assert "<|im_end|>" not in output
+        assert "<|im_start|>user" not in output
+        assert "<|im_start|>assistant" not in output
 
-        # Check content
-        assert transcript in output
-        assert "vietnamese content analyst" in output.lower()
+        # Check content (system prompt content, not transcript)
+        assert "content analyst" in output.lower()
+        assert "vietnamese" in output.lower()
+        assert "json" in output.lower()
 
-    def test_interview_template_has_chat_tokens(self, renderer):
-        """Test interview_transcript_v1 template outputs chat format."""
+    def test_interview_template_renders_system_prompt(self, renderer):
+        """Test interview_transcript_v1 template outputs proper system prompt."""
         schema = {"type": "object", "properties": {}}
         transcript = "test interview transcript"
 
@@ -76,34 +78,35 @@ class TestChatFormattedTemplates:
             schema=json.dumps(schema, indent=2),
         )
 
-        # Check for chat tokens
-        assert "<|im_start|>system" in output
-        assert "<|im_end|>" in output
-        assert "<|im_start|>user" in output
-        assert "<|im_start|>assistant" in output
+        # Check that it's a plain system prompt (no ChatML tokens)
+        assert "<|im_start|>system" not in output
+        assert "<|im_end|>" not in output
+        assert "<|im_start|>user" not in output
+        assert "<|im_start|>assistant" not in output
 
-        # Check content
-        assert transcript in output
+        # Check content (system prompt content, not transcript)
         assert "interview analyst" in output.lower()
+        assert "vietnamese" in output.lower()
+        assert "json" in output.lower()
 
-    def test_text_enhancement_template_has_chat_tokens(self, renderer):
-        """Test text_enhancement_v1 template outputs chat format."""
+    def test_text_enhancement_template_renders_system_prompt(self, renderer):
+        """Test text_enhancement_v1 template outputs proper system prompt."""
         text_input = "test text to enhance"
 
         output = renderer.render("text_enhancement_v1", text_input=text_input)
 
-        # Check for chat tokens
-        assert "<|im_start|>system" in output
-        assert "<|im_end|>" in output
-        assert "<|im_start|>user" in output
-        assert "<|im_start|>assistant" in output
+        # Check that it's a plain system prompt (no ChatML tokens)
+        assert "<|im_start|>system" not in output
+        assert "<|im_end|>" not in output
+        assert "<|im_start|>user" not in output
+        assert "<|im_start|>assistant" not in output
 
-        # Check content
-        assert text_input in output
+        # Check content (system prompt content, not text_input)
         assert "proofreader" in output.lower()
+        assert "vietnamese" in output.lower()
 
-    def test_templates_end_with_assistant_token(self, renderer):
-        """Test all templates end with assistant start token for generation."""
+    def test_templates_are_plain_system_prompts(self, renderer):
+        """Test all templates output plain system prompts without chat tokens."""
         schema = {"type": "object"}
         transcript = "test"
 
@@ -126,13 +129,18 @@ class TestChatFormattedTemplates:
         for template_id, params in templates:
             output = renderer.render(template_id, **params)
 
-            # Should end with assistant start token (ready for generation)
-            assert output.strip().endswith("<|im_start|>assistant"), (
-                f"Template {template_id} should end with assistant token"
+            # Should be plain text without ChatML tokens
+            assert "<|im_start|>" not in output, (
+                f"Template {template_id} should not contain ChatML tokens"
             )
+            assert "<|im_end|>" not in output, (
+                f"Template {template_id} should not contain ChatML tokens"
+            )
+            # Should contain system prompt content (not the input transcript)
+            assert "vietnamese" in output.lower()
 
-    def test_templates_have_proper_structure(self, renderer):
-        """Test templates have proper system/user/assistant structure."""
+    def test_templates_contain_expected_content(self, renderer):
+        """Test templates contain expected instructional content."""
         schema = {"type": "object"}
         transcript = "test content"
 
@@ -140,14 +148,11 @@ class TestChatFormattedTemplates:
             "meeting_notes_v1", transcript=transcript, schema=json.dumps(schema)
         )
 
-        # Check structure order
-        system_pos = output.find("<|im_start|>system")
-        user_pos = output.find("<|im_start|>user")
-        assistant_pos = output.find("<|im_start|>assistant")
-
-        assert system_pos < user_pos < assistant_pos, (
-            "Template should have system -> user -> assistant order"
-        )
+        # Check that template contains expected instructional content
+        assert "vietnamese" in output.lower()
+        assert "json" in output.lower()
+        assert "schema" in output.lower()
+        assert "meeting analyst" in output.lower()
 
     def test_templates_preserve_vietnamese_text(self, renderer):
         """Test templates properly handle Vietnamese characters."""
@@ -155,9 +160,10 @@ class TestChatFormattedTemplates:
 
         output = renderer.render("text_enhancement_v1", text_input=vietnamese_text)
 
-        # Check Vietnamese text is preserved
-        assert vietnamese_text in output
-        # Check no encoding issues
+        # Check Vietnamese text is preserved in template content
+        assert "vietnamese" in output.lower()
+        assert "proofreader" in output.lower()
+        # Check no encoding issues in template content
         assert "?" not in vietnamese_text.replace(
             "?", ""
         )  # Original has no question marks we didn't add
@@ -176,10 +182,11 @@ class TestChatFormattedTemplates:
             schema=json.dumps(schema, indent=2),
         )
 
-        # Check schema content is mentioned in output (in system message)
+        # Check schema content is mentioned in output
         assert "object" in output.lower()
-        # The schema variable should be rendered in the template
-        assert transcript in output
+        assert "title" in output.lower()
+        assert "summary" in output.lower()
+        assert "schema" in output.lower()
 
 
 class TestTemplateBackwardCompatibility:

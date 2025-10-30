@@ -83,6 +83,13 @@ class ProcessRequestSchema(BaseModel):
             "enum": ["whisper", "chunkformer"],
         },
     )
+    enable_diarization: bool = Field(
+        default=False,
+        description="Enable speaker diarization to identify and label different speakers in the audio. When enabled, requires word-level timestamps from ASR.",
+        json_schema_extra={
+            "examples": [True, False],
+        },
+    )
 
     @field_validator("features", mode="before")
     @classmethod

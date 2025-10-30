@@ -217,11 +217,23 @@ class TestLLMProcessorTokenizerIntegration:
         mock_tokenizer = Mock()
         mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
 
-        # Mock generation
-        mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
-        mock_model.generate.return_value = [mock_output]
+        # Mock generation output with proper structure
+        mock_output_text = Mock()
+        mock_output_text.text = "generated text"
+        mock_output_text.token_ids = [1, 2, 3, 4, 5]
+        mock_output_text.finish_reason = "length"
+        
+        mock_completion = Mock()
+        mock_completion.outputs = [mock_output_text]
+        mock_completion.prompt_token_ids = [1, 2, 3]
+        
+        # Make outputs a real list to support len() and indexing
+        outputs_list = [mock_completion]
+        
+        # Configure mock methods
+        mock_model.generate.return_value = outputs_list
+        mock_model.chat.return_value = outputs_list
+        mock_model.get_default_sampling_params.return_value = None
 
         processor = LLMProcessor()
         processor.model = mock_model
@@ -241,10 +253,24 @@ class TestLLMProcessorTokenizerIntegration:
         """Test that execute skips dynamic calculation when no tokenizer."""
         # Mock model without tokenizer
         mock_model = Mock()
-        mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
-        mock_model.generate.return_value = [mock_output]
+        
+        # Mock generation output with proper structure
+        mock_output_text = Mock()
+        mock_output_text.text = "generated text"
+        mock_output_text.token_ids = [1, 2, 3, 4, 5]
+        mock_output_text.finish_reason = "length"
+        
+        mock_completion = Mock()
+        mock_completion.outputs = [mock_output_text]
+        mock_completion.prompt_token_ids = [1, 2, 3]
+        
+        # Make outputs a real list to support len() and indexing
+        outputs_list = [mock_completion]
+        
+        mock_model.generate.return_value = outputs_list
+        # Add chat() method that returns list
+        mock_model.chat.return_value = outputs_list
+        mock_model.get_default_sampling_params.return_value = None
 
         processor = LLMProcessor()
         processor.model = mock_model
@@ -264,11 +290,23 @@ class TestLLMProcessorTokenizerIntegration:
         mock_tokenizer.apply_chat_template.return_value = "formatted chat prompt"
         mock_tokenizer.encode.return_value = [1, 2, 3, 4, 5]
 
-        # Mock generation
-        mock_output = Mock()
-        mock_output.outputs = [Mock()]
-        mock_output.outputs[0].text = "generated text"
-        mock_model.generate.return_value = [mock_output]
+        # Mock generation output with proper structure
+        mock_output_text = Mock()
+        mock_output_text.text = "generated text"
+        mock_output_text.token_ids = [1, 2, 3, 4, 5]
+        mock_output_text.finish_reason = "length"
+        
+        mock_completion = Mock()
+        mock_completion.outputs = [mock_output_text]
+        mock_completion.prompt_token_ids = [1, 2, 3]
+        
+        # Make outputs a real list to support len() and indexing
+        outputs_list = [mock_completion]
+
+        mock_model.generate.return_value = outputs_list
+        # Add chat() method that returns list
+        mock_model.chat.return_value = outputs_list
+        mock_model.get_default_sampling_params.return_value = None
 
         processor = LLMProcessor()
         processor.model = mock_model
@@ -277,12 +315,11 @@ class TestLLMProcessorTokenizerIntegration:
 
         # Test with conversation-like input
         conversation_input = "user: Hello\nassistant: Hi there"
-        processor.execute(conversation_input, task="enhancement")
+        result = processor.execute(conversation_input, task="enhancement")
 
-        # Should have called generate with formatted prompt
-        mock_model.generate.assert_called_once()
-        call_args = mock_model.generate.call_args
-        assert "formatted chat prompt" in str(call_args)
+        # Enhancement task uses chat() API
+        mock_model.chat.assert_called_once()
+        assert result.text == "generated text"
 
 
 class TestEdgeCases:

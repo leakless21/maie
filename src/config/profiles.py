@@ -25,7 +25,7 @@ DEVELOPMENT_PROFILE: ProfileData = {
     },
     "worker": {
         "worker_name": "maie-worker-dev",
-        "job_timeout": 300,
+        "job_timeout": 360,  # 6 minutes - reasonable for ASR + diarization + LLM
         "result_ttl": 3600,
         "worker_concurrency": 1,
         "worker_prefetch_multiplier": 2,
@@ -51,6 +51,9 @@ DEVELOPMENT_PROFILE: ProfileData = {
     },
     "features": {
         "enable_enhancement": False,
+    },
+    "diarization": {
+        "enabled": True,
     },
 }
 

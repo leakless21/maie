@@ -167,7 +167,7 @@ class TestValidateLLMOutput:
         data, error = validate_llm_output(output, schema)
 
         assert data is None
-        assert "Invalid JSON format" in error
+        assert "JSON decode error" in error
 
     def test_validate_schema_mismatch(self):
         """Test validation of output that doesn't match schema."""
@@ -305,7 +305,7 @@ class TestExtractValidationErrors:
         except ValidationError as e:
             error_info = extract_validation_errors(e)
 
-            assert "message" in error_info
+            assert "error" in error_info
             assert "path" in error_info
             assert "absolute_path" in error_info
             assert "schema_path" in error_info

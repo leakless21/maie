@@ -26,6 +26,7 @@ os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
 from src.config import configure_logging, get_logger  # noqa: E402
 from src.processors.llm import LLMProcessor  # noqa: E402
+from src.utils.device import ensure_cuda_available  # noqa: E402
 
 
 def estimate_tokens(text: str) -> int:
@@ -111,21 +112,22 @@ def main() -> int:
 
     # Check CUDA availability
     try:
-        import torch
-
-        if not torch.cuda.is_available():
-            logger.error("CUDA is not available. GPU is required for vLLM.")
-            print(
-                json.dumps(
-                    {
-                        "error": "gpu_required",
-                        "message": "CUDA not available; vLLM requires GPU",
-                    }
-                )
-            )
-            return 2
+        import torch  # type: ignore  # noqa: F401
     except ImportError:
         logger.error("PyTorch is not installed.")
+        return 2
+    try:
+        ensure_cuda_available("CUDA is not available. GPU is required for vLLM.")
+    except RuntimeError as exc:
+        logger.error(str(exc))
+        print(
+            json.dumps(
+                {
+                    "error": "gpu_required",
+                    "message": "CUDA not available; vLLM requires GPU",
+                }
+            )
+        )
         return 2
 
     # Build kwargs

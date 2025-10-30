@@ -149,3 +149,51 @@ def test_results_schema_smoke():
         raw_transcript="raw", clean_transcript="clean", summary={"k": "v"}
     )
     assert r.clean_transcript == "clean"
+
+
+def test_enable_diarization_defaults_to_false():
+    """RED: ProcessRequestSchema.enable_diarization defaults to False."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features=[schemas.Feature.RAW_TRANSCRIPT],
+    )
+    assert req.enable_diarization is False
+
+
+def test_enable_diarization_accepts_true():
+    """RED: ProcessRequestSchema.enable_diarization can be set to True."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features=[schemas.Feature.RAW_TRANSCRIPT],
+        enable_diarization=True,
+    )
+    assert req.enable_diarization is True
+
+
+def test_enable_diarization_accepts_false_explicitly():
+    """RED: ProcessRequestSchema.enable_diarization can be explicitly set to False."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features=[schemas.Feature.RAW_TRANSCRIPT],
+        enable_diarization=False,
+    )
+    assert req.enable_diarization is False
+
+
+def test_enable_diarization_validates_boolean_type():
+    """RED: ProcessRequestSchema.enable_diarization coerces string 'yes' to True."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features=[schemas.Feature.RAW_TRANSCRIPT],
+        enable_diarization="yes",  # Pydantic coerces to True
+    )
+    # Pydantic coerces truthy strings to True
+    assert req.enable_diarization is True
+
+    # Test that invalid types like dict raise ValidationError
+    with pytest.raises(ValidationError):
+        schemas.ProcessRequestSchema(
+            file="audio.wav",
+            features=[schemas.Feature.RAW_TRANSCRIPT],
+            enable_diarization={"invalid": "type"},
+        )

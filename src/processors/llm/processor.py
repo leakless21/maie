@@ -25,6 +25,8 @@ from src.tooling.vllm_utils import (
     calculate_checkpoint_hash,
     get_model_info,
 )
+from src.utils.device import ensure_cuda_available, has_cuda
+from src.utils.json_utils import safe_json_loads
 
 from .schema_validator import (
     load_template_schema,
@@ -139,22 +141,22 @@ class LLMProcessor(LLMBackend):
         try:
             # Enforce GPU-only usage in all environments for vLLM
             try:
-                import torch as _torch  # type: ignore
-
-                if not _torch.cuda.is_available():
-                    from os import getenv as _getenv
-
-                    raise RuntimeError(
-                        "CUDA is not available. GPU is required for vLLM. "
-                        f"CUDA_VISIBLE_DEVICES={_getenv('CUDA_VISIBLE_DEVICES')!r}"
-                    )
+                import torch as _torch  # type: ignore  # noqa: F401
             except ImportError as _imp_err:
                 raise RuntimeError(
                     "PyTorch is not installed. GPU is required for vLLM."
                 ) from _imp_err
 
+            from os import getenv as _getenv
+
+            ensure_cuda_available(
+                "CUDA is not available. GPU is required for vLLM. "
+                f"CUDA_VISIBLE_DEVICES={_getenv('CUDA_VISIBLE_DEVICES')!r}"
+            )
+
             # Disable vLLM telemetry before importing
             import os
+
             os.environ["VLLM_NO_USAGE_STATS"] = "1"
             os.environ["DO_NOT_TRACK"] = "1"
 
@@ -241,6 +243,18 @@ class LLMProcessor(LLMBackend):
 
             self._model_loaded = True
             logger.info(f"LLM model loaded successfully: {model_name}")
+
+            # DEBUG: Log model configuration details
+            from src.utils.device import select_device
+            device = select_device()
+            logger.debug(
+                "LLM model configuration",
+                model_name=model_name,
+                checkpoint_hash=self.checkpoint_hash,
+                quantization=quantization_method,
+                device=device,
+                model_path=str(model_path),
+            )
 
             # NOTE: Tokenizer initialization is deferred to avoid blocking issues
             # with vLLM V1 engine's get_tokenizer() in multi-process mode.
@@ -338,6 +352,17 @@ class LLMProcessor(LLMBackend):
         logger.info(f"First 200 chars of text: {text[:200]}")
         task = kwargs.get("task", "general")
         retry_hint = kwargs.pop("retry_hint", None)  # Extract retry hint if provided
+
+        # DEBUG: Log LLM input preview
+        input_preview = text[:200] + "..." if len(text) > 200 else text
+        logger.debug(
+            "LLM input preview",
+            task=task,
+            input_preview=input_preview,
+            char_count=len(text),
+            word_count=len(text.split()) if text else 0,
+            kwargs=kwargs,
+        )
 
         # Load model if not already loaded
         if not self._model_loaded:
@@ -447,12 +472,11 @@ class LLMProcessor(LLMBackend):
                 except Exception as e:
                     logger.warning(f"Failed to set up guided decoding: {e}")
         elif task == "enhancement":
-            # Handle enhancement task with template rendering (chat format)
+            # Handle enhancement task with chat API (matching summary pattern)
             try:
-                final_prompt = self.prompt_renderer.render(
-                    "text_enhancement_v1", text_input=text
-                )
-                logger.debug("Rendered enhancement prompt with chat template")
+                # Render system prompt (contains instructions and examples)
+                system_prompt = self.prompt_renderer.render("text_enhancement_v1")
+                logger.debug("Rendered enhancement system prompt")
             except Exception as e:
                 logger.error(f"Failed to render enhancement template: {e}")
                 return LLMResult(
@@ -461,6 +485,18 @@ class LLMProcessor(LLMBackend):
                     model_info=self.model_info or {"model_name": "unknown"},
                     metadata={"task": task, "error": f"Template render failed: {e}"},
                 )
+
+            # Build user message with text to enhance
+            user_message_content = f"Text to enhance:\n{text}"
+
+            # Build messages in OpenAI format
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message_content},
+            ]
+            logger.debug(f"Built messages for enhancement chat API")
+
+            use_chat_api = True
         else:
             # For other tasks, use text as prompt directly
             final_prompt = text
@@ -595,7 +631,7 @@ class LLMProcessor(LLMBackend):
 
         try:
             # Log GPU memory fragmentation before inference (NFR-10)
-            if torch.cuda.is_available():
+            if has_cuda() and torch is not None:
                 try:
                     mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)
                     mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)
@@ -635,11 +671,12 @@ class LLMProcessor(LLMBackend):
             else:
                 sampling = apply_overrides_to_sampling(base_sampling, overrides)
 
-            # Use chat() API for summary with messages, or generate() for others
-            if task == "summary" and use_chat_api and messages is not None:
+            # Use chat() API for tasks with messages (summary, enhancement), or generate() for others
+            if use_chat_api and messages is not None:
                 logger.debug(
-                    "Using chat() API for summary",
+                    f"Using chat() API for {task}",
                     extra={
+                        "task": task,
                         "messages_count": len(messages),
                         "sampling_params": str(sampling),
                         "model_type": type(self.model).__name__,
@@ -649,7 +686,8 @@ class LLMProcessor(LLMBackend):
                 inference_start = time.time()
                 logger.debug("About to call model.chat()")
                 # Type ignore: our dict[str, str] format is compatible with vLLM's expected message format
-                outputs = self.model.chat(messages=[messages], sampling_params=sampling)  # type: ignore
+                # BUGFIX: Pass messages directly as first positional argument, not wrapped in list
+                outputs = self.model.chat(messages, sampling_params=sampling)  # type: ignore
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -784,44 +822,61 @@ class LLMProcessor(LLMBackend):
                 }
             )
 
-        if task == "summary" and use_chat_api:
+        # Mark method used for both summary and enhancement when chat API is used
+        if use_chat_api:
             result_metadata["method"] = "chat_api"
+        
         if task == "summary":
             template_id = kwargs.get("template_id")
             try:
-                # Parse JSON output
-                structured_output = json.loads(generated_text)
+                # Parse JSON output using safe utility
+                structured_output = safe_json_loads(generated_text, default=None)
 
-                # Validate against schema
-                if template_id:
-                    schema = load_template_schema(
-                        template_id, settings.paths.templates_dir
-                    )
-                    # validate_llm_output returns (validated_output, error_message)
-                    validated_output, error_message = validate_llm_output(
-                        json.dumps(structured_output), schema
-                    )
+                if structured_output is not None:
+                    # Validate against schema
+                    if template_id:
+                        schema = load_template_schema(
+                            template_id, settings.paths.templates_dir
+                        )
+                        # validate_llm_output returns (validated_output, error_message)
+                        validated_output, error_message = validate_llm_output(
+                            json.dumps(structured_output), schema
+                        )
 
-                    if validated_output is not None:
-                        result_metadata["structured_summary"] = validated_output
-                        result_metadata["validation"] = "passed"
-                        logger.info(f"Summary validation passed for {template_id}")
+                        if validated_output is not None:
+                            result_metadata["structured_summary"] = validated_output
+                            result_metadata["validation"] = "passed"
+                            logger.info(f"Summary validation passed for {template_id}")
+                        else:
+                            result_metadata["validation"] = "failed"
+                            result_metadata["validation_error"] = error_message
+                            logger.warning(
+                                f"Summary validation failed: {error_message}"
+                            )
                     else:
-                        result_metadata["validation"] = "failed"
-                        result_metadata["validation_error"] = error_message
-                        logger.warning(f"Summary validation failed: {error_message}")
+                        result_metadata["structured_summary"] = structured_output
+                        result_metadata["validation"] = "skipped"
                 else:
-                    result_metadata["structured_summary"] = structured_output
-                    result_metadata["validation"] = "skipped"
+                    logger.error("Failed to parse JSON output")
+                    result_metadata["validation"] = "json_parse_error"
+                    result_metadata["parse_error"] = "Invalid JSON format"
 
-            except json.JSONDecodeError as e:
-                logger.error(f"Failed to parse JSON output: {e}")
-                result_metadata["validation"] = "json_parse_error"
-                result_metadata["parse_error"] = str(e)
             except Exception as e:
                 logger.error(f"Summary validation error: {e}")
                 result_metadata["validation"] = "error"
                 result_metadata["error"] = str(e)
+
+        # DEBUG: Log LLM output preview
+        output_text = generated_text or text
+        output_preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
+        logger.debug(
+            "LLM output preview",
+            task=task,
+            output_preview=output_preview,
+            char_count=len(output_text),
+            word_count=len(output_text.split()) if output_text else 0,
+            tokens_used=tokens_used if "tokens_used" in locals() else None,
+        )
 
         return LLMResult(
             text=generated_text or text,
@@ -1248,18 +1303,19 @@ class LLMProcessor(LLMBackend):
             import torch as _torch
         except Exception:
             _torch = None
-        try:
-            torch_module = globals().get("torch", _torch)
-            if (
-                torch_module is not None
-                and hasattr(torch_module, "cuda")
-                and callable(getattr(torch_module.cuda, "is_available", None))
-            ):
-                if torch_module.cuda.is_available():
+
+        torch_module = globals().get("torch", _torch)
+        if (
+            torch_module is not None
+            and hasattr(torch_module, "cuda")
+            and callable(getattr(torch_module.cuda, "empty_cache", None))
+        ):
+            if has_cuda():
+                try:
                     torch_module.cuda.empty_cache()
                     logger.debug("CUDA cache cleared")
-        except Exception as e:
-            logger.warning(f"Failed to clear CUDA cache: {e}")
+                except Exception as e:
+                    logger.warning(f"Failed to clear CUDA cache: {e}")
 
         # Reset state
         self.tokenizer = None

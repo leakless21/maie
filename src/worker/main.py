@@ -8,6 +8,45 @@ model verification on startup, and proper worker configuration.
 import sys
 from pathlib import Path
 
+import warnings
+
+# Suppress torchaudio deprecation warnings
+warnings.filterwarnings(
+    "ignore",
+    message="torchaudio._backend.utils.info has been deprecated",
+    category=UserWarning,
+    module="pyannote.audio.core.io"
+)
+warnings.filterwarnings(
+    "ignore",
+    message="torchaudio._backend.common.AudioMetaData has been deprecated",
+    category=UserWarning,
+    module="torchaudio._backend.soundfile_backend"
+)
+warnings.filterwarnings(
+    "ignore",
+    message="In 2.9, this function's implementation will be changed to use torchaudio.load_with_torchcodec",
+    category=UserWarning,
+    module="torchaudio._backend.utils"
+)
+warnings.filterwarnings(
+    "ignore",
+    message="torchaudio._backend.list_audio_backends has been deprecated",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message="TensorFloat-32.*has been disabled",
+    category=UserWarning,
+    module="pyannote.audio.utils.reproducibility"
+)
+warnings.filterwarnings(
+    "ignore",
+    message="std.*degrees of freedom is <= 0",
+    category=UserWarning,
+    module="pyannote.audio.models.blocks.pooling"
+)
+
 from redis import Redis
 from rq import Worker
 

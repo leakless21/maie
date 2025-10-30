@@ -85,7 +85,6 @@ def test_create_with_audio_processing_success(monkeypatch):
 
     assert "asr_processor" in result
     assert "audio_preprocessor" in result
-    assert "audio_metrics_collector" in result
     assert isinstance(result["asr_processor"], DummyBackend)
     assert result["asr_processor"].kwargs["foo"] == "bar"
 

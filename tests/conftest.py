@@ -388,9 +388,9 @@ def has_gpu():
         return _HAS_GPU
 
     try:
-        import torch
+        from src.utils.device import has_cuda
 
-        _HAS_GPU = torch.cuda.is_available()
+        _HAS_GPU = has_cuda()
         return _HAS_GPU
     except (ImportError, RuntimeError):
         _HAS_GPU = False
@@ -549,6 +549,51 @@ def mock_config(monkeypatch):
             monkeypatch.setattr(config.settings.asr, "whisper_cpu_fallback", False)
 
     return ConfigMocker()
+
+
+# ============================================================================
+# Mock Factories for Integration Tests
+# ============================================================================
+
+
+@pytest.fixture
+def mock_asr_output():
+    """Provide a mock ASR output object."""
+    from tests.fixtures.mock_factories import create_mock_asr_output
+
+    return create_mock_asr_output()
+
+
+@pytest.fixture
+def mock_asr_processor(mock_asr_output):
+    """Provide a mock ASR processor."""
+    from tests.fixtures.mock_factories import create_mock_asr_processor
+
+    return create_mock_asr_processor(output=mock_asr_output)
+
+
+@pytest.fixture
+def mock_llm_processor():
+    """Provide a mock LLM processor."""
+    from tests.fixtures.mock_factories import create_mock_llm_processor
+
+    return create_mock_llm_processor()
+
+
+@pytest.fixture
+def mock_pipeline_components():
+    """Provide a complete set of mock pipeline components."""
+    from tests.fixtures.mock_factories import create_mock_pipeline_components
+
+    return create_mock_pipeline_components()
+
+
+@pytest.fixture
+def mock_redis_client():
+    """Provide a mock Redis client."""
+    from tests.fixtures.mock_factories import create_mock_redis_client
+
+    return create_mock_redis_client()
 
 
 # ============================================================================

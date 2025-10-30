@@ -127,7 +127,7 @@ def test_configuration_integration_uses_config_model_path(monkeypatch, tmp_path)
     """If configuration provides a model path, ChunkFormerBackend should honor it during init."""
     # set config model path
     monkeypatch.setattr(
-        cfg.settings, "chunkformer_model_path", str(tmp_path / "cf"), raising=False
+        cfg.settings.chunkformer, "chunkformer_model_path", str(tmp_path / "cf"), raising=False
     )
 
     # Patch loader to assert it receives no explicit path (uses config)

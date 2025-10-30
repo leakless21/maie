@@ -5,7 +5,6 @@ from __future__ import annotations
 import tempfile
 import time
 from pathlib import Path
-from typing import Any, Dict
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -32,9 +31,10 @@ def temp_audio_dir():
     """Create temporary audio directory."""
     base_dir = Path(tempfile.mkdtemp())
     yield base_dir
-    
+
     # Cleanup
     import shutil
+
     shutil.rmtree(base_dir, ignore_errors=True)
 
 
@@ -43,9 +43,10 @@ def temp_log_dir():
     """Create temporary log directory."""
     base_dir = Path(tempfile.mkdtemp())
     yield base_dir
-    
+
     # Cleanup
     import shutil
+
     shutil.rmtree(base_dir, ignore_errors=True)
 
 
@@ -62,16 +63,18 @@ class TestCleanupAudioFiles:
 
         with patch("src.config.loader.settings") as mock_settings:
             mock_settings.paths.audio_dir = Path("/nonexistent/directory")
-            
+
             result = cleanup_audio_files(dry_run=False)
-            
+
             assert result["checked"] == 0
             assert result["deleted"] == 0
             assert result["skipped"] == 0
 
     @patch("src.cleanup.tasks.get_current_job")
     @patch("src.cleanup.tasks.redis.from_url")
-    def test_audio_cleanup_dry_run(self, mock_redis_from_url, mock_get_job, temp_audio_dir):
+    def test_audio_cleanup_dry_run(
+        self, mock_redis_from_url, mock_get_job, temp_audio_dir
+    ):
         """Test audio cleanup dry run mode."""
         from src.cleanup.tasks import cleanup_audio_files
 
@@ -95,7 +98,7 @@ class TestCleanupAudioFiles:
             mock_settings.redis.results_db = 1
 
             result = cleanup_audio_files(dry_run=True)
-            
+
             # In dry run, file should not be deleted
             assert preprocessed_file.exists()
             assert result["checked"] == 1
@@ -129,7 +132,7 @@ class TestCleanupAudioFiles:
             mock_settings.redis.results_db = 1
 
             result = cleanup_audio_files(dry_run=False)
-            
+
             # File should be deleted
             assert not preprocessed_file.exists()
             assert result["checked"] == 1
@@ -163,7 +166,7 @@ class TestCleanupAudioFiles:
             mock_settings.redis.results_db = 1
 
             result = cleanup_audio_files(dry_run=False)
-            
+
             # File should be deleted
             assert not preprocessed_file.exists()
             assert result["deleted"] == 1
@@ -196,7 +199,7 @@ class TestCleanupAudioFiles:
             mock_settings.redis.results_db = 1
 
             result = cleanup_audio_files(dry_run=False)
-            
+
             # File should NOT be deleted
             assert preprocessed_file.exists()
             assert result["deleted"] == 0
@@ -223,7 +226,7 @@ class TestCleanupAudioFiles:
             mock_settings.redis.results_db = 1
 
             result = cleanup_audio_files(dry_run=False)
-            
+
             assert "error" in result
             assert result["error"] == "redis_unavailable"
 
@@ -243,7 +246,7 @@ class TestCleanupLogs:
             mock_settings.cleanup.logs_retention_days = 7
 
             result = cleanup_logs(dry_run=False)
-            
+
             assert result["checked"] == 0
             assert result["deleted"] == 0
 
@@ -260,6 +263,7 @@ class TestCleanupLogs:
         old_time = time.time() - (10 * 24 * 3600)
         Path(old_log).touch()
         import os
+
         os.utime(old_log, (old_time, old_time))
 
         with patch("src.config.loader.settings") as mock_settings:
@@ -267,7 +271,7 @@ class TestCleanupLogs:
             mock_settings.cleanup.logs_retention_days = 7
 
             result = cleanup_logs(dry_run=True)
-            
+
             # In dry run, file should not be deleted
             assert old_log.exists()
             assert result["deleted"] == 0
@@ -284,6 +288,7 @@ class TestCleanupLogs:
         old_log.write_text("old log data")
         old_time = time.time() - (10 * 24 * 3600)
         import os
+
         os.utime(old_log, (old_time, old_time))
 
         # Create recent log file (2 days old)
@@ -297,7 +302,7 @@ class TestCleanupLogs:
             mock_settings.cleanup.logs_retention_days = 7
 
             result = cleanup_logs(dry_run=False)
-            
+
             # Old file should be deleted, recent file should remain
             assert not old_log.exists()
             assert recent_log.exists()
@@ -315,6 +320,7 @@ class TestCleanupLogs:
         old_log.write_text("a" * 1024 * 100)  # 100 KB
         old_time = time.time() - (10 * 24 * 3600)
         import os
+
         os.utime(old_log, (old_time, old_time))
 
         with patch("src.config.loader.settings") as mock_settings:
@@ -322,7 +328,7 @@ class TestCleanupLogs:
             mock_settings.cleanup.logs_retention_days = 7
 
             result = cleanup_logs(dry_run=False)
-            
+
             assert result["deleted"] == 1
             assert "space_freed_mb" in result
             # Should be approximately 0.1 MB
@@ -346,7 +352,7 @@ class TestCleanupCache:
         mock_redis_from_url.return_value = mock_redis_conn
 
         result = cleanup_cache(dry_run=False)
-        
+
         assert "error" in result
         assert result["error"] == "redis_unavailable"
 
@@ -370,7 +376,7 @@ class TestCleanupCache:
             mock_settings.redis.results_db = 1
 
             result = cleanup_cache(dry_run=False)
-            
+
             assert "error" not in result
             assert result["rq_jobs_cleaned"] == 0
             assert "results_db_keys_before" in result
@@ -401,7 +407,7 @@ class TestCleanupCache:
         old_job_time = current_time - (25 * 3600)
         old_job_data = {
             b"created_at": str(old_job_time).encode(),
-            b"status": b"finished"
+            b"status": b"finished",
         }
 
         # Mock scan_iter to return our test job
@@ -414,7 +420,7 @@ class TestCleanupCache:
             mock_settings.redis.results_db = 1
 
             result = cleanup_cache(dry_run=False)
-            
+
             # Old job should be deleted
             assert result["rq_jobs_cleaned"] == 1
             mock_redis_conn.delete.assert_called_once()
@@ -444,7 +450,7 @@ class TestCleanupCache:
         recent_job_time = current_time - (2 * 3600)
         recent_job_data = {
             b"created_at": str(recent_job_time).encode(),
-            b"status": b"finished"
+            b"status": b"finished",
         }
 
         # Mock scan_iter to return our test job
@@ -457,7 +463,7 @@ class TestCleanupCache:
             mock_settings.redis.results_db = 1
 
             result = cleanup_cache(dry_run=False)
-            
+
             # Recent job should NOT be deleted
             assert result["rq_jobs_cleaned"] == 0
             mock_redis_conn.delete.assert_not_called()
@@ -486,7 +492,7 @@ class TestDiskMonitor:
             mock_settings.cleanup.emergency_cleanup = False
 
             result = disk_monitor()
-            
+
             assert result["usage_percent"] == 60.0
             assert "alert" not in result or result.get("alert") is False
 
@@ -510,7 +516,7 @@ class TestDiskMonitor:
             mock_settings.cleanup.emergency_cleanup = False
 
             result = disk_monitor()
-            
+
             assert result["usage_percent"] == 85.0
             assert result.get("alert") is True
 
@@ -547,7 +553,7 @@ class TestDiskMonitor:
             mock_settings.cleanup.emergency_cleanup = True
 
             result = disk_monitor()
-            
+
             assert result.get("alert") is True
             assert "emergency_cleanup" in result
             assert mock_cleanup_audio.called

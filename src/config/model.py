@@ -6,24 +6,7 @@ from typing import Any, ClassVar, Dict, Literal, Mapping, Tuple, TypeVar, cast
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
-def _coerce_optional_int(value: Any) -> int | None:
-    if value is None:
-        return None
-    if isinstance(value, str):
-        stripped = value.strip()
-        if stripped == "":
-            return None
-        return int(stripped)
-    return int(value)
-
-
-def _blank_to_none(value: Any) -> str | None:
-    if value is None:
-        return None
-    if isinstance(value, str) and value.strip() == "":
-        return None
-    return value
+from src.utils.validation import coerce_optional_int, blank_to_none
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -123,12 +106,12 @@ class AsrSettings(BaseModel):
     @field_validator("whisper_language", mode="before")
     @classmethod
     def empty_languages_to_none(cls, value: Any) -> str | None:
-        return _blank_to_none(value)
+        return blank_to_none(value)
 
     @field_validator("whisper_cpu_threads", mode="before")
     @classmethod
     def convert_optional_threads(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class ChunkformerSettings(BaseModel):
@@ -158,14 +141,14 @@ class ChunkformerSettings(BaseModel):
     @field_validator("chunkformer_batch_size", mode="before")
     @classmethod
     def convert_optional_batch(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class LlmEnhanceSettings(BaseModel):
     model: str = Field(default="data/models/qwen3-4b-instruct-2507-awq")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
     max_model_len: int = Field(default=32768)
-    temperature: float = Field(default=0.0, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
     max_tokens: int | None = Field(default=None)
@@ -199,14 +182,14 @@ class LlmEnhanceSettings(BaseModel):
     )
     @classmethod
     def optional_ints(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class LlmSumSettings(BaseModel):
     model: str = Field(default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit")
     gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
     max_model_len: int = Field(default=32768)
-    temperature: float = Field(default=0.7, ge=0.0, le=2.0)
+    temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
     max_tokens: int | None = Field(default=None)
@@ -239,7 +222,7 @@ class LlmSumSettings(BaseModel):
     )
     @classmethod
     def optional_ints(cls, value: Any) -> int | None:
-        return _coerce_optional_int(value)
+        return coerce_optional_int(value)
 
 
 class PathsSettings(BaseModel):
@@ -264,6 +247,38 @@ class WorkerSettings(BaseModel):
     worker_concurrency: int = Field(default=2)
     worker_prefetch_multiplier: int = Field(default=4)
     worker_prefetch_timeout: int = Field(default=30)
+
+    model_config = ConfigDict(validate_assignment=True)
+
+
+class DiarizationSettings(BaseModel):
+    enabled: bool = Field(default=False, description="Enable speaker diarization")
+    model_path: str = Field(
+        default="pyannote/speaker-diarization-3.1",
+        description="HuggingFace model ID for pyannote speaker diarization (pyannote 3.x format)",
+    )
+    overlap_threshold: float = Field(
+        default=0.3,
+        ge=0.0,
+        le=1.0,
+        description="Minimum IoU threshold for speaker overlap detection",
+    )
+    require_cuda: bool = Field(
+        default=False,
+        description="Require CUDA for diarization; skip gracefully if False and no CUDA",
+    )
+    embedding_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Batch size for speaker embedding model (pyannote 3.x uses config.yaml defaults)",
+    )
+    segmentation_batch_size: int = Field(
+        default=32,
+        ge=1,
+        le=256,
+        description="Batch size for segmentation model (pyannote 3.x uses config.yaml defaults)",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -301,8 +316,12 @@ class CleanupSettings(BaseModel):
 
     model_config = ConfigDict(validate_assignment=True)
 
-    @field_validator("audio_cleanup_interval", "log_cleanup_interval", 
-                     "cache_cleanup_interval", "disk_monitor_interval")
+    @field_validator(
+        "audio_cleanup_interval",
+        "log_cleanup_interval",
+        "cache_cleanup_interval",
+        "disk_monitor_interval",
+    )
     @classmethod
     def validate_intervals(cls, value: int) -> int:
         """Ensure cleanup intervals are positive and reasonable (10s to 86400s = 1 day)."""
@@ -321,13 +340,9 @@ class CleanupSettings(BaseModel):
     def validate_retention_days(cls, value: int) -> int:
         """Ensure retention periods are non-negative."""
         if value < 0:
-            raise ValueError(
-                f"Retention days cannot be negative, got {value}"
-            )
+            raise ValueError(f"Retention days cannot be negative, got {value}")
         if value > 365:
-            raise ValueError(
-                f"Retention days should not exceed 365, got {value}"
-            )
+            raise ValueError(f"Retention days should not exceed 365, got {value}")
         return value
 
     @field_validator("disk_threshold_pct")
@@ -345,9 +360,7 @@ class CleanupSettings(BaseModel):
     def validate_check_dir(cls, value: str) -> str:
         """Ensure check_dir is a valid path string."""
         if not value or not isinstance(value, str):
-            raise ValueError(
-                f"check_dir must be a non-empty string, got {value}"
-            )
+            raise ValueError(f"check_dir must be a non-empty string, got {value}")
         return value
 
 
@@ -368,6 +381,7 @@ class AppSettings(BaseSettings):
     redis: RedisSettings = Field(default_factory=RedisSettings)
     asr: AsrSettings = Field(default_factory=AsrSettings)
     chunkformer: ChunkformerSettings = Field(default_factory=ChunkformerSettings)
+    diarization: DiarizationSettings = Field(default_factory=DiarizationSettings)
     llm_enhance: LlmEnhanceSettings = Field(default_factory=LlmEnhanceSettings)
     llm_sum: LlmSumSettings = Field(default_factory=LlmSumSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
