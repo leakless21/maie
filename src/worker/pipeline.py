@@ -44,7 +44,6 @@ from src.api.schemas import TaskStatus
 from src.config import settings
 from src.utils.device import has_cuda, select_device
 from src.utils.sanitization import sanitize_metadata
-from src.processors.audio.diarizer import DiarizedSegment
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -358,6 +357,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     features = task_params.get("features", ["clean_transcript", "summary"])
     template_id = task_params.get("template_id")
     config = task_params.get("config", {})
+    enable_diarization = task_params.get("enable_diarization", False)
 
     # Connect to Redis results database (DB 1 per TDD.md section 3.6)
     redis_host = task_params.get("redis_host", "localhost")
@@ -721,7 +721,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 )
 
                 # DEBUG: Log ASR output preview
-                transcript_preview = result.text[:200] + "..." if len(result.text) > 200 else result.text
+                transcript_preview = (
+                    result.text[:200] + "..." if len(result.text) > 200 else result.text
+                )
                 logger.debug(
                     "ASR output preview",
                     task_id=job_id,
@@ -811,9 +813,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
         # Stage 2.5: DIARIZATION - Speaker attribution (optional enhancement)
         # =====================================================================
+        diarizer = None  # Track loaded diarizer model for cleanup
         try:
-            # Apply diarization if enabled
-            if settings.diarization.enabled:
+            # Apply diarization if enabled globally AND requested for this task
+            if settings.diarization.enabled and enable_diarization:
                 logger.info("Starting speaker diarization")
                 try:
                     from src.processors.audio.diarizer import get_diarizer
@@ -837,94 +840,138 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                             asr_segs_for_diar = []
                             for seg in asr_result.segments:
                                 asr_segs_for_diar.append(
-                                    type("ASRSeg", (), {
-                                        "start": seg.get("start", seg.start) if hasattr(seg, "start") else seg.get("start"),
-                                        "end": seg.get("end", seg.end) if hasattr(seg, "end") else seg.get("end"),
-                                        "text": seg.get("text", seg.text) if hasattr(seg, "text") else seg.get("text"),
-                                        "words": seg.get("words") if isinstance(seg, dict) else getattr(seg, "words", None),
-                                    })()
+                                    type(
+                                        "ASRSeg",
+                                        (),
+                                        {
+                                            "start": seg.get("start", seg.start)
+                                            if hasattr(seg, "start")
+                                            else seg.get("start"),
+                                            "end": seg.get("end", seg.end)
+                                            if hasattr(seg, "end")
+                                            else seg.get("end"),
+                                            "text": seg.get("text", seg.text)
+                                            if hasattr(seg, "text")
+                                            else seg.get("text"),
+                                            "words": seg.get("words")
+                                            if isinstance(seg, dict)
+                                            else getattr(seg, "words", None),
+                                        },
+                                    )()
                                 )
 
                             # Check if word timestamps are available
-                            has_word_timestamps = diarizer.has_word_timestamps(asr_segs_for_diar)
-                            
+                            has_word_timestamps = diarizer.has_word_timestamps(
+                                asr_segs_for_diar
+                            )
+
                             if has_word_timestamps:
-                                logger.info("Word timestamps available - using WhisperX-style assignment")
+                                logger.info(
+                                    "Word timestamps available - using WhisperX-style assignment"
+                                )
                                 # Use WhisperX-style word-level assignment
-                                diarized_segs = diarizer.assign_word_speakers_whisperx_style(
-                                    diar_spans, asr_segs_for_diar
+                                diarized_segs = (
+                                    diarizer.assign_word_speakers_whisperx_style(
+                                        diar_spans, asr_segs_for_diar
+                                    )
+                                )
+
+                                # Merge adjacent same-speaker segments
+                                merged_segs = diarizer.merge_adjacent_same_speaker(
+                                    diarized_segs
+                                )
+
+                                # Update ASR result segments with speaker info
+                                updated_segments = []
+                                for seg in merged_segs:
+                                    updated_segments.append(
+                                        {
+                                            "start": seg.start,
+                                            "end": seg.end,
+                                            "text": seg.text,
+                                            "speaker": seg.speaker,
+                                        }
+                                    )
+
+                                asr_result.segments = updated_segments
+
+                                # Render speaker-attributed transcript for LLM input
+                                try:
+                                    from src.processors.prompt.diarization import (
+                                        render_speaker_attributed_transcript,
+                                    )
+
+                                    speaker_transcript = (
+                                        render_speaker_attributed_transcript(
+                                            updated_segments
+                                        )
+                                    )
+
+                                    # Use speaker-attributed transcript for LLM
+                                    transcription = speaker_transcript
+                                    logger.info(
+                                        "Using speaker-attributed transcript for LLM",
+                                        transcript_length=len(speaker_transcript),
+                                        speaker_count=len(
+                                            set(
+                                                s.get("speaker")
+                                                for s in updated_segments
+                                                if s.get("speaker")
+                                            )
+                                        ),
+                                    )
+
+                                    # DEBUG: Log diarization output preview
+                                    speaker_transcript_preview = (
+                                        speaker_transcript[:200] + "..."
+                                        if len(speaker_transcript) > 200
+                                        else speaker_transcript
+                                    )
+                                    speaker_count = len(
+                                        set(
+                                            s.get("speaker")
+                                            for s in updated_segments
+                                            if s.get("speaker")
+                                        )
+                                    )
+                                    logger.debug(
+                                        "Diarization output preview",
+                                        task_id=job_id,
+                                        speaker_transcript_preview=speaker_transcript_preview,
+                                        speaker_count=speaker_count,
+                                        segment_count=len(updated_segments),
+                                        transcript_length=len(speaker_transcript),
+                                    )
+                                except Exception as render_error:
+                                    logger.warning(
+                                        "Failed to render speaker-attributed transcript; using plain transcript",
+                                        error=str(render_error),
+                                    )
+
+                                logger.info(
+                                    "Diarization applied successfully",
+                                    segment_count=len(updated_segments),
+                                    speaker_count=len(
+                                        set(
+                                            s.get("speaker")
+                                            for s in updated_segments
+                                            if s.get("speaker")
+                                        )
+                                    ),
                                 )
                             else:
-                                logger.warning("No word timestamps available - skipping diarization")
-                                # Skip diarization, keep segments as-is with speaker=None
-                                diarized_segs = []
-                                for seg in asr_segs_for_diar:
-                                    diarized_segs.append(DiarizedSegment(
-                                        start=seg.start,
-                                        end=seg.end,
-                                        text=seg.text,
-                                        speaker=None,
-                                    ))
-
-                            # Merge adjacent same-speaker segments
-                            merged_segs = diarizer.merge_adjacent_same_speaker(
-                                diarized_segs
-                            )
-
-                            # Update ASR result segments with speaker info
-                            updated_segments = []
-                            for seg in merged_segs:
-                                updated_segments.append({
-                                    "start": seg.start,
-                                    "end": seg.end,
-                                    "text": seg.text,
-                                    "speaker": seg.speaker,
-                                })
-
-                            asr_result.segments = updated_segments
-                            
-                            # Render speaker-attributed transcript for LLM input
-                            try:
-                                from src.processors.prompt.diarization import (
-                                    render_speaker_attributed_transcript,
-                                )
-                                
-                                speaker_transcript = render_speaker_attributed_transcript(
-                                    updated_segments
-                                )
-                                
-                                # Use speaker-attributed transcript for LLM
-                                transcription = speaker_transcript
-                                logger.info(
-                                    "Using speaker-attributed transcript for LLM",
-                                    transcript_length=len(speaker_transcript),
-                                    speaker_count=len(set(s.get("speaker") for s in updated_segments if s.get("speaker"))),
-                                )
-
-                                # DEBUG: Log diarization output preview
-                                speaker_transcript_preview = speaker_transcript[:200] + "..." if len(speaker_transcript) > 200 else speaker_transcript
-                                speaker_count = len(set(s.get("speaker") for s in updated_segments if s.get("speaker")))
-                                logger.debug(
-                                    "Diarization output preview",
-                                    task_id=job_id,
-                                    speaker_transcript_preview=speaker_transcript_preview,
-                                    speaker_count=speaker_count,
-                                    segment_count=len(updated_segments),
-                                    transcript_length=len(speaker_transcript),
-                                )
-                            except Exception as render_error:
                                 logger.warning(
-                                    "Failed to render speaker-attributed transcript; using plain transcript",
-                                    error=str(render_error),
+                                    "No word timestamps available - skipping diarization"
                                 )
-                            
-                            logger.info(
-                                "Diarization applied successfully",
-                                segment_count=len(updated_segments),
-                                speaker_count=len(set(s.get("speaker") for s in updated_segments if s.get("speaker"))),
-                            )
+                                # Keep using the original plain transcript without speaker attribution
+                                logger.info(
+                                    "Continuing with plain transcript (no speaker labels)",
+                                    transcript_length=len(transcription),
+                                )
                         else:
-                            logger.warning("Diarization returned no spans; continuing without speaker info")
+                            logger.warning(
+                                "Diarization returned no spans; continuing without speaker info"
+                            )
                     else:
                         logger.warning("Diarizer unavailable; skipping diarization")
 
@@ -941,6 +988,32 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 "Unexpected error in diarization stage; continuing pipeline",
                 error=str(diar_stage_error),
             )
+        finally:
+            # CRITICAL: Always unload diarization model to free GPU memory
+            if diarizer is not None:
+                try:
+                    logger.info("Unloading diarization model")
+                    # Pyannote models don't have an explicit unload method,
+                    # but we can delete the model reference and clear GPU cache
+                    if diarizer.model is not None:
+                        del diarizer.model
+                        diarizer.model = None
+
+                    # Critical: Clear CUDA cache to free GPU memory
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        torch.cuda.empty_cache()
+                        logger.info("Diarization model unloaded and GPU cache cleared")
+                    else:
+                        logger.info("Diarization model unloaded")
+                except (AttributeError, RuntimeError, OSError) as e:
+                    logger.warning(
+                        "Error during diarization model unload", error=str(e)
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Unexpected error during diarization model unload", error=str(e)
+                    )
+                diarizer = None
 
         # =====================================================================
         # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summary)
@@ -991,6 +1064,16 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             logger.info("Loading LLM model", task_id=job_id)
 
+            # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
+            # This prevents fragmentation issues from previous models
+            if TORCH_AVAILABLE and torch is not None and has_cuda():
+                try:
+                    torch.cuda.empty_cache()
+                    torch.cuda.synchronize()  # Wait for all operations to complete
+                    logger.info("GPU cache cleared before LLM load")
+                except Exception as cache_error:
+                    logger.warning(f"Could not clear GPU cache: {cache_error}")
+
             # Step 3a: Load LLM model using LLMProcessor directly
             from src.processors.llm import LLMProcessor
 
@@ -1021,8 +1104,15 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                     # DEBUG: Log LLM enhancement input preview
-                    enhancement_input_preview = transcription[:200] + "..." if len(transcription) > 200 else transcription
-                    has_speaker_attribution = any(line.startswith(("S0:", "S1:", "S2:", "S3:", "S4:", "S5:")) for line in transcription.split('\n'))
+                    enhancement_input_preview = (
+                        transcription[:200] + "..."
+                        if len(transcription) > 200
+                        else transcription
+                    )
+                    has_speaker_attribution = any(
+                        line.startswith(("S0:", "S1:", "S2:", "S3:", "S4:", "S5:"))
+                        for line in transcription.split("\n")
+                    )
                     logger.debug(
                         "LLM enhancement input preview",
                         task_id=job_id,
@@ -1096,7 +1186,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                     # DEBUG: Log LLM summarization input preview
-                    summary_input_preview = clean_transcript[:200] + "..." if len(clean_transcript) > 200 else clean_transcript
+                    summary_input_preview = (
+                        clean_transcript[:200] + "..."
+                        if len(clean_transcript) > 200
+                        else clean_transcript
+                    )
                     logger.debug(
                         "LLM summarization input preview",
                         task_id=job_id,

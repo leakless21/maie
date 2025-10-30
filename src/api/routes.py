@@ -212,6 +212,7 @@ def enqueue_job(
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
         "asr_backend": request_params.get("asr_backend", "chunkformer"),
+        "enable_diarization": request_params.get("enable_diarization", False),
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_db": settings.redis.results_db,
@@ -255,6 +256,10 @@ class ProcessController(Controller):
             "- **asr_backend** (optional, string): ASR backend selection\n"
             "  - Available: `whisper` (default), `chunkformer`\n"
             "  - Use `/v1/models` to get available backends\n\n"
+            "- **enable_diarization** (optional, boolean): Enable speaker diarization\n"
+            "  - Default: `false`\n"
+            "  - When enabled, identifies and labels different speakers in the audio\n"
+            "  - Requires word-level timestamps from ASR (automatically enabled with Whisper)\n\n"
             "**Examples:**\n\n"
             "Basic processing (default settings):\n"
             "```bash\n"
@@ -283,6 +288,17 @@ class ProcessController(Controller):
             "  -F 'features=enhancement_metrics' \\\n"
             "  -F 'template_id=meeting_notes_v1' \\\n"
             "  -F 'asr_backend=chunkformer'\n"
+            "```\n\n"
+            "With speaker diarization enabled:\n"
+            "```bash\n"
+            "curl -X POST 'http://localhost:8000/v1/process' \\\n"
+            "  -H 'X-API-Key: <your_api_key>' \\\n"
+            "  -F 'file=@/path/to/meeting.wav' \\\n"
+            "  -F 'features=clean_transcript' \\\n"
+            "  -F 'features=summary' \\\n"
+            "  -F 'template_id=meeting_notes_v1' \\\n"
+            "  -F 'asr_backend=whisper' \\\n"
+            "  -F 'enable_diarization=true'\n"
             "```\n\n"
             "**Response:**\n\n"
             "Returns HTTP 202 Accepted with a task ID for tracking the processing status.\n\n"
@@ -509,6 +525,7 @@ class ProcessController(Controller):
             "template_id": template_id,
             "file_path": str(file_path),
             "asr_backend": asr_backend,
+            "enable_diarization": payload.enable_diarization,
         }
         await create_task_in_redis(task_id, request_params)
 

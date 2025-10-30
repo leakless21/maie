@@ -230,6 +230,72 @@ The worker enforces **strict sequential execution** to operate within VRAM const
 - Qwen3-4B-Instruct (AWQ): 15-25s load time (direct vLLM inference)
 - Target total: 2-3 minutes for 45-minute audio (NFR-5)
 
+**GPU Memory Management Strategy (Critical for Stability):**
+
+To operate within 12GB VRAM constraints, the pipeline implements strict memory management:
+
+**Phase 1: ASR Processing**
+
+- Load ASR model (6-8GB VRAM)
+- Execute transcription
+- **Unload immediately**: Call `model.unload()`
+- **Clear GPU cache**: `torch.cuda.empty_cache()` + `torch.cuda.synchronize()`
+- Memory reclaimed: Full 6-8GB
+
+**Phase 2: Diarization (Optional)**
+
+- Load pyannote model (2-3GB VRAM)
+- Execute speaker attribution
+- **Unload immediately**: Delete model reference + clear GPU cache
+- Memory reclaimed: Full 2-3GB (critical before LLM load)
+
+**Phase 3: Pre-LLM Synchronization (Critical)**
+
+- Additional GPU cache clear before LLM loading
+- `torch.cuda.empty_cache()` + `torch.cuda.synchronize()`
+- Prevents memory fragmentation issues from previous models
+- Ensures clean state for LLM allocation
+
+**Phase 4: LLM Processing**
+
+- Load LLM model (3-4GB VRAM with AWQ quantization)
+- Execute inference (enhancement/summarization)
+- Total VRAM after phases 1-3: <1GB residual + 3-4GB LLM = ~4GB available ✓
+
+**Memory Cleanup Pattern (Applied to All Stages):**
+
+```python
+finally:
+    # CRITICAL: Always unload model to free GPU memory
+    if model is not None:
+        try:
+            if hasattr(model, "unload"):
+                model.unload()
+
+            # Clear CUDA cache to free GPU memory
+            if TORCH_AVAILABLE and torch is not None and has_cuda():
+                torch.cuda.empty_cache()
+                torch.cuda.synchronize()
+                logger.info("Model unloaded and GPU cache cleared")
+        except Exception as e:
+            logger.warning(f"Error during model unload: {e}")
+        model = None
+```
+
+**Why Synchronization is Critical:**
+
+- `torch.cuda.empty_cache()` triggers device synchronization
+- `torch.cuda.synchronize()` explicitly waits for GPU operations to complete
+- Prevents race conditions where GPU still holds memory for pending operations
+- Essential for reliable memory measurements and subsequent allocations
+
+**Memory Fragmentation Mitigation:**
+
+- Monitor GPU memory fragmentation (log warning if >10%)
+- Recommendation for high-fragmentation scenarios: `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`
+- Pre-allocate space before LLM if fragmentation detected
+- Consider model quantization (AWQ, GPTQ) for smaller VRAM footprint
+
 **Pipeline State Machine:**
 
 ```
@@ -987,7 +1053,69 @@ LLMResult:
 
 _Tags are embedded within summary dict, not separate field._
 
-### 3.6. Redis Configuration
+### 3.6. Worker Configuration & Timeouts
+
+**Job Timeout Settings:**
+
+The RQ worker enforces job timeouts to prevent hung processes. Configuration profiles define different timeout values:
+
+| Profile     | Job Timeout  | Use Case                           |
+| ----------- | ------------ | ---------------------------------- |
+| Development | 360s (6min)  | Local development with diarization |
+| Production  | 600s (10min) | Production with full pipeline      |
+
+**Why These Values?**
+
+- **ASR Processing**: 1-2 minutes (depends on audio duration)
+- **Diarization** (optional): 1-2 minutes (speaker attribution)
+- **LLM Processing**: 1-2 minutes (transcription enhancement + summarization)
+- **Total**: 3-6 minutes typical, up to 10 minutes for large audio files
+
+**Timeout Configuration:**
+
+```env
+# .env (Development)
+APP_WORKER__JOB_TIMEOUT=360  # 6 minutes
+
+# .env (Production with longer audio)
+APP_WORKER__JOB_TIMEOUT=600  # 10 minutes
+```
+
+**Environment Variable Mapping:**
+
+```python
+# src/config/profiles.py
+"worker": {
+    "job_timeout": 360,        # Seconds - RQ job timeout
+    "result_ttl": 3600,        # Seconds - Results cached for 1 hour
+    "worker_concurrency": 1,   # Single GPU = 1 worker
+}
+```
+
+**Timeout Behavior:**
+
+1. If job completes before timeout → Success (results stored in Redis DB 1)
+2. If job exceeds timeout → Worker killed + job moved to FailedJobRegistry
+3. RQ auto-retry logic applies (configurable, default: 2 retries)
+4. After retry exhaustion → Manual inspection required
+
+**Monitoring Timeout Utilization:**
+
+```bash
+# Check active jobs and their runtime
+redis-cli -n 0 HGETALL rq:job:{job_id}
+
+# Monitor worker logs
+tail -f logs/app.log | grep -i "timeout\|work-horse"
+```
+
+**Tuning Recommendations:**
+
+- **Increase timeout** if processing long-form audio (>60 min)
+- **Decrease timeout** if using smaller models or if processing stalls
+- **Monitor fragmentation** in logs; high fragmentation may extend inference time
+
+### 3.7. Redis Configuration
 
 **Dual-Database Strategy:**
 
@@ -1034,7 +1162,7 @@ Fields:
   error_message       → String (if status = FAILED)
 ```
 
-### 3.7. Deployment Architecture
+### 3.8. Deployment Architecture
 
 **Package Management: Pixi (prefix.dev)**
 
