@@ -218,7 +218,9 @@ def main() -> int:
             result_dict = {
                 "transcript": asr_result.text,
                 "rtf": rtf,
-                "confidence": asr_result.confidence if asr_result.confidence is not None else 0.0,
+                "confidence": asr_result.confidence
+                if asr_result.confidence is not None
+                else 0.0,
             }
             # Include VAD result if available
             if vad_result:

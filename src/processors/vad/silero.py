@@ -26,7 +26,7 @@ except ImportError:
 class SileroVADBackend(VADBackend):
     """
     Silero VAD backend implementation.
-    
+
     Silero VAD is a lightweight voice activity detection model that works
     with various audio formats and sampling rates.
     """
@@ -183,10 +183,10 @@ class SileroVADBackend(VADBackend):
                 )
 
             # Calculate metrics
-            speech_duration = sum(
-                seg.duration() for seg in segments if seg.is_speech
+            speech_duration = sum(seg.duration() for seg in segments if seg.is_speech)
+            speech_ratio = (
+                speech_duration / total_duration if total_duration > 0 else 0.0
             )
-            speech_ratio = speech_duration / total_duration if total_duration > 0 else 0.0
 
             processing_time = time.time() - start_time
 
@@ -198,7 +198,9 @@ class SileroVADBackend(VADBackend):
                 processing_time=processing_time,
                 backend_info={
                     "backend": "silero",
-                    "model_path": str(self.model_path) if self.model_path else "built-in",
+                    "model_path": str(self.model_path)
+                    if self.model_path
+                    else "built-in",
                     "threshold": self.threshold,
                     "device": self.device,
                 },
