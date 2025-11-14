@@ -36,9 +36,26 @@ def main() -> int:
 
     parser = argparse.ArgumentParser(description="ASR with Whisper backend")
     parser.add_argument("--audio", required=True, help="Path to input audio file")
-    parser.add_argument("--model-path", help="Optional model path override")
+    # Accept both --model-path and --model for convenience
+    parser.add_argument(
+        "--model-path",
+        "--model",
+        dest="model_path",
+        help="Optional model path override",
+    )
     parser.add_argument("--beam-size", type=int, default=None)
     parser.add_argument("--vad-filter", action="store_true")
+    parser.add_argument(
+        "--language",
+        help="Force language code for transcription (e.g., vi). Defaults to auto-detect.",
+        default="vi",
+    )
+    parser.add_argument(
+        "--task",
+        choices=["transcribe", "translate"],
+        help="Override Whisper task. Defaults to backend configuration.",
+        default="transcribe",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON result")
     args = parser.parse_args()
 
@@ -56,6 +73,12 @@ def main() -> int:
         config["beam_size"] = args.beam_size
     if args.vad_filter:
         config["vad_filter"] = True
+
+    exec_kwargs: Dict[str, Any] = {}
+    if args.language:
+        exec_kwargs["language"] = args.language
+    if args.task:
+        exec_kwargs["task"] = args.task
 
     preprocessor = AudioPreprocessor()
     try:
@@ -102,7 +125,10 @@ def main() -> int:
         import time
 
         start_time = time.time()
-        asr_result = asr.execute(audio_data=open(processing_audio_path, "rb").read())
+        asr_result = asr.execute(
+            audio_data=open(processing_audio_path, "rb").read(),
+            **exec_kwargs,
+        )
         processing_time = time.time() - start_time
 
         # Calculate RTF (Real-Time Factor)
