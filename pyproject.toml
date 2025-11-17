@@ -60,7 +60,7 @@ jsonschema = "*"
 python-Levenshtein = "*"
 flashinfer-python = "*"
 aiofiles = "*"
-flashinfer-jit-cache = { url = "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.4.1/flashinfer_jit_cache-0.4.1+cu128-cp39-abi3-manylinux_2_28_x86_64.whl" }
+flashinfer-jit-cache = { url = "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.5.2/flashinfer_jit_cache-0.5.2%2Bcu128-cp39-abi3-manylinux_2_28_x86_64.whl" }
 
 [tool.pixi.feature.dev.pypi-dependencies]
 pytest-asyncio = ">=1.2.0, <2"
