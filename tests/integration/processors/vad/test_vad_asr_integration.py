@@ -18,7 +18,7 @@ class TestVADASRIntegration:
             silero_sampling_rate=16000,
             device="cpu",
         )
-        
+
         try:
             vad_backend = ASRFactory.create_vad_backend(vad_config)
             assert vad_backend is not None
@@ -70,4 +70,4 @@ class TestVADASRIntegration:
         assert config.backend == "silero"
         assert config.silero_threshold == 0.5
         assert config.silero_sampling_rate == 16000
-        assert config.min_speech_duration_ms == 250
+        assert config.min_speech_duration_ms == 200

@@ -193,6 +193,8 @@ async def create_task_in_redis(
             "enable_vad": request_params.get("enable_vad"),
             "vad_threshold": request_params.get("vad_threshold"),
         }
+        # Redis 7.x is stricter - filter out None values before hset
+        task_data = {k: v for k, v in task_data.items() if v is not None}
         await redis_client.hset(task_key, mapping=task_data)
         await redis_client.expire(task_key, settings.worker.result_ttl)
     finally:

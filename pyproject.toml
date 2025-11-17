@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["soxr", "transformers", "flashinfer-cubin", "rq-dashboard", "pyannote-audio==3.4.0", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3", "silero-vad>=6.2.0,<7", "onnxruntime>=1.23.2,<2"]
+dependencies = ["soxr", "transformers", "flashinfer-cubin>=0.5.2,<0.6", "rq-dashboard", "pyannote-audio==3.4.0", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3", "silero-vad>=6.2.0,<7", "onnxruntime>=1.23.2,<2"]
 
 
 [dependency-groups]
@@ -58,7 +58,7 @@ faster-whisper = "*"
 ctranslate2 = "*"
 jsonschema = "*"
 python-Levenshtein = "*"
-flashinfer-python = "*"
+flashinfer-python = ">=0.5.2,<0.6"
 aiofiles = "*"
 flashinfer-jit-cache = { url = "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.5.2/flashinfer_jit_cache-0.5.2%2Bcu128-cp39-abi3-manylinux_2_28_x86_64.whl" }
 

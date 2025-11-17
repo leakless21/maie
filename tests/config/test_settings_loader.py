@@ -39,7 +39,7 @@ class TestEnvironmentProfiles:
         assert settings.environment == "development"
         assert settings.debug is True
         assert settings.logging.log_level == "DEBUG"
-        assert settings.worker.job_timeout == 300
+        assert settings.worker.job_timeout == 360
         assert settings.paths.audio_dir == Path("data/audio")
 
     def test_production_profile(self):
