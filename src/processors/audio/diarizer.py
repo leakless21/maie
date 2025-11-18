@@ -72,13 +72,17 @@ class Diarizer:
 
     def _load_pyannote_model(self) -> object:
         """
-        Load pyannote speaker diarization model lazily.
+        Load pyannote 4.x speaker diarization model lazily from LOCAL PATH.
 
-        Supports both pyannote.audio 3.x and 4.x:
-        - 3.x: Uses "pyannote/speaker-diarization-3.1" model
-        - 4.x: Uses "pyannote/speaker-diarization-community-1" model (available offline)
+        Uses pyannote-audio 4.x with speaker-diarization-community-1 model,
+        which is optimized for offline deployment and available for local use.
 
-        Batch sizes are configured in the model's config.yaml file in both versions.
+        CRITICAL: This loads from local model_path to run FULLY OFFLINE without:
+        - HuggingFace API calls
+        - OpenTelemetry telemetry to otel.pyannote.ai
+        - Any network dependencies
+
+        Batch sizes are configured in the model's config.yaml file.
 
         Reference: https://github.com/pyannote/pyannote-audio/blob/main/tutorials
 
@@ -109,70 +113,42 @@ class Diarizer:
             logger.warning("CUDA not available; diarization will be skipped")
             return None
 
-        logger.info("Starting pyannote model load process...")
+        logger.info(
+            "Starting pyannote 4.x model load process from LOCAL PATH (offline mode)..."
+        )
 
         try:
-            # Lazy import of pyannote
+            # CRITICAL: Disable ALL telemetry/analytics BEFORE importing pyannote
+            # This prevents calls to otel.pyannote.ai by disabling at library init time
+            import os
+
+            os.environ["PYANNOTE_DISABLE_TELEMETRY"] = "1"
+            os.environ["PYANNOTE_NO_ANALYTICS"] = "1"
+            os.environ["HF_TRANSFER_DISABLE"] = "1"
+            os.environ["HUGGINGFACE_HUB_OFFLINE"] = "1"
+            # Also disable at OpenTelemetry level
+            os.environ["OTEL_SDK_DISABLED"] = "1"
+            os.environ["OTEL_TRACES_EXPORTER"] = "none"
+
+            # Lazy import of pyannote AFTER disabling telemetry
             logger.info("Importing pyannote.audio.Pipeline...")
             from pyannote.audio import Pipeline
 
-            logger.info("Imports successful, loading pipeline...")
+            logger.info("Imports successful, loading pipeline from LOCAL PATH...")
 
-            # Detect pyannote version and use appropriate model
-            try:
-                import pyannote.audio
+            # CRITICAL: Use LOCAL MODEL PATH instead of HuggingFace ID
+            # This prevents HuggingFace API calls and uses pre-downloaded model
+            logger.info(
+                f"Loading pyannote 4.x pipeline from LOCAL PATH: {self.model_path}"
+            )
 
-                version = pyannote.audio.__version__
-                major_version = int(version.split(".")[0])
-                logger.info(f"Detected pyannote.audio version: {version}")
-            except Exception as v_err:
-                logger.warning(
-                    f"Could not detect pyannote version: {v_err}, assuming 3.x"
-                )
-                major_version = 3
-
-            # Map local paths to appropriate model IDs based on version
-            model_id = self.model_path
-
-            if major_version >= 4:
-                # pyannote 4.x: Use community-1 model (available for offline use)
-                if (
-                    "community" in model_id
-                    or "3.1" in model_id
-                    or "data/models" in model_id
-                ):
-                    model_id = "pyannote/speaker-diarization-community-1"
-                    logger.info(
-                        f"Mapped {self.model_path} to {model_id} "
-                        "(pyannote 4.x uses community-1 model)"
-                    )
-            else:
-                # pyannote 3.x: Use 3.1 model
-                if "speaker-diarization-3.1" in model_id:
-                    model_id = "pyannote/speaker-diarization-3.1"
-                elif "community" in model_id or "data/models" in model_id:
-                    model_id = "pyannote/speaker-diarization-3.1"
-                    logger.info(
-                        f"Mapped {self.model_path} to {model_id} "
-                        "(pyannote 3.x uses speaker-diarization-3.1)"
-                    )
-
-            logger.info(f"Loading pyannote pipeline: {model_id}")
-
-            # Load model from HuggingFace (uses local cache if available)
-            # Support both pyannote 3.x (use_auth_token) and 4.x (token) parameter names
-            import os
-
-            token = os.environ.get("HUGGINGFACE_TOKEN", True)  # True for offline-first
-
-            try:
-                # Try pyannote 4.x API (token parameter)
-                model = Pipeline.from_pretrained(model_id, token=token)
-                logger.info("Loaded using pyannote 4.x API (token parameter)")
-            except TypeError:
-                # Fall back to pyannote 3.x API (use_auth_token parameter)
-                model = Pipeline.from_pretrained(model_id, use_auth_token=token)
-                logger.info("Loaded using pyannote 3.x API (use_auth_token parameter)")
+            # pyannote 4.x API: Load from local path (official docs)
+            # When loading from a local path, NO authentication is needed and NO network requests are made
+            # Reference: https://huggingface.co/pyannote/speaker-diarization-community-1
+            model = Pipeline.from_pretrained(self.model_path)
+            logger.info(
+                "Pipeline loaded from LOCAL PATH using pyannote 4.x API (fully offline)"
+            )
 
             # Move model to GPU if available
             import torch
@@ -181,10 +157,10 @@ class Diarizer:
             model.to(device)  # type: ignore[union-attr]
 
             # Log batch size configuration info
-            # NOTE: Batch sizes are set in the model's config.yaml in both 3.x and 4.x
+            # NOTE: Batch sizes are set in the model's config.yaml
             # Default is 32 for both embedding and segmentation
             logger.info(
-                f"Pyannote model loaded successfully on {device}. "
+                f"Pyannote 4.x model loaded successfully on {device} from LOCAL PATH. "
                 f"Requested batch sizes: embedding={self.embedding_batch_size}, "
                 f"segmentation={self.segmentation_batch_size}. "
                 f"Note: batch sizes are configured in model's config.yaml"
@@ -197,7 +173,9 @@ class Diarizer:
             logger.error(f"pyannote.audio not installed: {e}")
             return None
         except Exception as e:
-            logger.error(f"Failed to load diarization model: {e}", exc_info=True)
+            logger.error(
+                f"Failed to load diarization model from LOCAL PATH: {e}", exc_info=True
+            )
             return None
 
     def _normalize_speaker_label(self, speaker: str) -> str:
@@ -263,17 +241,38 @@ class Diarizer:
             else:
                 diarization = model(audio_path)
 
-            # Convert pyannote output to simple list of spans
-            # pyannote returns an iterator of (segment, _, speaker) tuples
+            # Convert PyAnnote 4.x output to simple list of spans
+            # PyAnnote 4.x returns a DiarizeOutput object with .speaker_diarization attribute
+            # that contains (segment, speaker) tuples (NOT itertracks)
+            # Reference: https://huggingface.co/pyannote/speaker-diarization-community-1
             spans = []
-            for segment, _, speaker in diarization.itertracks(yield_label=True):
-                spans.append(
-                    {
-                        "start": float(segment.start),
-                        "end": float(segment.end),
-                        "speaker": self._normalize_speaker_label(speaker),
-                    }
-                )
+
+            # Access the speaker_diarization attribute from the DiarizeOutput object
+            if hasattr(diarization, "speaker_diarization"):
+                for segment, speaker in diarization.speaker_diarization:
+                    spans.append(
+                        {
+                            "start": float(segment.start),
+                            "end": float(segment.end),
+                            "speaker": self._normalize_speaker_label(speaker),
+                        }
+                    )
+            else:
+                # Fallback for older API versions that use itertracks (PyAnnote 3.x)
+                try:
+                    for segment, _, speaker in diarization.itertracks(yield_label=True):
+                        spans.append(
+                            {
+                                "start": float(segment.start),
+                                "end": float(segment.end),
+                                "speaker": self._normalize_speaker_label(speaker),
+                            }
+                        )
+                except AttributeError:
+                    logger.error(
+                        "Diarization output format not recognized. Expected .speaker_diarization or .itertracks()"
+                    )
+                    return None
 
             logger.info(f"Diarization complete: {len(spans)} speaker segments")
 

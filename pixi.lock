@@ -3886,13 +3886,13 @@ packages:
 - pypi: ./
   name: maie
   version: 0.1.0
-  sha256: 0a7dfae55db46f89ffb2e5e94f6045172cfd895293ec8aae10ea83827ab213b8
+  sha256: 4a88341debc57032b7cf1e17588269eaa895d1448420c5a76b22686c15f1562a
   requires_dist:
   - soxr
   - transformers
   - flashinfer-cubin>=0.5.2,<0.6
   - rq-dashboard
-  - pyannote-audio>=3.4.0,<5
+  - pyannote-audio>=4.0.0,<5
   - torch>=2.8.0,<3
   - torchaudio>=2.8.0,<3
   - silero-vad>=6.2.0,<7

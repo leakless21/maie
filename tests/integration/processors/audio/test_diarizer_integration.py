@@ -68,15 +68,19 @@ class TestDiarizationIntegration:
             start: float
             end: float
 
-        mock_model_output = [
-            (MockSegment(0.0, 1.0), "_", "S1"),
-            (MockSegment(1.0, 2.0), "_", "S2"),
+        # PyAnnote 4.x format: [(segment, speaker), ...]
+        mock_speaker_diarization = [
+            (MockSegment(0.0, 1.0), "SPEAKER_00"),
+            (MockSegment(1.0, 2.0), "SPEAKER_01"),
         ]
 
-        # Create mock model that returns properly formatted output
+        # Create mock DiarizeOutput (PyAnnote 4.x format)
+        mock_diarization_output = Mock()
+        mock_diarization_output.speaker_diarization = mock_speaker_diarization
+
+        # Create mock model that returns DiarizeOutput when called
         mock_model = Mock()
-        mock_model.return_value = mock_model
-        mock_model.itertracks = Mock(return_value=iter(mock_model_output))
+        mock_model.return_value = mock_diarization_output
 
         # Run diarization with mocked model
         with patch.object(diarizer, "_load_pyannote_model", return_value=mock_model):
@@ -85,8 +89,9 @@ class TestDiarizationIntegration:
         # Verify diarization output
         assert diar_spans is not None
         assert len(diar_spans) == 2
-        assert diar_spans[0]["speaker"] == "S1"
-        assert diar_spans[1]["speaker"] == "S2"
+        # Speaker labels are normalized: SPEAKER_00 -> S0, SPEAKER_01 -> S1
+        assert diar_spans[0]["speaker"] == "S0"
+        assert diar_spans[1]["speaker"] == "S1"
 
         # Now test alignment with ASR segments (with word timestamps)
         class ASRSeg:
@@ -98,11 +103,18 @@ class TestDiarizationIntegration:
 
         asr_segments = [
             ASRSeg(0.0, 0.5, "hello", [{"start": 0.0, "end": 0.5, "word": "hello"}]),
-            ASRSeg(0.5, 1.5, "world test", [
-                {"start": 0.5, "end": 1.0, "word": "world"},
-                {"start": 1.0, "end": 1.5, "word": "test"}
-            ]),
-            ASRSeg(1.5, 2.0, "goodbye", [{"start": 1.5, "end": 2.0, "word": "goodbye"}]),
+            ASRSeg(
+                0.5,
+                1.5,
+                "world test",
+                [
+                    {"start": 0.5, "end": 1.0, "word": "world"},
+                    {"start": 1.0, "end": 1.5, "word": "test"},
+                ],
+            ),
+            ASRSeg(
+                1.5, 2.0, "goodbye", [{"start": 1.5, "end": 2.0, "word": "goodbye"}]
+            ),
         ]
 
         aligned = diarizer.assign_word_speakers_whisperx_style(diar_spans, asr_segments)
@@ -154,8 +166,10 @@ class TestDiarizationIntegration:
             {"start": 8.0, "end": 9.0, "word": "nine"},
             {"start": 9.0, "end": 10.0, "word": "ten"},
         ]
-        
-        asr_segs = [ASRSeg(0.0, 10.0, "one two three four five six seven eight nine ten", words)]
+
+        asr_segs = [
+            ASRSeg(0.0, 10.0, "one two three four five six seven eight nine ten", words)
+        ]
         diar_spans = [
             {"start": 0, "end": 5, "speaker": "S1"},
             {"start": 5, "end": 10, "speaker": "S2"},
@@ -205,16 +219,26 @@ class TestDiarizationIntegration:
                 self.words = words
 
         asr_segs = [
-            ASRSeg(0.0, 5.0, "speaker one talking", [
-                {"start": 0.0, "end": 1.0, "word": "speaker"},
-                {"start": 1.0, "end": 2.0, "word": "one"},
-                {"start": 2.0, "end": 3.0, "word": "talking"}
-            ]),
-            ASRSeg(5.0, 10.0, "speaker two speaking", [
-                {"start": 5.0, "end": 6.0, "word": "speaker"},
-                {"start": 6.0, "end": 7.0, "word": "two"},
-                {"start": 7.0, "end": 8.0, "word": "speaking"}
-            ]),
+            ASRSeg(
+                0.0,
+                5.0,
+                "speaker one talking",
+                [
+                    {"start": 0.0, "end": 1.0, "word": "speaker"},
+                    {"start": 1.0, "end": 2.0, "word": "one"},
+                    {"start": 2.0, "end": 3.0, "word": "talking"},
+                ],
+            ),
+            ASRSeg(
+                5.0,
+                10.0,
+                "speaker two speaking",
+                [
+                    {"start": 5.0, "end": 6.0, "word": "speaker"},
+                    {"start": 6.0, "end": 7.0, "word": "two"},
+                    {"start": 7.0, "end": 8.0, "word": "speaking"},
+                ],
+            ),
         ]
 
         diar_spans = [

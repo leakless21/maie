@@ -1288,10 +1288,20 @@ class LLMProcessor(LLMBackend):
         This method ensures proper cleanup of vLLM resources and CUDA memory.
         """
         if self.model is not None:
+            # GPU mem before unload
+            try:
+                import torch
+                alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
+                reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
+            except:
+                alloc_before = reserved_before = -1
+
             try:
                 # Delete the model to free GPU memory
                 del self.model
                 logger.debug("LLM model unloaded successfully")
+            except Exception as e:
+                logger.warning(f"Error during model unload: {e}")
             except Exception as e:
                 logger.warning(f"Error during model unload: {e}")
             finally:
@@ -1312,8 +1322,14 @@ class LLMProcessor(LLMBackend):
         ):
             if has_cuda():
                 try:
+                    alloc_pre_cache = torch.cuda.memory_allocated(0) / (1024**3)
+                    reserved_pre_cache = torch.cuda.memory_reserved(0) / (1024**3)
                     torch_module.cuda.empty_cache()
-                    logger.debug("CUDA cache cleared")
+                    alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                    reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                    logger.info("LLM unload GPU mem: alloc %.2fGB→%.2fGB (pre %.2fGB), reserved %.2fGB→%.2fGB (pre %.2fGB)", alloc_before, alloc_after, alloc_pre_cache, reserved_before, reserved_after, reserved_pre_cache)
+                except Exception as e:
+                    logger.warning(f"Failed to clear CUDA cache: {e}")
                 except Exception as e:
                     logger.warning(f"Failed to clear CUDA cache: {e}")
 

@@ -83,9 +83,9 @@ class RedisSettings(BaseModel):
 
 class AsrSettings(BaseModel):
     whisper_model_path: str = Field(
-        default="data/models/era-x-wow-turbo-v1.1-ct2",
+        default="data/models/openai-whisper-large",
     )
-    whisper_model_variant: str = Field(default="erax-wow-turbo")
+    whisper_model_variant: str = Field(default="openai-large")
     whisper_beam_size: int = Field(default=5)
     whisper_vad_filter: bool = Field(default=False)
     whisper_vad_min_silence_ms: int = Field(default=500)
@@ -254,8 +254,8 @@ class WorkerSettings(BaseModel):
 class DiarizationSettings(BaseModel):
     enabled: bool = Field(default=False, description="Enable speaker diarization")
     model_path: str = Field(
-        default="pyannote/speaker-diarization-3.1",
-        description="HuggingFace model ID for pyannote speaker diarization (pyannote 3.x format)",
+        default="data/models/pyannote-speaker-diarization-community-1",
+        description="LOCAL PATH to pyannote speaker diarization model for FULLY OFFLINE operation (no HuggingFace/network calls)",
     )
     overlap_threshold: float = Field(
         default=0.3,

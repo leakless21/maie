@@ -55,8 +55,8 @@ class ProcessRequestSchema(BaseModel):
         json_schema_extra={"format": "binary", "type": "string"},
     )
     features: List[Feature] = Field(
-        default=[Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY],
-        description="Desired outputs. Available options: 'raw_transcript', 'clean_transcript', 'summary', 'enhancement_metrics'. Default: ['clean_transcript', 'summary']. Tags are embedded in summary output via the template schema.",
+        default=[Feature.CLEAN_TRANSCRIPT],
+        description="Desired outputs. Available options: 'raw_transcript', 'clean_transcript', 'summary', 'enhancement_metrics'. Default: ['clean_transcript']. Tags are embedded in summary output via the template schema.",
         json_schema_extra={
             "examples": [
                 ["clean_transcript", "summary"],

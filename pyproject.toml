@@ -4,7 +4,7 @@ version = "0.1.0"
 description = "Modular Audio Intelligence Engine"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = ["soxr", "transformers", "flashinfer-cubin>=0.5.2,<0.6", "rq-dashboard", "pyannote-audio>=3.4.0,<5", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3", "silero-vad>=6.2.0,<7", "onnxruntime>=1.23.2,<2", "torchcodec==0.7.0"]
+dependencies = ["soxr", "transformers", "flashinfer-cubin>=0.5.2,<0.6", "rq-dashboard", "pyannote-audio>=4.0.0,<5", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3", "silero-vad>=6.2.0,<7", "onnxruntime>=1.23.2,<2", "torchcodec==0.7.0"]
 
 
 [dependency-groups]
@@ -73,8 +73,8 @@ test-debug = "pytest -vv --tb=long --showlocals -ra -s"
 lint = "ruff check --fix"
 format = "ruff format"
 api = "uvicorn src.api.main:app"
-worker = "python src/worker/main.py"
-scheduler = "python src/scheduler/main.py"
+worker = "bash -c 'cd \"$PWD\" && python -m src.worker.main'"
+scheduler = "bash -c 'cd \"$PWD\" && python -m src.scheduler.main'"
 style = "ruff check --fix && ruff format -v && dead"  # Combined formatting and linting
 download-models = "bash scripts/download-models.sh"  # Keep existing bash script
 

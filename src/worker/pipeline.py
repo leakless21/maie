@@ -898,10 +898,14 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     if vad_model is not None and hasattr(vad_model, "unload"):
                         vad_model.unload()
 
-                    # Clear CUDA cache to free GPU memory
+                    # GPU memory diagnostics
                     if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
                         torch.cuda.empty_cache()
-                        logger.info("VAD model unloaded and GPU cache cleared")
+                        alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                        logger.info("VAD unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
                     else:
                         logger.info("VAD model unloaded")
                 except (AttributeError, RuntimeError, OSError) as e:
@@ -921,8 +925,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
                     # Critical: Clear CUDA cache to free GPU memory
                     if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
                         torch.cuda.empty_cache()
-                        logger.info("ASR model unloaded and GPU cache cleared")
+                        alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                        logger.info("ASR unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
                     else:
                         logger.info("ASR model unloaded")
                 except (AttributeError, RuntimeError, OSError) as e:
@@ -1141,6 +1149,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
         # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summary)
         # =====================================================================
+        llm_model = None  # Initialize to None in case we skip loading
         try:
             if redis_conn:
                 safe_transcript_len = 0
@@ -1167,8 +1176,19 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     details={"transcription_length": 0},
                 )
 
-            # Preflight: only proceed if LLM-related features are requested
-            wants_llm = "clean_transcript" in features or "summary" in features
+            # Preflight: determine if LLM is actually needed
+            # Check if enhancement is needed based on ASR backend capabilities
+            from src.processors.llm import LLMProcessor
+
+            temp_llm = LLMProcessor()
+            needs_enhancement = (
+                "clean_transcript" in features
+                and hasattr(temp_llm, "needs_enhancement")
+                and temp_llm.needs_enhancement(asr_backend)
+            )
+            needs_summary = "summary" in features
+            wants_llm = needs_enhancement or needs_summary
+
             if wants_llm and not has_cuda():
                 # Fail gracefully with clear, actionable message
                 raise LLMProcessingError(
@@ -1185,35 +1205,36 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     },
                 )
 
-            logger.info("Loading LLM model", task_id=job_id)
+            if not wants_llm:
+                logger.info(
+                    "Skipping LLM loading - ASR backend provides native punctuation and no summary requested",
+                    asr_backend=asr_backend,
+                )
+            else:
+                logger.info("Loading LLM model", task_id=job_id)
 
-            # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
-            # This prevents fragmentation issues from previous models
-            if TORCH_AVAILABLE and torch is not None and has_cuda():
-                try:
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()  # Wait for all operations to complete
-                    logger.info("GPU cache cleared before LLM load")
-                except Exception as cache_error:
-                    logger.warning(f"Could not clear GPU cache: {cache_error}")
+                # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
+                # This prevents fragmentation issues from previous models
+                if TORCH_AVAILABLE and torch is not None and has_cuda():
+                    try:
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()  # Wait for all operations to complete
+                        logger.info("GPU cache cleared before LLM load")
+                    except Exception as cache_error:
+                        logger.warning(f"Could not clear GPU cache: {cache_error}")
 
-            # Step 3a: Load LLM model using LLMProcessor directly
-            from src.processors.llm import LLMProcessor
-
-            llm_model = LLMProcessor()
-            # Trigger lazy loading
-            llm_model._load_model()
+                # Step 3a: Load LLM model using LLMProcessor directly
+                llm_model = LLMProcessor()
+                # Trigger lazy loading
+                llm_model._load_model()
 
             # Step 3b: Execute LLM processing (enhancement and/or summary)
-            # Text enhancement (conditional based on ASR backend capabilities)
-            # Skip enhancement if ASR backend provides native punctuation (e.g., Whisper with erax-wow-turbo)
-            needs_enhancement = (
-                "clean_transcript" in features
-                and hasattr(llm_model, "needs_enhancement")
-                and llm_model.needs_enhancement(asr_backend)
-            )
+            # Initialize variables
+            clean_transcript = transcription
+            structured_summary = None
 
-            if needs_enhancement:
+            # Only process enhancement if LLM was loaded and enhancement is needed
+            if wants_llm and needs_enhancement:
                 try:
                     input_char_count = len(transcription)
                     input_word_count = (
@@ -1271,15 +1292,14 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         error=str(e),
                     )
                     clean_transcript = transcription
-            else:
-                # Skip enhancement - ASR backend provides native punctuation
-                clean_transcript = transcription
+            elif wants_llm:
+                # LLM was loaded but enhancement not needed (ASR provides native punctuation)
                 logger.info(
                     "Text enhancement skipped - ASR backend provides native punctuation"
                 )
 
             # Structured summary
-            if "summary" in features:
+            if wants_llm and "summary" in features:
                 if not template_id:
                     error_msg = "template_id required when summary feature requested"
                     logger.error(error_msg)
@@ -1366,7 +1386,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Step 3c: Collect version metadata while models are loaded
             try:
-                version_metadata = get_version_metadata(asr_metadata, llm_model)
+                version_metadata = get_version_metadata(
+                    asr_metadata, llm_model if wants_llm else None
+                )
             except Exception as metadata_error:
                 logger.error(
                     "Failed to collect version metadata",
@@ -1542,6 +1564,18 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error=str(e),
         )
 
+        # Update status to FAILED so /v1/status reflects terminal state
+        if redis_conn:
+            error_details = {
+                "status": TaskStatus.FAILED.value,
+                "error": str(e),
+                "stage": "pipeline_execution",
+                "error_code": error_code,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            redis_conn.hset(task_key, mapping=error_details)
+
         try:
             clear_correlation_id()
         except Exception:
@@ -1571,6 +1605,18 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error_code=error_code,
             error=str(e),
         )
+
+        # Update status to FAILED so /v1/status no longer reports PROCESSING_* state
+        if redis_conn:
+            error_details = {
+                "status": TaskStatus.FAILED.value,
+                "error": str(e),
+                "stage": "pipeline_execution",
+                "error_code": error_code,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            redis_conn.hset(task_key, mapping=error_details)
 
         try:
             clear_correlation_id()
