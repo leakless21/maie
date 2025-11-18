@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 from redis import Redis
-from rq import Worker
+from rq import SimpleWorker
 
 from src.worker.main import setup_redis_connection, start_worker, verify_models
 
@@ -117,7 +117,7 @@ class TestStartWorker:
 
     @patch("src.worker.main.verify_models")
     @patch("src.worker.main.setup_redis_connection")
-    @patch("src.worker.main.Worker")
+    @patch("src.worker.main.SimpleWorker")
     def test_start_worker_successful_startup(
         self, mock_worker_class, mock_setup_redis, mock_verify
     ):
@@ -126,7 +126,7 @@ class TestStartWorker:
         mock_verify.return_value = True
         mock_redis = MagicMock(spec=Redis)
         mock_setup_redis.return_value = mock_redis
-        mock_worker = MagicMock(spec=Worker)
+        mock_worker = MagicMock(spec=SimpleWorker)
         mock_worker.name = "test-worker"
         mock_worker_class.return_value = mock_worker
 
@@ -151,7 +151,7 @@ class TestStartWorker:
 
     @patch("src.worker.main.verify_models")
     @patch("src.worker.main.setup_redis_connection")
-    @patch("src.worker.main.Worker")
+    @patch("src.worker.main.SimpleWorker")
     def test_worker_listens_to_correct_queues(
         self, mock_worker_class, mock_setup_redis, mock_verify
     ):
@@ -160,7 +160,7 @@ class TestStartWorker:
         mock_verify.return_value = True
         mock_redis = MagicMock(spec=Redis)
         mock_setup_redis.return_value = mock_redis
-        mock_worker = MagicMock(spec=Worker)
+        mock_worker = MagicMock(spec=SimpleWorker)
         mock_worker.name = "test-worker"  # Add name attribute
         mock_worker_class.return_value = mock_worker
 
@@ -176,7 +176,7 @@ class TestStartWorker:
 
     @patch("src.worker.main.verify_models")
     @patch("src.worker.main.setup_redis_connection")
-    @patch("src.worker.main.Worker")
+    @patch("src.worker.main.SimpleWorker")
     def test_worker_uses_settings_for_configuration(
         self, mock_worker_class, mock_setup_redis, mock_verify
     ):
@@ -185,7 +185,7 @@ class TestStartWorker:
         mock_verify.return_value = True
         mock_redis = MagicMock(spec=Redis)
         mock_setup_redis.return_value = mock_redis
-        mock_worker = MagicMock(spec=Worker)
+        mock_worker = MagicMock(spec=SimpleWorker)
         mock_worker.name = "configured-worker-name"
         mock_worker_class.return_value = mock_worker
 

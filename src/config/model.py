@@ -83,11 +83,11 @@ class RedisSettings(BaseModel):
 
 class AsrSettings(BaseModel):
     whisper_model_path: str = Field(
-        default="data/models/era-x-wow-turbo-v1.1-ct2",
+        default="data/models/openai-whisper-large",
     )
-    whisper_model_variant: str = Field(default="erax-wow-turbo")
+    whisper_model_variant: str = Field(default="openai-large")
     whisper_beam_size: int = Field(default=5)
-    whisper_vad_filter: bool = Field(default=True)
+    whisper_vad_filter: bool = Field(default=False)
     whisper_vad_min_silence_ms: int = Field(default=500)
     whisper_vad_speech_pad_ms: int = Field(default=400)
     whisper_device: str = Field(default="cuda")
@@ -254,8 +254,8 @@ class WorkerSettings(BaseModel):
 class DiarizationSettings(BaseModel):
     enabled: bool = Field(default=False, description="Enable speaker diarization")
     model_path: str = Field(
-        default="pyannote/speaker-diarization-3.1",
-        description="HuggingFace model ID for pyannote speaker diarization (pyannote 3.x format)",
+        default="data/models/pyannote-speaker-diarization-community-1",
+        description="LOCAL PATH to pyannote speaker diarization model for FULLY OFFLINE operation (no HuggingFace/network calls)",
     )
     overlap_threshold: float = Field(
         default=0.3,
@@ -364,6 +364,82 @@ class CleanupSettings(BaseModel):
         return value
 
 
+class VADSettings(BaseModel):
+    """Voice Activity Detection (VAD) settings."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable Voice Activity Detection preprocessing",
+    )
+    backend: str = Field(
+        default="silero",
+        description="VAD backend to use (currently supports 'silero')",
+    )
+    silero_model_path: str | None = Field(
+        default=None,
+        description="Optional explicit ONNX model path; if not provided, uses silero-vad's built-in loader",
+    )
+    silero_threshold: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description="Speech confidence threshold for Silero VAD",
+    )
+    silero_sampling_rate: int = Field(
+        default=16000,
+        ge=8000,
+        description="Audio sampling rate for Silero VAD",
+    )
+    min_speech_duration_ms: int = Field(
+        default=200,
+        ge=0,
+        description="Minimum speech segment duration in milliseconds",
+    )
+    max_speech_duration_ms: int = Field(
+        default=60000,
+        ge=0,
+        description="Maximum continuous speech duration in milliseconds",
+    )
+    min_silence_duration_ms: int = Field(
+        default=500,
+        ge=0,
+        description="Minimum silence duration between speech segments in milliseconds",
+    )
+    window_size_samples: int = Field(
+        default=512,
+        ge=1,
+        description="Window size for VAD in samples",
+    )
+    device: str = Field(
+        default="cuda",
+        description="Device to use for VAD processing ('cuda' or 'cpu')",
+    )
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("backend")
+    @classmethod
+    def validate_backend(cls, value: str) -> str:
+        """Ensure backend is supported."""
+        supported = {"silero"}
+        if value not in supported:
+            raise ValueError(
+                f"Unsupported VAD backend: {value}. Supported: {', '.join(supported)}"
+            )
+        return value
+
+    @field_validator("device")
+    @classmethod
+    def validate_device(cls, value: str) -> str:
+        """Ensure device is valid."""
+        supported = {"cuda", "cpu"}
+        if value not in supported:
+            raise ValueError(
+                f"Invalid device: {value}. Must be one of: {', '.join(supported)}"
+            )
+        return value
+
+
 class FeatureFlags(BaseModel):
     enable_enhancement: bool = Field(default=True)
 
@@ -382,6 +458,7 @@ class AppSettings(BaseSettings):
     asr: AsrSettings = Field(default_factory=AsrSettings)
     chunkformer: ChunkformerSettings = Field(default_factory=ChunkformerSettings)
     diarization: DiarizationSettings = Field(default_factory=DiarizationSettings)
+    vad: VADSettings = Field(default_factory=VADSettings)
     llm_enhance: LlmEnhanceSettings = Field(default_factory=LlmEnhanceSettings)
     llm_sum: LlmSumSettings = Field(default_factory=LlmSumSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)

@@ -274,6 +274,7 @@ def calculate_metrics(
     start_time: float,
     audio_duration: float,
     asr_rtf: float,
+    vad_result: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """Calculate runtime metrics for the processing per MetricsSchema and FR-5."""
     total_processing_time = time.time() - start_time
@@ -305,6 +306,11 @@ def calculate_metrics(
         "transcription_length": transcription_length,
         "audio_duration": audio_duration,  # Kept for backward compatibility with tests
     }
+
+    # Add VAD metrics if available
+    if vad_result:
+        metrics["vad_coverage"] = vad_result.get("speech_ratio", 0.0)
+        metrics["vad_segments"] = vad_result.get("num_segments", 0)
 
     # Add enhancement metrics if text enhancement was performed
     if enhanced_text and enhanced_text != original_text:
@@ -358,6 +364,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     template_id = task_params.get("template_id")
     config = task_params.get("config", {})
     enable_diarization = task_params.get("enable_diarization", False)
+    
+    # VAD parameters (can override system defaults)
+    enable_vad_override = task_params.get("enable_vad")
+    vad_threshold_override = task_params.get("vad_threshold")
 
     # Connect to Redis results database (DB 1 per TDD.md section 3.6)
     redis_host = task_params.get("redis_host", "localhost")
@@ -372,9 +382,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     start_time = time.time()
     asr_model = None  # Track loaded ASR model for cleanup
     llm_model = None  # Track loaded LLM model for cleanup
+    vad_model = None  # Track loaded VAD model for cleanup
     audio_duration = 10.0  # Default fallback, will be updated from preprocessing
     processing_audio_path = audio_path  # Path to use for ASR (normalized or raw)
     version_metadata: Optional[Dict[str, Any]] = None
+    vad_result: Optional[Dict[str, Any]] = None  # Track VAD processing results
 
     try:
         # =====================================================================
@@ -644,6 +656,96 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             }
 
         # =====================================================================
+        # Stage 1.5: VAD (Voice Activity Detection) - Optional preprocessing
+        # =====================================================================
+        try:
+            # Use request-level override if provided, otherwise use system settings
+            vad_enabled = enable_vad_override if enable_vad_override is not None else settings.vad.enabled
+            
+            if vad_enabled:
+                logger.info(
+                    "Starting VAD processing",
+                    task_id=job_id,
+                    vad_backend=settings.vad.backend,
+                )
+
+                # Import VAD factory
+                from src.processors.asr.factory import ASRFactory
+                from src.config.model import VADSettings
+
+                # Create VAD configuration with optional overrides
+                vad_config = VADSettings(
+                    enabled=True,
+                    backend=settings.vad.backend,
+                    silero_model_path=settings.vad.silero_model_path,
+                    silero_threshold=vad_threshold_override if vad_threshold_override is not None else settings.vad.silero_threshold,
+                    silero_sampling_rate=settings.vad.silero_sampling_rate,
+                    min_speech_duration_ms=settings.vad.min_speech_duration_ms,
+                    max_speech_duration_ms=settings.vad.max_speech_duration_ms,
+                    min_silence_duration_ms=settings.vad.min_silence_duration_ms,
+                    window_size_samples=settings.vad.window_size_samples,
+                    device=settings.vad.device,
+                )
+
+                # Create VAD backend from settings
+                vad_model = ASRFactory.create_vad_backend(vad_config)
+
+                if vad_model:
+                    try:
+                        # Perform speech detection
+                        vad_result_obj = vad_model.detect_speech(processing_audio_path)
+
+                        # Convert VADResult to dictionary for storage
+                        vad_result = {
+                            "total_duration": vad_result_obj.total_duration,
+                            "speech_duration": vad_result_obj.speech_duration,
+                            "speech_ratio": vad_result_obj.speech_ratio,
+                            "non_speech_duration": vad_result_obj.non_speech_duration(),
+                            "num_segments": len(vad_result_obj.segments),
+                            "num_speech_segments": len(vad_result_obj.get_speech_segments()),
+                            "num_silence_segments": len(vad_result_obj.get_silence_segments()),
+                            "processing_time": vad_result_obj.processing_time,
+                            "backend_info": vad_result_obj.backend_info,
+                        }
+
+                        logger.info(
+                            "VAD processing completed",
+                            task_id=job_id,
+                            speech_duration=vad_result["speech_duration"],
+                            speech_ratio=vad_result["speech_ratio"],
+                            num_segments=vad_result["num_segments"],
+                            processing_time=vad_result["processing_time"],
+                        )
+                    except Exception as exc:
+                        logger.error(
+                            "VAD processing failed, continuing without VAD",
+                            task_id=job_id,
+                            error=str(exc),
+                            exc_info=True,
+                        )
+                        vad_result = None
+                        if vad_model:
+                            try:
+                                vad_model.unload()
+                            except Exception:
+                                pass
+                            vad_model = None
+        except Exception as exc:
+            logger.warning(
+                "VAD initialization failed, continuing without VAD",
+                task_id=job_id,
+                error=str(exc),
+                exc_info=True,
+            )
+            vad_result = None
+            if vad_model:
+                try:
+                    vad_model.unload()
+                except Exception:
+                    pass
+                vad_model = None
+
+        # =====================================================================
         # Stage 2: PROCESSING_ASR - ASR transcription with sequential GPU usage
         # =====================================================================
         try:
@@ -789,6 +891,31 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             )
 
         finally:
+            # Step 1.5c: Unload VAD model if loaded
+            if vad_model is not None:
+                try:
+                    logger.info("Unloading VAD model")
+                    if vad_model is not None and hasattr(vad_model, "unload"):
+                        vad_model.unload()
+
+                    # GPU memory diagnostics
+                    if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
+                        torch.cuda.empty_cache()
+                        alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                        logger.info("VAD unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
+                    else:
+                        logger.info("VAD model unloaded")
+                except (AttributeError, RuntimeError, OSError) as e:
+                    logger.warning("Error during VAD model unload", error=str(e))
+                except Exception as e:
+                    logger.warning(
+                        "Unexpected error during VAD model unload", error=str(e)
+                    )
+                vad_model = None
+
             # Step 2c: CRITICAL - Always unload ASR model to free GPU memory
             if asr_model is not None:
                 try:
@@ -798,8 +925,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
                     # Critical: Clear CUDA cache to free GPU memory
                     if TORCH_AVAILABLE and torch is not None and has_cuda():
+                        alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
                         torch.cuda.empty_cache()
-                        logger.info("ASR model unloaded and GPU cache cleared")
+                        alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                        logger.info("ASR unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
                     else:
                         logger.info("ASR model unloaded")
                 except (AttributeError, RuntimeError, OSError) as e:
@@ -1018,6 +1149,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
         # Stage 3: PROCESSING_LLM - LLM processing (enhancement + summary)
         # =====================================================================
+        llm_model = None  # Initialize to None in case we skip loading
         try:
             if redis_conn:
                 safe_transcript_len = 0
@@ -1044,8 +1176,19 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     details={"transcription_length": 0},
                 )
 
-            # Preflight: only proceed if LLM-related features are requested
-            wants_llm = "clean_transcript" in features or "summary" in features
+            # Preflight: determine if LLM is actually needed
+            # Check if enhancement is needed based on ASR backend capabilities
+            from src.processors.llm import LLMProcessor
+
+            temp_llm = LLMProcessor()
+            needs_enhancement = (
+                "clean_transcript" in features
+                and hasattr(temp_llm, "needs_enhancement")
+                and temp_llm.needs_enhancement(asr_backend)
+            )
+            needs_summary = "summary" in features
+            wants_llm = needs_enhancement or needs_summary
+
             if wants_llm and not has_cuda():
                 # Fail gracefully with clear, actionable message
                 raise LLMProcessingError(
@@ -1062,35 +1205,36 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     },
                 )
 
-            logger.info("Loading LLM model", task_id=job_id)
+            if not wants_llm:
+                logger.info(
+                    "Skipping LLM loading - ASR backend provides native punctuation and no summary requested",
+                    asr_backend=asr_backend,
+                )
+            else:
+                logger.info("Loading LLM model", task_id=job_id)
 
-            # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
-            # This prevents fragmentation issues from previous models
-            if TORCH_AVAILABLE and torch is not None and has_cuda():
-                try:
-                    torch.cuda.empty_cache()
-                    torch.cuda.synchronize()  # Wait for all operations to complete
-                    logger.info("GPU cache cleared before LLM load")
-                except Exception as cache_error:
-                    logger.warning(f"Could not clear GPU cache: {cache_error}")
+                # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
+                # This prevents fragmentation issues from previous models
+                if TORCH_AVAILABLE and torch is not None and has_cuda():
+                    try:
+                        torch.cuda.empty_cache()
+                        torch.cuda.synchronize()  # Wait for all operations to complete
+                        logger.info("GPU cache cleared before LLM load")
+                    except Exception as cache_error:
+                        logger.warning(f"Could not clear GPU cache: {cache_error}")
 
-            # Step 3a: Load LLM model using LLMProcessor directly
-            from src.processors.llm import LLMProcessor
-
-            llm_model = LLMProcessor()
-            # Trigger lazy loading
-            llm_model._load_model()
+                # Step 3a: Load LLM model using LLMProcessor directly
+                llm_model = LLMProcessor()
+                # Trigger lazy loading
+                llm_model._load_model()
 
             # Step 3b: Execute LLM processing (enhancement and/or summary)
-            # Text enhancement (conditional based on ASR backend capabilities)
-            # Skip enhancement if ASR backend provides native punctuation (e.g., Whisper with erax-wow-turbo)
-            needs_enhancement = (
-                "clean_transcript" in features
-                and hasattr(llm_model, "needs_enhancement")
-                and llm_model.needs_enhancement(asr_backend)
-            )
+            # Initialize variables
+            clean_transcript = transcription
+            structured_summary = None
 
-            if needs_enhancement:
+            # Only process enhancement if LLM was loaded and enhancement is needed
+            if wants_llm and needs_enhancement:
                 try:
                     input_char_count = len(transcription)
                     input_word_count = (
@@ -1148,15 +1292,14 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         error=str(e),
                     )
                     clean_transcript = transcription
-            else:
-                # Skip enhancement - ASR backend provides native punctuation
-                clean_transcript = transcription
+            elif wants_llm:
+                # LLM was loaded but enhancement not needed (ASR provides native punctuation)
                 logger.info(
                     "Text enhancement skipped - ASR backend provides native punctuation"
                 )
 
             # Structured summary
-            if "summary" in features:
+            if wants_llm and "summary" in features:
                 if not template_id:
                     error_msg = "template_id required when summary feature requested"
                     logger.error(error_msg)
@@ -1243,7 +1386,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             # Step 3c: Collect version metadata while models are loaded
             try:
-                version_metadata = get_version_metadata(asr_metadata, llm_model)
+                version_metadata = get_version_metadata(
+                    asr_metadata, llm_model if wants_llm else None
+                )
             except Exception as metadata_error:
                 logger.error(
                     "Failed to collect version metadata",
@@ -1287,7 +1432,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
         # Calculate metrics (FR-5)
         metrics = calculate_metrics(
-            transcription, clean_transcript, start_time, audio_duration, asr_rtf
+            transcription, clean_transcript, start_time, audio_duration, asr_rtf, vad_result
         )
 
         # Collect version metadata if not already resolved
@@ -1419,6 +1564,18 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error=str(e),
         )
 
+        # Update status to FAILED so /v1/status reflects terminal state
+        if redis_conn:
+            error_details = {
+                "status": TaskStatus.FAILED.value,
+                "error": str(e),
+                "stage": "pipeline_execution",
+                "error_code": error_code,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            redis_conn.hset(task_key, mapping=error_details)
+
         try:
             clear_correlation_id()
         except Exception:
@@ -1448,6 +1605,18 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             error_code=error_code,
             error=str(e),
         )
+
+        # Update status to FAILED so /v1/status no longer reports PROCESSING_* state
+        if redis_conn:
+            error_details = {
+                "status": TaskStatus.FAILED.value,
+                "error": str(e),
+                "stage": "pipeline_execution",
+                "error_code": error_code,
+                "updated_at": datetime.now(timezone.utc).isoformat(),
+                "completed_at": datetime.now(timezone.utc).isoformat(),
+            }
+            redis_conn.hset(task_key, mapping=error_details)
 
         try:
             clear_correlation_id()

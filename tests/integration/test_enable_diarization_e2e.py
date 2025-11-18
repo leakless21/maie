@@ -146,7 +146,9 @@ class TestDiarizationWithMockedPipeline:
         """Verify diarization is called when both global and parameter are True."""
         # Setup mock settings
         mock_settings.diarization.enabled = True
-        mock_settings.diarization.model_path = "pyannote/speaker-diarization-3.1"
+        mock_settings.diarization.model_path = (
+            "data/models/pyannote-speaker-diarization-community-1"
+        )
         mock_settings.diarization.require_cuda = False
         mock_settings.diarization.embedding_batch_size = 32
         mock_settings.diarization.segmentation_batch_size = 32

@@ -106,6 +106,16 @@ pixi run pytest tests/e2e/ -v
 pixi run pytest tests/e2e/test_core_workflow.py::TestCoreWorkflow::test_happy_path_whisper -v
 ```
 
+**⚠️ Important Prerequisites:**
+
+E2E tests will **automatically verify** that:
+
+1. ✅ **API server is running** at `http://localhost:8000`
+2. ✅ **RQ workers are running** and processing tasks
+3. ✅ **Redis is accessible** at `localhost:6379`
+
+If any of these are missing, tests will exit immediately with helpful error messages.
+
 ## Stopping and Cleanup
 
 ```bash

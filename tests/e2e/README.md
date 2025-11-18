@@ -70,6 +70,16 @@ export SECRET_API_KEY=test-key-123456789012345678901234567890
 pixi run pytest tests/e2e/ -v
 ```
 
+**⚠️ Important: Automatic Pre-flight Checks**
+
+E2E tests now include automatic verification that will **exit immediately** if:
+
+- ❌ API server is not responding at `http://localhost:8000`
+- ❌ No RQ workers are detected in Redis
+- ❌ Redis is not accessible
+
+You'll see clear error messages with instructions on how to start missing components.
+
 **Cleanup**:
 
 ```bash
@@ -344,12 +354,12 @@ env | grep -E "(SECRET_API_KEY|API_BASE_URL)" || echo "No test env vars found"
 
 **Common Authentication Issues**:
 
-| Issue                | Symptom            | Solution                               |
-| -------------------- | ------------------ | -------------------------------------- |
+| Issue                | Symptom            | Solution                                             |
+| -------------------- | ------------------ | ---------------------------------------------------- |
 | Wrong API Key        | 401 Unauthorized   | Use exact key from AppSettings (development profile) |
-| Missing Header       | 401 Unauthorized   | Include `X-API-Key` header             |
-| Environment Mismatch | 500 Server Error   | Ensure test config is loaded           |
-| Port Conflict        | Connection Refused | Verify API runs on port 8000           |
+| Missing Header       | 401 Unauthorized   | Include `X-API-Key` header                           |
+| Environment Mismatch | 500 Server Error   | Ensure test config is loaded                         |
+| Port Conflict        | Connection Refused | Verify API runs on port 8000                         |
 
 ### Troubleshooting
 

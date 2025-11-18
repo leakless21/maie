@@ -56,7 +56,8 @@ class TestCoreWorkflow:
             ["raw_transcript", "clean_transcript", "summary"],
         ]
 
-        for features in test_cases:
+        for i, features in enumerate(test_cases, 1):
+            print(f"\n=== Test case {i}/{len(test_cases)}: {features} ===")
             response = api_client.submit_audio(
                 audio_file,
                 features=features,
@@ -64,9 +65,18 @@ class TestCoreWorkflow:
             )
             assert response.status_code == 202
             task_id = response.json()["task_id"]
+            print(f"Submitted task {task_id}")
 
-            result = api_client.wait_for_completion(task_id)
-            self._validate_features_present(result, features)
+            # Use shorter timeout per task (60s) instead of waiting full 300s
+            try:
+                result = api_client.wait_for_completion(task_id, timeout=60)
+                self._validate_features_present(result, features)
+            except TimeoutError as e:
+                pytest.fail(
+                    f"Task {task_id} timed out after 60s for features {features}.\n"
+                    f"Error: {e}\n"
+                    f"This suggests workers are not running or not picking up tasks."
+                )
 
     def _validate_complete_result(self, result):
         """Validate complete processing result"""

@@ -15,19 +15,19 @@ warnings.filterwarnings(
     "ignore",
     message="torchaudio._backend.utils.info has been deprecated",
     category=UserWarning,
-    module="pyannote.audio.core.io"
+    module="pyannote.audio.core.io",
 )
 warnings.filterwarnings(
     "ignore",
     message="torchaudio._backend.common.AudioMetaData has been deprecated",
     category=UserWarning,
-    module="torchaudio._backend.soundfile_backend"
+    module="torchaudio._backend.soundfile_backend",
 )
 warnings.filterwarnings(
     "ignore",
     message="In 2.9, this function's implementation will be changed to use torchaudio.load_with_torchcodec",
     category=UserWarning,
-    module="torchaudio._backend.utils"
+    module="torchaudio._backend.utils",
 )
 warnings.filterwarnings(
     "ignore",
@@ -38,17 +38,17 @@ warnings.filterwarnings(
     "ignore",
     message="TensorFloat-32.*has been disabled",
     category=UserWarning,
-    module="pyannote.audio.utils.reproducibility"
+    module="pyannote.audio.utils.reproducibility",
 )
 warnings.filterwarnings(
     "ignore",
     message="std.*degrees of freedom is <= 0",
     category=UserWarning,
-    module="pyannote.audio.models.blocks.pooling"
+    module="pyannote.audio.models.blocks.pooling",
 )
 
 from redis import Redis
-from rq import Worker
+from rq import SimpleWorker
 
 # Opt-in: import logging configuration helpers defensively.
 from src.config import configure_logging, get_logger, settings
@@ -125,16 +125,22 @@ def start_worker() -> None:
     # Define the queues this worker will listen to
     listen = ["default", "audio_processing"]
 
-    # Create RQ worker with connection - use settings for worker name
-    worker = Worker(
+    # Create RQ SimpleWorker to avoid forking issues with CUDA
+    # SimpleWorker executes jobs in the main process without os.fork()
+    # This preserves CUDA context and avoids "CUDA initialization error"
+    # Reference: https://github.com/rq/rq/blob/master/docs/docs/workers.md
+    worker = SimpleWorker(
         listen,
         connection=redis_conn,
         name=settings.worker.worker_name,
         exception_handlers=[],
     )
 
-    get_logger().info("Starting worker {}", worker.name)
-    worker.work()
+    get_logger().info(
+        "Starting worker {} (SimpleWorker - no forking, max_jobs=1 for GPU reset)",
+        worker.name,
+    )
+    worker.work(max_jobs=1)
 
 
 if __name__ == "__main__":
@@ -162,6 +168,15 @@ if __name__ == "__main__":
     logger = logger if logger is not None else get_logger()
     logger = get_module_logger(__name__)
     logger.info("Loguru configuration active (phase1) - worker")
+    
+    # DEBUG: Log current logging configuration state
+    import logging
+    root_logger = logging.getLogger()
+    handlers = root_logger.handlers
+    logger.info("Root logger handlers count: {}", len(handlers))
+    for i, handler in enumerate(handlers):
+        logger.info("Handler {}: {} (level: {})", i, type(handler).__name__, handler.level)
+    
     try:
         from src.config import settings as _settings_for_log
 

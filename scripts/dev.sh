@@ -5,9 +5,11 @@
 set -euo pipefail
 
 # Default environment variables
-export PYTHONPATH="${PYTHONPATH:-.}:$(pwd)"
+# Set PYTHONPATH to include project root for src imports
+export PYTHONPATH="$(pwd):${PYTHONPATH:-.}"
 export ENVIRONMENT="${ENVIRONMENT:-development}"
 export LOG_LEVEL="${LOG_LEVEL:-DEBUG}"
+export PYTHONDONTWRITEBYTECODE=1
 
 # Default to first GPU if not explicitly set (dev expects GPU usage)
 if [[ -z "${CUDA_VISIBLE_DEVICES:-}" ]]; then
@@ -172,29 +174,15 @@ elif [[ "$API_ONLY" == true ]]; then
 elif [[ "$WORKER_ONLY" == true ]]; then
   echo "Starting worker process..."
   
-  # Start worker in background to capture PID
-  pixi run worker &
-  WORKER_PID=$!
-  
   # Function to handle script termination
   cleanup() {
     echo "Shutting down worker process..."
-    
-    # Kill worker process if it was started
-    if [[ -n "${WORKER_PID:-}" ]]; then
-      echo "Stopping worker process (PID: $WORKER_PID)..."
-      kill $WORKER_PID 2>/dev/null || true
-    fi
     
     # Also kill any remaining RQ worker processes
     echo "Cleaning up any remaining RQ worker processes..."
     pkill -f "rq:worker" 2>/dev/null || true
     pkill -f "pixi run worker" 2>/dev/null || true
-    
-    # Wait for process to terminate
-    if [[ -n "${WORKER_PID:-}" ]]; then
-      wait $WORKER_PID 2>/dev/null || true
-    fi
+    pkill -f "python -m src.worker.main" 2>/dev/null || true
     
     echo "Cleanup completed."
     exit 0
@@ -203,8 +191,14 @@ elif [[ "$WORKER_ONLY" == true ]]; then
   # Set up signal traps
   trap cleanup SIGINT SIGTERM
   
-  # Wait for worker process
-  wait $WORKER_PID
+  # Start worker in a continuous loop to handle max_jobs=1
+  # When a worker exits after max_jobs, restart it automatically
+  while true; do
+    echo "Starting worker process..."
+    pixi run worker || true
+    echo "Worker exited or crashed, restarting in 2 seconds..."
+    sleep 2
+  done
 else
   echo "Starting API server on $HOST:$PORT, worker process, and scheduler..."
   
@@ -219,8 +213,14 @@ else
   # Give API server a moment to start
   sleep 2
   
-  # Start worker in background
-  pixi run worker &
+  # Start worker in background with continuous restart loop for max_jobs=1
+  # This ensures jobs don't get stuck when worker reaches max_jobs limit
+  (
+    while true; do
+      pixi run worker || true
+      sleep 1
+    done
+  ) &
   WORKER_PID=$!
   
   # Start scheduler in background (unless disabled)
@@ -232,49 +232,51 @@ else
     echo "Scheduler disabled - no automatic cleanup will occur"
   fi
   
-# Function to handle script termination
-cleanup() {
-  echo "Shutting down services..."
-  
-  # Kill API server if it was started
-  if [[ -n "${API_PID:-}" ]]; then
-    echo "Stopping API server (PID: $API_PID)..."
-    kill $API_PID 2>/dev/null || true
-  fi
-  
-  # Kill worker process if it was started
-  if [[ -n "${WORKER_PID:-}" ]]; then
-    echo "Stopping worker process (PID: $WORKER_PID)..."
-    kill $WORKER_PID 2>/dev/null || true
-  fi
-  
-  # Kill scheduler process if it was started
-  if [[ -n "${SCHEDULER_PID:-}" ]]; then
-    echo "Stopping scheduler process (PID: $SCHEDULER_PID)..."
-    kill $SCHEDULER_PID 2>/dev/null || true
-  fi
-  
-  # Also kill any remaining RQ processes
-  echo "Cleaning up any remaining RQ processes..."
-  pkill -f "rq:worker" 2>/dev/null || true
-  pkill -f "rq:scheduler" 2>/dev/null || true
-  pkill -f "pixi run worker" 2>/dev/null || true
-  pkill -f "pixi run scheduler" 2>/dev/null || true
-  
-  # Wait for processes to terminate
-  if [[ -n "${API_PID:-}" ]]; then
-    wait $API_PID 2>/dev/null || true
-  fi
-  if [[ -n "${WORKER_PID:-}" ]]; then
-    wait $WORKER_PID 2>/dev/null || true
-  fi
-  if [[ -n "${SCHEDULER_PID:-}" ]]; then
-    wait $SCHEDULER_PID 2>/dev/null || true
-  fi
-  
-  echo "Cleanup completed."
-  exit 0
-}
+  # Function to handle script termination
+  cleanup() {
+    echo "Shutting down services..."
+    
+    # Kill API server if it was started
+    if [[ -n "${API_PID:-}" ]]; then
+      echo "Stopping API server (PID: $API_PID)..."
+      kill $API_PID 2>/dev/null || true
+    fi
+    
+    # Kill worker process if it was started
+    if [[ -n "${WORKER_PID:-}" ]]; then
+      echo "Stopping worker process (PID: $WORKER_PID)..."
+      kill $WORKER_PID 2>/dev/null || true
+    fi
+    
+    # Kill scheduler process if it was started
+    if [[ -n "${SCHEDULER_PID:-}" ]]; then
+      echo "Stopping scheduler process (PID: $SCHEDULER_PID)..."
+      kill $SCHEDULER_PID 2>/dev/null || true
+    fi
+    
+    # Also kill any remaining RQ processes
+    echo "Cleaning up any remaining RQ processes..."
+    pkill -f "rq:worker" 2>/dev/null || true
+    pkill -f "rq:scheduler" 2>/dev/null || true
+    pkill -f "pixi run worker" 2>/dev/null || true
+    pkill -f "pixi run scheduler" 2>/dev/null || true
+    pkill -f "python -m src.worker.main" 2>/dev/null || true
+    pkill -f "python -m src.scheduler.main" 2>/dev/null || true
+    
+    # Wait for processes to terminate
+    if [[ -n "${API_PID:-}" ]]; then
+      wait $API_PID 2>/dev/null || true
+    fi
+    if [[ -n "${WORKER_PID:-}" ]]; then
+      wait $WORKER_PID 2>/dev/null || true
+    fi
+    if [[ -n "${SCHEDULER_PID:-}" ]]; then
+      wait $SCHEDULER_PID 2>/dev/null || true
+    fi
+    
+    echo "Cleanup completed."
+    exit 0
+  }
   
   # Set up signal traps
   trap cleanup SIGINT SIGTERM

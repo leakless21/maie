@@ -7,6 +7,17 @@ import os
 # Ensure PyTorch uses expandable CUDA segments to reduce fragmentation warnings.
 os.environ.setdefault("PYTORCH_CUDA_ALLOC_CONF", "expandable_segments:True")
 
+# CRITICAL: Disable ALL telemetry and analytics for FULLY OFFLINE operation
+# This prevents network calls to:
+# - otel.pyannote.ai (OpenTelemetry telemetry from pyannote)
+# - HuggingFace Hub (transformers/HuggingFace telemetry)
+os.environ.setdefault("PYANNOTE_DISABLE_TELEMETRY", "1")
+os.environ.setdefault("PYANNOTE_NO_ANALYTICS", "1")
+os.environ.setdefault("HF_TRANSFER_DISABLE", "1")
+os.environ.setdefault("HUGGINGFACE_HUB_OFFLINE", "1")
+os.environ.setdefault("TRANSFORMERS_OFFLINE", "1")
+os.environ.setdefault("HF_DATASETS_OFFLINE", "1")
+
 from .model import AppSettings
 from .loader import get_settings, reset_settings_cache, settings
 from .logging import (

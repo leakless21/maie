@@ -189,7 +189,12 @@ async def create_task_in_redis(
             "asr_backend": asr_backend_value,
             # Store correlation ID for traceability in results DB
             "correlation_id": _cid_var.get() or "",
+            # VAD parameters
+            "enable_vad": request_params.get("enable_vad"),
+            "vad_threshold": request_params.get("vad_threshold"),
         }
+        # Redis 7.x is stricter - filter out None values before hset
+        task_data = {k: v for k, v in task_data.items() if v is not None}
         await redis_client.hset(task_key, mapping=task_data)
         await redis_client.expire(task_key, settings.worker.result_ttl)
     finally:
@@ -213,6 +218,8 @@ def enqueue_job(
         "template_id": request_params.get("template_id"),
         "asr_backend": request_params.get("asr_backend", "chunkformer"),
         "enable_diarization": request_params.get("enable_diarization", False),
+        "enable_vad": request_params.get("enable_vad"),
+        "vad_threshold": request_params.get("vad_threshold"),
         "redis_host": "localhost",
         "redis_port": 6379,
         "redis_db": settings.redis.results_db,

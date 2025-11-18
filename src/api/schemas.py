@@ -55,8 +55,8 @@ class ProcessRequestSchema(BaseModel):
         json_schema_extra={"format": "binary", "type": "string"},
     )
     features: List[Feature] = Field(
-        default=[Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY],
-        description="Desired outputs. Available options: 'raw_transcript', 'clean_transcript', 'summary', 'enhancement_metrics'. Default: ['clean_transcript', 'summary']. Tags are embedded in summary output via the template schema.",
+        default=[Feature.CLEAN_TRANSCRIPT],
+        description="Desired outputs. Available options: 'raw_transcript', 'clean_transcript', 'summary', 'enhancement_metrics'. Default: ['clean_transcript']. Tags are embedded in summary output via the template schema.",
         json_schema_extra={
             "examples": [
                 ["clean_transcript", "summary"],
@@ -89,6 +89,18 @@ class ProcessRequestSchema(BaseModel):
         json_schema_extra={
             "examples": [True, False],
         },
+    )
+    enable_vad: Optional[bool] = Field(
+        default=None,
+        description="Enable Voice Activity Detection (VAD) preprocessing. If not specified, uses system default from configuration. VAD helps optimize processing by identifying speech regions.",
+        json_schema_extra={"examples": [True, False]},
+    )
+    vad_threshold: Optional[float] = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Speech confidence threshold for VAD (0.0-1.0). Lower values detect more speech but may include noise. Default: 0.5",
+        json_schema_extra={"examples": [0.3, 0.5, 0.7]},
     )
 
     @field_validator("features", mode="before")
@@ -263,6 +275,9 @@ class MetricsSchema(BaseModel):
     rtf: float = Field(..., description="Real-Time Factor")
     vad_coverage: float = Field(..., description="VAD coverage ratio")
     asr_confidence_avg: float = Field(..., description="Average ASR confidence")
+    vad_segments: int | None = Field(
+        default=None, description="Number of speech segments detected by VAD"
+    )
     edit_rate_cleaning: float | None = Field(
         default=None, description="Edit distance rate for enhancement"
     )

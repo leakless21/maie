@@ -8,6 +8,8 @@ from src.processors.asr.chunkformer import ChunkFormerBackend
 from src.processors.asr.whisper import WhisperBackend
 from src.processors.audio.preprocessor import AudioPreprocessor
 from src.processors.base import ASRBackend
+from src.processors.vad.factory import VADFactory
+from src.config.model import VADSettings
 
 
 class ASRFactory:
@@ -74,6 +76,35 @@ class ASRFactory:
             "asr_processor": asr_processor,
             "audio_preprocessor": AudioPreprocessor(),
         }
+
+    @classmethod
+    def create_vad_backend(cls, vad_config: VADSettings) -> Any:
+        """
+        Create a VAD backend from configuration.
+
+        Args:
+            vad_config: VAD configuration settings
+
+        Returns:
+            VAD backend instance
+
+        Raises:
+            ValueError: If VAD configuration is invalid
+        """
+        if not vad_config.enabled:
+            return None
+
+        return VADFactory.create(
+            vad_config.backend,
+            model_path=vad_config.silero_model_path,
+            threshold=vad_config.silero_threshold,
+            sampling_rate=vad_config.silero_sampling_rate,
+            min_speech_duration_ms=vad_config.min_speech_duration_ms,
+            max_speech_duration_ms=vad_config.max_speech_duration_ms,
+            min_silence_duration_ms=vad_config.min_silence_duration_ms,
+            window_size_samples=vad_config.window_size_samples,
+            device=vad_config.device,
+        )
 
 
 # Register the supported backends

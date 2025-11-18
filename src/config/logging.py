@@ -177,6 +177,14 @@ def configure_logging() -> Any:
     # Intercept standard library loggers
     intercept_stdlib_logging(level=level)
 
+    # DEBUG: Log final logging configuration state
+    import logging
+    root_logger = logging.getLogger()
+    handlers = root_logger.handlers
+    _loguru_logger.info("Final root logger handlers count: {}", len(handlers))
+    for i, handler in enumerate(handlers):
+        _loguru_logger.info("Final Handler {}: {} (level: {})", i, type(handler).__name__, handler.level)
+
     return _loguru_logger
 
 
