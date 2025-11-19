@@ -134,7 +134,7 @@ def run_diarization_test(
     try:
         # Step 1: Preprocess audio
         logger.info(
-            "Preprocessing audio",
+            "Preprocessing audio: path={path} embedding_batch={embedding_batch_size} segmentation_batch={segmentation_batch_size}",
             path=str(audio_path),
             embedding_batch_size=embedding_batch_size,
             segmentation_batch_size=segmentation_batch_size,
@@ -153,7 +153,7 @@ def run_diarization_test(
         sample_rate = int(metadata.get("sample_rate", 16000))
 
         logger.info(
-            "Audio preprocessed successfully",
+            "Audio preprocessed successfully: duration={duration}s sample_rate={sample_rate} normalized={normalized}",
             duration=audio_duration,
             sample_rate=sample_rate,
             normalized=metadata.get("normalized_path") is not None,
@@ -161,7 +161,7 @@ def run_diarization_test(
 
         # Step 2: Load diarization model with configured batch sizes
         logger.info(
-            "Loading speaker diarization model",
+            "Loading speaker diarization model: embedding_batch={embedding_batch_size} segmentation_batch={segmentation_batch_size} speakers={num_speakers}",
             embedding_batch_size=embedding_batch_size,
             segmentation_batch_size=segmentation_batch_size,
             num_speakers=num_speakers,
@@ -193,7 +193,7 @@ def run_diarization_test(
             raise ValueError("Diarization returned no segments")
 
         logger.info(
-            "Diarization complete", num_segments=len(diarized_segments)
+            "Diarization complete: segments={num_segments}", num_segments=len(diarized_segments)
         )
 
         result = {
@@ -322,7 +322,7 @@ Examples:
             return 1
 
         logger.info(
-            "Testing multiple batch size configurations",
+            "Testing multiple batch size configurations: {batch_sizes}",
             batch_sizes=batch_sizes,
         )
 

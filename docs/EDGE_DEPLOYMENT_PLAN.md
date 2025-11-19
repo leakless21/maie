@@ -5,10 +5,13 @@ This document is an engineering plan for the edge/single‑task deployment mode.
 ## 1. Objectives & Constraints
 
 - **Goal**: Run the Modular Audio Intelligence Engine on an edge device that processes **one audio task at a time** while reusing the existing MAIE codebase and avoiding forks.
+- **Target device example**: NVIDIA Jetson Nano (ARM64, 4 GB RAM, low‑power GPU, JetPack‑managed CUDA and drivers). The same plan applies to similar low‑resource edge devices.
 - **Constraints**:
   - Limited compute (CPU/GPU memory, RAM, disk space).
   - Likely offline or restricted network (no dynamic model downloads).
   - Need deterministic, single-threaded behavior for predictable resource usage.
+  - CUDA and driver stack pinned to the JetPack toolchain on the device (for example, a specific CUDA 12.x build), which may not match the x86_64 CUDA versions assumed by some optional dependencies (for example `vllm`, `flashinfer-*`).
+  - Python version and available wheels may differ from the upstream development environment (for example, Python < 3.12), so deployment packaging must be decoupled from local dev tooling while keeping the same application code.
 - **Decision**: Keep the upstream pipeline intact; expose it via configuration and/or a lightweight wrapper so the same tracked codebase can continue to evolve with upstream fixes and tests.
 - **Execution model for this device**: Implement **Option C – Minimal Synchronous Edge API** as the primary path; keep Options A and B documented as alternatives for deployments that prefer a CLI-only interface or reuse of the existing async API + worker model.
 
@@ -40,6 +43,11 @@ This document is an engineering plan for the edge/single‑task deployment mode.
    - `paths`: set to device-specific directories (overwrite in `.env` if needed)
 2. **Register** the profile in the `PROFILES` dict alongside `development` and `production`.
 3. **Select the profile** on-device via the `ENVIRONMENT` setting (for example, `ENVIRONMENT=edge` in the process environment or `.env` file).
+4. **Jetson Nano tuning without forking the repo**:
+   - Reuse the same codebase and `EDGE_PROFILE`, but apply Jetson-specific overrides via .env` (no separate source tree).
+   - Prefer smaller ASR models and CPU or minimally GPU-accelerated execution (`asr.whisper_device`/`chunkformer_device` set to `"cpu"` or `"cuda"` with small models and conservative `compute_type`).
+   - Disable or treat as optional any features that require x86_64-only CUDA 12.x libraries (for example, on-device LLM enhancement backed by `vllm` or `flashinfer-*`), unless you provide alternative Jetson-compatible backends.
+   - Keep strict single-task semantics (`worker_concurrency=1`) and set relatively low limits for `api.max_file_size_mb` and maximum audio duration to stay within Jetson Nano memory constraints.
 
 ## 4. Option C – Minimal Synchronous Edge API (`src/api/edge_main.py`)
 
@@ -67,6 +75,7 @@ Primary execution model for this edge device: provides an HTTP surface while kee
     - `save_audio_file_streaming` for streamed upload and size validation.
     - `ProcessRequestSchema` and `Feature` enums for request validation.
     - `process_audio_task` as the core pipeline implementation.
+  - The same `edge_main` module and HTTP contract are used on both x86_64 servers and Jetson Nano; hardware-specific behavior (for example, CPU vs GPU, enabled features) is controlled purely through configuration and environment, not by forking the code.
 
 ### 4.3 Request specification – `POST /v1/process-sync`
 
@@ -135,6 +144,18 @@ This section captures the high-level tuning intent for edge. Concrete configurat
   - `asr.whisper_device`/`chunkformer_device` to `"cpu"` or `"cuda"` depending on hardware.
   - Batch sizes (if available) to values that balance latency/memory.
   - Disable GPU-specific features if running headless CPU (for example, by forcing `has_cuda()` false or setting `PYTORCH_CUDA_ALLOC_CONF`).
+
+### 5.4 Jetson Nano baseline
+
+- Treat Jetson Nano as a “worst-case” constrained edge device and validate tuning against it first; other devices with more RAM/VRAM can relax these settings.
+- Recommended defaults:
+  - Use the smallest ASR model that meets quality requirements; prefer CPU execution unless Nano’s GPU clearly improves latency without causing out-of-memory errors.
+  - Disable diarization and on-device LLM enhancement/summary by default; expose them only as opt-in flags once you have validated memory and latency.
+  - Set conservative limits for `api.max_file_size_mb` and/or maximum audio duration (for example, 5–10 minutes of audio) to avoid exhausting RAM/VRAM.
+  - Keep concurrency at 1 (already enforced by the edge API lock and `worker_concurrency=1`) and avoid background jobs that might compete for GPU.
+- Environment and dependency notes:
+  - Install Jetson-compatible `torch`/`torchaudio` builds provided by JetPack or NVIDIA channels, and omit x86_64-only CUDA 12.x packages such as `vllm`, `flashinfer-python`, and `flashinfer-jit-cache`; the MAIE application code should treat these as optional accelerators.
+  - Because Jetson Nano’s Python and CUDA versions may differ from the upstream development environment, treat `pyproject.toml` as a development reference: on-device, build a minimal runtime environment that satisfies MAIE’s imports and interfaces without modifying or forking this repository.
 
 ## 6. Logging, Cleanup, and Monitoring
 
