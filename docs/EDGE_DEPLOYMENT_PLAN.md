@@ -16,9 +16,9 @@ This document is an engineering plan for the edge/single‑task deployment mode.
 
 ### 2.1 Execution Models
 
-1. **Option C – Minimal synchronous edge API (recommended)** – Expose `process_audio_task` via `src/api/edge_main.py` as a single-process HTTP handler that executes tasks inline (no Redis/RQ) with an application-level lock. This is the execution model detailed in §6.
+1. **Option C – Minimal synchronous edge API (recommended)** – Expose `process_audio_task` via `src/api/edge_main.py` as a single-process HTTP handler that executes tasks inline (no Redis/RQ) with an application-level lock. This is the execution model detailed in §4.
 2. **Option A – Embedded pipeline CLI** – Import `process_audio_task` from `src/worker/pipeline.py` and invoke it directly in a small script (no Redis, no RQ, no HTTP API). One process handles one job, sequentially.
-3. **Option B – Local API + worker** – Keep the Litestar API (`src/api/main.py`) and an RQ worker, but configure them with concurrency=1 and shallow queue prior to linking them with systemd, supervisord, or similar. This keeps the HTTP interface while still ensuring single-task execution.
+3. **Option B – Local API + worker** – Keep the Litestar API (`src/api/main.py`) and an RQ worker, but configure them with concurrency=1 and a shallow queue so at most one task is processed at a time and backlog remains bounded.
 
 ### 2.2 Shared Characteristics
 
@@ -39,60 +39,13 @@ This document is an engineering plan for the edge/single‑task deployment mode.
    - `features.enable_enhancement`: `False` unless improvement is required
    - `paths`: set to device-specific directories (overwrite in `.env` if needed)
 2. **Register** the profile in the `PROFILES` dict alongside `development` and `production`.
-3. **Select the profile** on-device via environment variable (`ENVIRONMENT=edge`) or `.env` entries (e.g., `APP_ENV=edge` depending on loader heuristics).
+3. **Select the profile** on-device via the `ENVIRONMENT` setting (for example, `ENVIRONMENT=edge` in the process environment or `.env` file).
 
-## 4. Option A – Minimal Embedded Pipeline Wrapper (alternative CLI)
-
-### 4.1 Behavior
-
-- Provide a CLI/entry point (e.g., `maie-edge`) that:
-  - Parses CLI args or config describing audio path, desired features, template ID, optional diarization flag.
-  - Builds `task_params` expected by `process_audio_task`.
-  - Calls the function directly (no RQ job).
-  - Emits results/meta to stdout or a JSON file.
-
-### 4.2 Implementation Steps
-
-1. Create module (e.g., `src/edge/main.py`) with:
-   - `argparse`/`typer` for CLI input.
-   - `process_audio_task` import.
-   - Construction of `task_params` dictionary:
-     - Required: `audio_path`
-     - Optional: `asr_backend`, `features`, `template_id`, `config`, `enable_diarization`, `enable_vad`, `vad_threshold`, `redis_host`/`redis_port`/`redis_db` (unused, optional).
-2. Invoke `process_audio_task` and handle the returned dict:
-   - Read `results` for transcripts/summaries.
-   - Extract `metrics` and `versions`.
-   - Format output as JSON or write to file (e.g., `<audio>.maie.json`).
-3. Expose CLI via `pyproject.toml` `[project.scripts]` (e.g., `maie-edge = "src.edge.main:cli"`), allowing `pip install .` to install the CLI.
-4. Ensure any errors get printed/logged at the CLI level; `process_audio_task` already handles GPU cleanup and internal logging.
-
-### 4.3 Benefits
-
-- Eliminates Redis/RQ dependency, minimizing memory and operational overhead.
-- Integrates cleanly with automation or OS-level job runners (cron, systemd, etc.).
-- Reuses the same tested pipeline logic as the HTTP API, so behavior and results stay consistent across deployment modes.
-
-## 5. Option B – API + Worker but constrained to single task (alternative async model)
-
-### 5.1 When to choose
-
-- If you need HTTP endpoints on-device for integration (e.g., remote services expect `/v1/process`).
-- Or you already rely on the API for multi-feature toggling.
-
-### 5.2 Configuration Changes
-
-1. Use `EDGE_PROFILE` to set `worker.worker_concurrency=1`, `worker.worker_prefetch_multiplier=1`.
-2. Keep `redis.max_queue_depth` small (5 or less) to limit backlog.
-3. Optionally implement API-level guard rejecting new jobs when queue depth exceeds threshold (using `redis.count()`).
-4. Bind API to loopback via `APP_API__host=127.0.0.1` unless external access is required.
-5. Keep `APP_API__secret_key` strong and unique per device.
-6. Deploy API + worker as separate systemd services or supervised processes; ensure logs rotate locally.
-
-## 6. Option C – Minimal Synchronous Edge API (`src/api/edge_main.py`)
+## 4. Option C – Minimal Synchronous Edge API (`src/api/edge_main.py`)
 
 Primary execution model for this edge device: provides an HTTP surface while keeping processing single-task, single-process, and Redis-free.
 
-### 6.1 Purpose and behavior
+### 4.1 Purpose and behavior
 
 - Provide a **minimal HTTP interface** on the edge device without Redis/RQ queueing.
 - Expose a simple synchronous endpoint that:
@@ -101,7 +54,7 @@ Primary execution model for this edge device: provides an HTTP surface while kee
   - Returns the **full pipeline result payload** in the HTTP response.
 - Enforce **single-task semantics** via an application-level lock, so only one request is processed at a time.
 
-### 6.2 Implementation overview
+### 4.2 Implementation overview
 
 - Module: `src/api/edge_main.py`
 - Key components:
@@ -115,13 +68,15 @@ Primary execution model for this edge device: provides an HTTP surface while kee
     - `ProcessRequestSchema` and `Feature` enums for request validation.
     - `process_audio_task` as the core pipeline implementation.
 
-### 6.3 Request specification – `POST /v1/process-sync`
+### 4.3 Request specification – `POST /v1/process-sync`
 
-The HTTP surface for this endpoint is intentionally thin: it should perform authentication, validate `ProcessRequestSchema`, stream the file to disk via `save_audio_file_streaming`, and then hand off to the pipeline as described in §6.4.
+- The request body matches the existing `ProcessRequestSchema` used by the main API.
+- At a high level, the endpoint accepts:
+  - A multipart/form-data upload containing the audio file (`file`).
+  - Optional parameters such as `features`, `template_id`, `asr_backend`, `enable_diarization`, `enable_vad`, and `vad_threshold`.
+- The full external API contract (fields, defaults, and error codes) is documented in `docs/EDGE_DEPLOYMENT_GUIDE.md` under “API Reference → POST /v1/process-sync” and should be treated as the source of truth for clients.
 
-The full external API contract (fields, defaults, and error codes) is documented in `docs/EDGE_DEPLOYMENT_GUIDE.md` under “API Reference → POST /v1/process-sync” and should be treated as the source of truth for clients.
-
-### 6.4 Processing and pipeline invocation
+### 4.4 Processing and pipeline invocation
 
 - After validation:
   - A `task_id` UUID is generated for logging and directory isolation.
@@ -134,19 +89,19 @@ The full external API contract (fields, defaults, and error codes) is documented
   - `process_audio_task(task_params)` is invoked via `anyio.to_thread.run_sync` to avoid blocking the event loop.
   - Because `get_current_job()` returns `None` when no RQ worker is present, `process_audio_task` does not attempt Redis status updates; it simply returns the result structure.
 
-### 6.5 Single-task enforcement
+### 4.5 Single-task enforcement
 
 - Global `asyncio.Lock` (`_process_lock`) in `edge_main.py` wraps the pipeline call:
   - Only one request can hold the lock at a time.
   - Additional concurrent `/v1/process-sync` calls will queue at the application level until the lock is released.
 - This mirrors the hardware constraint of “one task at a time” regardless of HTTP clients.
 
-### 6.6 Response specification
+### 4.6 Response specification
 
 - On success, the handler returns the dictionary produced by `process_audio_task` (augmented with `task_id` if missing) as JSON with HTTP `200 OK`.
 - The shape is identical to the existing queue-based pipeline result (`task_id`, `versions`, `metrics`, `results`, and optional `error`/`status` fields); see `docs/EDGE_DEPLOYMENT_GUIDE.md` “API Reference → POST /v1/process-sync” for an example payload that client integrators should rely on.
 
-### 6.7 Running the edge API
+### 4.7 Running the edge API
 
 - Start via Python:
   - `python -m src.api.edge_main`
@@ -157,31 +112,31 @@ The full external API contract (fields, defaults, and error codes) is documented
   - `APP_API__secret_key` set to a strong API key.
   - Model and audio/template paths configured and populated as described in earlier sections.
 
-## 7. Resource & Feature Tuning
+## 5. Resource & Feature Tuning
 
 This section captures the high-level tuning intent for edge. Concrete configuration matrices and environment variable examples live in `docs/EDGE_DEPLOYMENT_GUIDE.md` (“Resource Management” and “Performance Tuning”).
 
-### 7.1 Models
+### 5.1 Models
 
 - Pre-download required ASR/LLM/diarization models into local `data/models/`.
 - Tailor to the device:
   - Smaller Whisper or ChunkFormer variant for CPU.
   - Smaller/on-device LLM or disable enhancement/summary if memory constrained.
 
-### 7.2 Diarization
+### 5.2 Diarization
 
 - Use `settings.diarization.require_cuda=False` to keep the system alive even if CUDA is missing.
 - Enable only when the device has sufficient compute and you need speaker labels.
 - Provide CLI flag or API parameter (`enable_diarization`) to opt into diarization per task.
 
-### 7.3 GPU/CPU Mode
+### 5.3 GPU/CPU Mode
 
 - In `EDGE_PROFILE`, set:
   - `asr.whisper_device`/`chunkformer_device` to `"cpu"` or `"cuda"` depending on hardware.
   - Batch sizes (if available) to values that balance latency/memory.
   - Disable GPU-specific features if running headless CPU (for example, by forcing `has_cuda()` false or setting `PYTORCH_CUDA_ALLOC_CONF`).
 
-## 8. Logging, Cleanup, and Monitoring
+## 6. Logging, Cleanup, and Monitoring
 
 At a high level, edge deployments should favor aggressive cleanup and small log retention; see `docs/EDGE_DEPLOYMENT_GUIDE.md` (“Configuration → Edge Profile Settings” and “Monitoring & Troubleshooting”) for concrete defaults and environment overrides.
 
@@ -195,13 +150,13 @@ At a high level, edge deployments should favor aggressive cleanup and small log 
    - If using an API, `/health` can be used for basic liveness checks.
    - The CLI wrapper can output pass/fail status plus metrics to help automation detect issues.
 
-## 9. Verification & Hardening
+## 7. Verification & Hardening
 
 This section complements the operational testing guidance in `docs/EDGE_DEPLOYMENT_GUIDE.md` (“Testing” and “Maintenance”).
 
 1. **Local dev verification**:
    - Run targeted tests such as `tests/integration/processors/audio/test_diarizer_integration.py`.
-   - Execute the CLI (Option A) or API (Option B or edge API) against sample audio and validate outputs.
+   - Execute the primary edge API (Option C) against sample audio; optionally also test the CLI (Option A) or existing async API + worker (Option B) if you plan to support those variants.
    - Confirm `process_audio_task` returns structured results and metrics.
 2. **On-device validation**:
    - Deploy code and `.env`.
@@ -213,7 +168,7 @@ This section complements the operational testing guidance in `docs/EDGE_DEPLOYME
    - Document log locations, output file format, and instructions for model updates.
    - Keep a maintenance guide describing how to upgrade MAIE or models in the future.
 
-## 10. Optional Enhancements
+## 8. Optional Enhancements
 
 1. Add a minimal status CLI command to show the last run metadata (`maie-edge status`).
 2. Provide a small web-based admin UI (if using an API) for local uploads and results viewing.
