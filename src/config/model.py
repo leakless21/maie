@@ -7,6 +7,48 @@ from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from src.utils.validation import coerce_optional_int, blank_to_none
+from enum import Enum
+
+
+class LlmBackendType(str, Enum):
+    LOCAL_VLLM = "local_vllm"
+    VLLM_SERVER = "vllm_server"
+
+
+class LlmServerSettings(BaseModel):
+    """vLLM Server configuration for enhancement and summary tasks."""
+    
+    # Enhancement endpoint (required)
+    enhance_base_url: str = Field(
+        default="http://localhost:8001/v1",
+        description="vLLM server endpoint for enhancement tasks"
+    )
+    enhance_api_key: SecretStr | None = Field(default=None)
+    enhance_model_name: str | None = Field(
+        default="maie-enhance",
+        description="Model name for enhancement (optional)"
+    )
+    
+    # Summary endpoint (defaults to enhancement if not set)
+    summary_base_url: str | None = Field(
+        default=None,
+        description="vLLM server for summary (uses enhance_base_url if None)"
+    )
+    summary_api_key: SecretStr | None = Field(default=None)
+    summary_model_name: str | None = Field(
+        default="maie-enhance",
+        description="Model name for summary (optional)"
+    )
+    
+    # Common settings
+    request_timeout_seconds: float = Field(default=300.0)
+    
+    model_config = ConfigDict(validate_assignment=True)
+    
+    @property
+    def summary_url(self) -> str:
+        """Get summary endpoint, defaulting to enhance endpoint."""
+        return self.summary_base_url or self.enhance_base_url
 
 
 ModelT = TypeVar("ModelT", bound=BaseModel)
@@ -155,12 +197,12 @@ class LlmEnhanceSettings(BaseModel):
     use_beam_search: bool = Field(default=False)
     quantization: str | None = Field(default=None)
     max_num_seqs: int | None = Field(
-        default=None,
+        default=4,
         ge=1,
         description="Maximum in-flight sequences vLLM should schedule concurrently",
     )
     max_num_batched_tokens: int | None = Field(
-        default=None,
+        default=8192,
         ge=1,
         description="Upper bound on total tokens (prompt + decode) processed per scheduler step",
     )
@@ -461,6 +503,8 @@ class AppSettings(BaseSettings):
     vad: VADSettings = Field(default_factory=VADSettings)
     llm_enhance: LlmEnhanceSettings = Field(default_factory=LlmEnhanceSettings)
     llm_sum: LlmSumSettings = Field(default_factory=LlmSumSettings)
+    llm_backend: LlmBackendType = Field(default=LlmBackendType.VLLM_SERVER)
+    llm_server: LlmServerSettings = Field(default_factory=LlmServerSettings)
     paths: PathsSettings = Field(default_factory=PathsSettings)
     worker: WorkerSettings = Field(default_factory=WorkerSettings)
     cleanup: CleanupSettings = Field(default_factory=CleanupSettings)

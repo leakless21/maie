@@ -112,7 +112,9 @@ curl -X POST "http://localhost:8000/v1/process" \
   - Whisper: Industry-standard speech recognition
   - ChunkFormer: Advanced long-form audio processing
 - **Speaker Diarization**: Automatic speaker identification with pyannote.audio for multi-speaker content
-- **LLM Integration**: VLLM-powered text enhancement and summary
+- **LLM Integration**: VLLM-powered text enhancement and summary with flexible backend options
+  - **Local vLLM**: In-process model loading (default)
+  - **vLLM Server**: Persistent server mode for reduced latency
 - **Template System**: Customizable output formats (meeting notes, interview transcripts, etc.)
 
 ### 🔧 Enterprise Features
@@ -314,7 +316,10 @@ done
 | `LLM_MODEL_NAME`         | `cpatonn/Qwen3-4B-Instruct` | VLLM model name          |
 | `GPU_MEMORY_UTILIZATION` | `0.9`                       | GPU memory usage limit   |
 | `LOG_LEVEL`              | `INFO`                      | Logging level            |
-| `DEBUG`                  | `false`                     | Debug mode enable        |
+| `ASR_DEVICE`             | `cuda`                      | Device for ASR (cuda/cpu)|
+| `LLM_BACKEND`            | `local_vllm`                | LLM backend type         |
+| `LLM_SERVER__ENHANCE_BASE_URL` | `http://localhost:8001/v1` | Enhancement server URL |
+| `LLM_SERVER__SUMMARY_BASE_URL` | (optional)               | Summary server URL (defaults to enhance) |
 
 ### GPU Configuration
 
@@ -326,6 +331,47 @@ export CUDA_VISIBLE_DEVICES=0,1
 export GPU_MEMORY_UTILIZATION=0.85
 export LLM_MAX_MODEL_LEN=32768
 ```
+
+### LLM Backend Configuration
+
+MAIE supports two LLM backend modes:
+
+**Local vLLM (Default):**
+```bash
+export LLM_BACKEND=local_vllm
+```
+
+**vLLM Server (Recommended for Production):**
+```bash
+export LLM_BACKEND=vllm_server
+
+# Single server (both tasks)
+export LLM_SERVER__ENHANCE_BASE_URL=http://localhost:8001/v1
+
+# Or dual servers (task-specific optimization)
+export LLM_SERVER__ENHANCE_BASE_URL=http://localhost:8001/v1  # Larger model
+export LLM_SERVER__SUMMARY_BASE_URL=http://localhost:8002/v1  # Faster model
+```
+
+**Deploy Local vLLM Server:**
+```bash
+# Single server for both tasks
+./scripts/start-vllm-server.sh
+
+# Or dual servers for optimization
+VLLM_SERVER_PORT=8001 ./scripts/start-vllm-server.sh enhance
+VLLM_SERVER_PORT=8002 ./scripts/start-vllm-server.sh summary
+```
+
+**Or Deploy with Docker:**
+```bash
+docker run --gpus all -p 8001:8001 vllm/vllm-openai:latest \
+  --model data/models/qwen3-4b-instruct-2507-awq \
+  --gpu-memory-utilization 0.9 \
+  --port 8001
+```
+
+For detailed configuration, see [docs/LLM_BACKEND_CONFIGURATION.md](docs/LLM_BACKEND_CONFIGURATION.md).
 
 ### Performance Tuning
 

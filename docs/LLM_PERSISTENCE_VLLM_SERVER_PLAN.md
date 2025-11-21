@@ -14,6 +14,21 @@ The goal is:
 
 ---
 
+## Implementation Status
+
+**✅ COMPLETED** - All features implemented and tested as of v1.1
+
+- ✅ Configuration abstraction (`LlmBackendType`, `LlmServerSettings`)
+- ✅ Client abstraction (`ChatCompletionClient`, `LocalVllmClient`, `VllmServerClient`)
+- ✅ `LLMProcessor` refactoring for backend selection
+- ✅ Worker pipeline adjustments for conditional GPU management
+- ✅ Comprehensive unit and integration tests (37/37 passing)
+- ✅ Documentation updates (README, env.template, configuration guide)
+
+For usage instructions, see [LLM_BACKEND_CONFIGURATION.md](LLM_BACKEND_CONFIGURATION.md).
+
+---
+
 ## 1. Current Architecture (LLM Path)
 
 ### 1.1 Components

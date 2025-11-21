@@ -12,6 +12,7 @@ from Levenshtein import distance as levenshtein_distance
 
 from src.config import settings
 from src.config.logging import get_module_logger
+from src.config.model import LlmBackendType
 from src.processors.base import LLMBackend, LLMResult
 from src.processors.llm.config import (
     GenerationConfig,
@@ -20,6 +21,11 @@ from src.processors.llm.config import (
 )
 from src.processors.prompt.renderer import PromptRenderer
 from src.processors.prompt.template_loader import TemplateLoader
+from src.tooling.llm_client import (
+    ChatCompletionClient,
+    LocalVllmClient,
+    VllmServerClient,
+)
 from src.tooling.vllm_utils import (
     apply_overrides_to_sampling,
     calculate_checkpoint_hash,
@@ -53,7 +59,17 @@ class LLMProcessor(LLMBackend):
             **kwargs: Additional backend-specific parameters
         """
         self.model_path = model_path or settings.llm_enhance.model
+        # Model state (local vLLM mode)
         self.model = None
+        self._model_loaded = False
+        
+        # Client state (both modes)
+        # In server mode: two separate clients
+        # In local mode: both reference same LocalVllmClient
+        self.client_enhance: ChatCompletionClient | None = None
+        self.client_summary: ChatCompletionClient | None = None
+        
+        # Metadata
         self.tokenizer = None
         self.checkpoint_hash = None
         self.model_info = None
@@ -78,9 +94,6 @@ class LLMProcessor(LLMBackend):
             top_k=settings.llm_sum.top_k,
             max_tokens=settings.llm_sum.max_tokens,
         )
-
-        # Load model lazily (only when first needed)
-        self._model_loaded = False
 
     def _detect_quantization_method(self, model_path: str) -> str | None:
         """
@@ -131,13 +144,67 @@ class LLMProcessor(LLMBackend):
 
     def _load_model(self, **kwargs) -> None:
         """
-        Load vLLM model with AWQ quantization.
+        Load vLLM model or initialize server client.
 
         Args:
             **kwargs: Additional model loading parameters
         """
         if self._model_loaded:
             return
+
+        # Determine model name based on task or use default
+        model_name = kwargs.get("model_name", self.model_path)
+        logger.info(f"Initializing LLM backend: {settings.llm_backend} for model: {model_name}")
+
+        if settings.llm_backend == LlmBackendType.VLLM_SERVER:
+            # Server mode: create separate clients for enhancement and summary
+            try:
+                logger.info(f"Initializing vLLM server clients - "
+                           f"enhance: {settings.llm_server.enhance_base_url}, "
+                           f"summary: {settings.llm_server.summary_url}")
+                
+                # Enhancement client
+                self.client_enhance = VllmServerClient(
+                    base_url=settings.llm_server.enhance_base_url,
+                    api_key=settings.llm_server.enhance_api_key.get_secret_value() 
+                        if settings.llm_server.enhance_api_key else None,
+                    model_name=settings.llm_server.enhance_model_name,
+                )
+                
+                # Summary client (may be same endpoint or different)
+                self.client_summary = VllmServerClient(
+                    base_url=settings.llm_server.summary_url,
+                    api_key=settings.llm_server.summary_api_key.get_secret_value()
+                        if settings.llm_server.summary_api_key else None,
+                    model_name=settings.llm_server.summary_model_name,
+                )
+                
+                # Set metadata
+                self.checkpoint_hash = f"remote:{model_name}"
+                self.model_info = {
+                    "model_name": model_name,
+                    "checkpoint_hash": self.checkpoint_hash,
+                    "backend": "vllm_server",
+                    "enhance_endpoint": settings.llm_server.enhance_base_url,
+                    "summary_endpoint": settings.llm_server.summary_url,
+                }
+                
+                self._model_loaded = True
+                logger.info("vLLM server clients initialized successfully")
+                return
+
+            except Exception as e:
+                logger.error(f"Failed to initialize vLLM server clients: {e}")
+                self.client_enhance = None
+                self.client_summary = None
+                self.checkpoint_hash = f"init_error:{str(e)[:50]}"
+                self.model_info = {
+                    "model_name": "unavailable",
+                    "reason": f"Init error: {e}",
+                }
+                raise
+
+        # Local vLLM initialization (legacy path)
         try:
             # Enforce GPU-only usage in all environments for vLLM
             try:
@@ -181,10 +248,7 @@ class LLMProcessor(LLMBackend):
                 # Keep vLLM quiet (WARNING level)
                 vllm_logger.setLevel(logging.WARNING)
 
-            # Determine model name based on task or use default
-            model_name = kwargs.get("model_name", self.model_path)
-
-            logger.info(f"Loading LLM model: {model_name}")
+            logger.info(f"Loading local LLM model: {model_name}")
 
             # Load model with configurable quantization
             quantization_method = (
@@ -218,6 +282,12 @@ class LLMProcessor(LLMBackend):
 
             logger.debug(f"Calling LLM() constructor with args: {llm_args}")
             self.model = LLM(**llm_args)
+            
+            # In local mode, both clients point to the same LocalVllmClient
+            local_client = LocalVllmClient(self.model)
+            self.client_enhance = local_client
+            self.client_summary = local_client
+            
             logger.debug("LLM() constructor returned successfully")
 
             # Calculate checkpoint hash for versioning (NFR-1)
@@ -264,6 +334,7 @@ class LLMProcessor(LLMBackend):
         except ImportError:
             logger.warning("vLLM not installed, LLM features will be unavailable")
             self.model = None
+            self.client = None
             self.checkpoint_hash = "vllm_not_installed"
             self.model_info = {
                 "model_name": "unavailable",
@@ -272,6 +343,7 @@ class LLMProcessor(LLMBackend):
         except (RuntimeError, OSError, MemoryError) as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
+            self.client = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -281,6 +353,7 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
+            self.client = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -350,7 +423,29 @@ class LLMProcessor(LLMBackend):
             f"execute() method called with text length: {len(text)}, task: {kwargs.get('task', 'general')}"
         )
         logger.info(f"First 200 chars of text: {text[:200]}")
+        # Extract task for client selection
         task = kwargs.get("task", "general")
+        
+        # Ensure model is loaded
+        if not self._model_loaded:
+            self._load_model(**kwargs) # Keep original kwargs for _load_model
+        
+        # Select client based on task type
+        if task == "summary":
+            client = self.client_summary
+        else:
+            client = self.client_enhance
+        
+        # Verify client is available
+        if not client:
+            logger.error(f"Client not available for task: {task}")
+            return LLMResult(
+                text=text, # Use original 'text' for consistency
+                tokens_used=None,
+                model_info=self.model_info or {"model_name": "unavailable", "reason": "LLM model not available"},
+                metadata={"task": task, "error": "LLM model not available"},
+            )
+        
         retry_hint = kwargs.pop("retry_hint", None)  # Extract retry hint if provided
 
         # DEBUG: Log LLM input preview
@@ -367,15 +462,6 @@ class LLMProcessor(LLMBackend):
         # Load model if not already loaded
         if not self._model_loaded:
             self._load_model(**kwargs)
-
-        if self.model is None:
-            return LLMResult(
-                text=text,
-                tokens_used=None,
-                model_info=self.model_info
-                or {"model_name": "unavailable", "reason": "vLLM not installed"},
-                metadata={"task": task, "fallback": True},
-            )
 
         # Initialize variables for different code paths
         use_chat_api = False
@@ -628,10 +714,17 @@ class LLMProcessor(LLMBackend):
         generated_text = text  # Default fallback
         tokens_used = None
         vllm_outputs = None  # Store outputs for metadata extraction
+        current_model_info = self.model_info.copy() if self.model_info else {}
+        
+        # Initialize timing variables to prevent UnboundLocalError in error handling
+        inference_start = 0.0
+        inference_end = 0.0
+        output_info = {}
 
         try:
             # Log GPU memory fragmentation before inference (NFR-10)
-            if has_cuda() and torch is not None:
+            # Only relevant for local vLLM
+            if settings.llm_backend == LlmBackendType.LOCAL_VLLM and has_cuda() and torch is not None:
                 try:
                     mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)
                     mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)
@@ -658,7 +751,7 @@ class LLMProcessor(LLMBackend):
                     logger.debug(f"Could not check GPU memory: {mem_check_error}")
 
             base_sampling = None
-            if hasattr(self.model, "get_default_sampling_params"):
+            if self.model and hasattr(self.model, "get_default_sampling_params"):
                 try:
                     base_sampling = self.model.get_default_sampling_params()
                 except Exception:
@@ -679,15 +772,16 @@ class LLMProcessor(LLMBackend):
                         "task": task,
                         "messages_count": len(messages),
                         "sampling_params": str(sampling),
-                        "model_type": type(self.model).__name__,
+                        "backend": settings.llm_backend,
                     },
                 )
 
                 inference_start = time.time()
-                logger.debug("About to call model.chat()")
-                # Type ignore: our dict[str, str] format is compatible with vLLM's expected message format
-                # BUGFIX: Pass messages directly as first positional argument, not wrapped in list
-                outputs = self.model.chat(messages, sampling_params=sampling)  # type: ignore
+                logger.debug("About to call client.chat()")
+                
+                # Use the task-specific client
+                outputs = client.chat(messages, sampling_params=sampling, guided_decoding=guided_decoding)
+                
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -708,7 +802,7 @@ class LLMProcessor(LLMBackend):
                     }
 
                 logger.debug(
-                    "model.chat() completed",
+                    "client.chat() completed",
                     extra={
                         "inference_duration": inference_end - inference_start,
                         "outputs_count": len(outputs) if outputs else 0,
@@ -725,19 +819,25 @@ class LLMProcessor(LLMBackend):
                     else None
                 )
             elif final_prompt is not None:
+                # For non-chat tasks, we also use client.chat() by wrapping the prompt in a user message
+                # This unifies the interface for both local and server backends
                 logger.debug(
-                    "Using generate() API",
+                    "Using chat() API for raw prompt",
                     extra={
                         "prompt_length": len(final_prompt),
                         "sampling_params": str(sampling),
-                        "model_type": type(self.model).__name__,
+                        "backend": settings.llm_backend,
                     },
                 )
+                
+                # Wrap raw prompt in a user message
+                messages = [{"role": "user", "content": final_prompt}]
 
                 inference_start = time.time()
-                logger.debug("About to call model.generate()")
-                # Use traditional generate() API
-                outputs = self.model.generate([final_prompt], sampling)
+                logger.debug("About to call client.chat() with wrapped prompt")
+                
+                outputs = client.chat(messages, sampling_params=sampling)
+                
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -758,7 +858,7 @@ class LLMProcessor(LLMBackend):
                     }
 
                 logger.debug(
-                    "model.generate() completed",
+                    "client.chat() completed",
                     extra={
                         "inference_duration": inference_end - inference_start,
                         "outputs_count": len(outputs) if outputs else 0,
@@ -767,12 +867,118 @@ class LLMProcessor(LLMBackend):
                 )
 
                 generated_text = outputs[0].outputs[0].text if outputs else ""
-                tokens_used = None
+                
+                # Extract usage stats
+                prompt_tokens = 0
+                completion_tokens = 0
+                if outputs and len(outputs) > 0:
+                    if hasattr(outputs[0], "prompt_token_ids") and outputs[0].prompt_token_ids:
+                        prompt_tokens = len(outputs[0].prompt_token_ids)
+                    if outputs[0].outputs and hasattr(outputs[0].outputs[0], "token_ids"):
+                        completion_tokens = len(outputs[0].outputs[0].token_ids)
+                
+                total_tokens = prompt_tokens + completion_tokens
+                
+                # Update model info with usage
+                current_model_info["usage"] = {
+                    "prompt_tokens": prompt_tokens,
+                    "completion_tokens": completion_tokens,
+                    "total_tokens": total_tokens
+                }
+
+                tokens_used = prompt_tokens # Use the more robustly calculated prompt_tokens
             else:
                 # Fallback if neither path is available
                 logger.error("Neither chat API messages nor final_prompt available")
                 generated_text = text
                 tokens_used = None
+                current_model_info = self.model_info
+
+            # For summary tasks, validate and parse JSON output
+            result_metadata = {"task": task, "config": sampling_params_dict}
+
+            # Store vLLM output metadata if available
+            if vllm_outputs and len(vllm_outputs) > 0 and vllm_outputs[0].outputs:
+                first_output = vllm_outputs[0].outputs[0]
+                # Handle token_ids that might be a Mock object in tests
+                token_ids = getattr(first_output, "token_ids", None)
+                generated_tokens = None
+                if token_ids is not None and hasattr(token_ids, "__len__"):
+                    try:
+                        generated_tokens = len(token_ids)
+                    except (TypeError, AttributeError):
+                        # token_ids might be a Mock that doesn't support len()
+                        generated_tokens = None
+                result_metadata.update(
+                    {
+                        "finish_reason": getattr(first_output, "finish_reason", "unknown"),
+                        "generated_tokens": generated_tokens,
+                        "output_length": len(generated_text),
+                    }
+                )
+
+            # Mark method used for both summary and enhancement when chat API is used
+            if use_chat_api:
+                result_metadata["method"] = "chat_api"
+            
+            if task == "summary":
+                template_id = kwargs.get("template_id")
+                try:
+                    # Parse JSON output using safe utility
+                    structured_output = safe_json_loads(generated_text, default=None)
+
+                    if structured_output is not None:
+                        # Validate against schema
+                        if template_id:
+                            schema = load_template_schema(
+                                template_id, settings.paths.templates_dir
+                            )
+                            # validate_llm_output returns (validated_output, error_message)
+                            validated_output, error_message = validate_llm_output(
+                                json.dumps(structured_output), schema
+                            )
+
+                            if validated_output is not None:
+                                result_metadata["structured_summary"] = validated_output
+                                result_metadata["validation"] = "passed"
+                                logger.info(f"Summary validation passed for {template_id}")
+                            else:
+                                result_metadata["validation"] = "failed"
+                                result_metadata["validation_error"] = error_message
+                                logger.warning(
+                                    f"Summary validation failed: {error_message}"
+                                )
+                        else:
+                            result_metadata["structured_summary"] = structured_output
+                            result_metadata["validation"] = "skipped"
+                    else:
+                        logger.error("Failed to parse JSON output")
+                        result_metadata["validation"] = "json_parse_error"
+                        result_metadata["parse_error"] = "Invalid JSON format"
+
+                except Exception as e:
+                    logger.error(f"Summary validation error: {e}")
+                    result_metadata["validation"] = "error"
+                    result_metadata["error"] = str(e)
+
+            # DEBUG: Log LLM output preview
+            output_text = generated_text or text
+            output_preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
+            logger.debug(
+                "LLM output preview",
+                task=task,
+                output_preview=output_preview,
+                char_count=len(output_text),
+                word_count=len(output_text.split()) if output_text else 0,
+                tokens_used=tokens_used if "tokens_used" in locals() else None,
+            )
+
+            return LLMResult(
+                text=generated_text or text,
+                tokens_used=tokens_used,
+                model_info=current_model_info,
+                metadata=result_metadata,
+            )
 
         except Exception as e:
             # Check if this is a CUDA OOM error and provide actionable guidance
@@ -799,91 +1005,18 @@ class LLMProcessor(LLMBackend):
                 logger.error(f"LLM generation failed: {e}")
             generated_text = text
 
-        # For summary tasks, validate and parse JSON output
-        result_metadata = {"task": task, "config": sampling_params_dict}
-
-        # Store vLLM output metadata if available
-        if vllm_outputs and len(vllm_outputs) > 0 and vllm_outputs[0].outputs:
-            first_output = vllm_outputs[0].outputs[0]
-            # Handle token_ids that might be a Mock object in tests
-            token_ids = getattr(first_output, "token_ids", None)
-            generated_tokens = None
-            if token_ids is not None and hasattr(token_ids, "__len__"):
-                try:
-                    generated_tokens = len(token_ids)
-                except (TypeError, AttributeError):
-                    # token_ids might be a Mock that doesn't support len()
-                    generated_tokens = None
-            result_metadata.update(
-                {
-                    "finish_reason": getattr(first_output, "finish_reason", "unknown"),
-                    "generated_tokens": generated_tokens,
-                    "output_length": len(generated_text),
-                }
+            # Return an LLMResult even on error, with error info
+            return LLMResult(
+                text=generated_text,
+                tokens_used=None,
+                model_info=current_model_info,
+                metadata={
+                    "task": task,
+                    "error": error_msg,
+                    "inference_time": inference_end - inference_start if inference_end > inference_start else 0.0,
+                    "finish_reason": output_info.get("finish_reason", "error"),
+                },
             )
-
-        # Mark method used for both summary and enhancement when chat API is used
-        if use_chat_api:
-            result_metadata["method"] = "chat_api"
-        
-        if task == "summary":
-            template_id = kwargs.get("template_id")
-            try:
-                # Parse JSON output using safe utility
-                structured_output = safe_json_loads(generated_text, default=None)
-
-                if structured_output is not None:
-                    # Validate against schema
-                    if template_id:
-                        schema = load_template_schema(
-                            template_id, settings.paths.templates_dir
-                        )
-                        # validate_llm_output returns (validated_output, error_message)
-                        validated_output, error_message = validate_llm_output(
-                            json.dumps(structured_output), schema
-                        )
-
-                        if validated_output is not None:
-                            result_metadata["structured_summary"] = validated_output
-                            result_metadata["validation"] = "passed"
-                            logger.info(f"Summary validation passed for {template_id}")
-                        else:
-                            result_metadata["validation"] = "failed"
-                            result_metadata["validation_error"] = error_message
-                            logger.warning(
-                                f"Summary validation failed: {error_message}"
-                            )
-                    else:
-                        result_metadata["structured_summary"] = structured_output
-                        result_metadata["validation"] = "skipped"
-                else:
-                    logger.error("Failed to parse JSON output")
-                    result_metadata["validation"] = "json_parse_error"
-                    result_metadata["parse_error"] = "Invalid JSON format"
-
-            except Exception as e:
-                logger.error(f"Summary validation error: {e}")
-                result_metadata["validation"] = "error"
-                result_metadata["error"] = str(e)
-
-        # DEBUG: Log LLM output preview
-        output_text = generated_text or text
-        output_preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
-        logger.debug(
-            "LLM output preview",
-            task=task,
-            output_preview=output_preview,
-            char_count=len(output_text),
-            word_count=len(output_text.split()) if output_text else 0,
-            tokens_used=tokens_used if "tokens_used" in locals() else None,
-        )
-
-        return LLMResult(
-            text=generated_text or text,
-            tokens_used=tokens_used if "tokens_used" in locals() else None,
-            model_info=self.model_info or {"model_name": "unknown"},
-            metadata=result_metadata,
-        )
 
     def enhance_text(self, text: str, **kwargs) -> Dict[str, Any]:
         """
@@ -900,7 +1033,7 @@ class LLMProcessor(LLMBackend):
         if not self._model_loaded:
             self._load_model(**kwargs)
 
-        if self.model is None:
+        if not self._model_loaded:
             return {
                 "enhanced_text": text,
                 "original_text": text,
@@ -968,7 +1101,7 @@ class LLMProcessor(LLMBackend):
         if not self._model_loaded:
             self._load_model(**kwargs)
 
-        if self.model is None:
+        if not self._model_loaded:
             return {
                 "summary": None,
                 "error": "LLM model not available",
@@ -1302,36 +1435,34 @@ class LLMProcessor(LLMBackend):
                 logger.debug("LLM model unloaded successfully")
             except Exception as e:
                 logger.warning(f"Error during model unload: {e}")
-            except Exception as e:
-                logger.warning(f"Error during model unload: {e}")
             finally:
                 self.model = None
                 self._model_loaded = False
 
         # Clear CUDA cache (allow tests to patch module-level torch)
-        try:
-            import torch as _torch
-        except Exception:
-            _torch = None
+        # Only clear cache if using local vLLM backend
+        if settings.llm_backend == LlmBackendType.LOCAL_VLLM:
+            try:
+                import torch as _torch
+            except Exception:
+                _torch = None
 
-        torch_module = globals().get("torch", _torch)
-        if (
-            torch_module is not None
-            and hasattr(torch_module, "cuda")
-            and callable(getattr(torch_module.cuda, "empty_cache", None))
-        ):
-            if has_cuda():
-                try:
-                    alloc_pre_cache = torch.cuda.memory_allocated(0) / (1024**3)
-                    reserved_pre_cache = torch.cuda.memory_reserved(0) / (1024**3)
-                    torch_module.cuda.empty_cache()
-                    alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
-                    reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
-                    logger.info("LLM unload GPU mem: alloc %.2fGB→%.2fGB (pre %.2fGB), reserved %.2fGB→%.2fGB (pre %.2fGB)", alloc_before, alloc_after, alloc_pre_cache, reserved_before, reserved_after, reserved_pre_cache)
-                except Exception as e:
-                    logger.warning(f"Failed to clear CUDA cache: {e}")
-                except Exception as e:
-                    logger.warning(f"Failed to clear CUDA cache: {e}")
+            torch_module = globals().get("torch", _torch)
+            if (
+                torch_module is not None
+                and hasattr(torch_module, "cuda")
+                and callable(getattr(torch_module.cuda, "empty_cache", None))
+            ):
+                if has_cuda():
+                    try:
+                        alloc_pre_cache = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_pre_cache = torch.cuda.memory_reserved(0) / (1024**3)
+                        torch_module.cuda.empty_cache()
+                        alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
+                        reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
+                        logger.info("LLM unload GPU mem: alloc %.2fGB→%.2fGB (pre %.2fGB), reserved %.2fGB→%.2fGB (pre %.2fGB)", alloc_before, alloc_after, alloc_pre_cache, reserved_before, reserved_after, reserved_pre_cache)
+                    except Exception as e:
+                        logger.warning(f"Failed to clear CUDA cache: {e}")
 
         # Reset state
         self.tokenizer = None

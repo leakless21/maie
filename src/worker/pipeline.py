@@ -41,7 +41,9 @@ from src.api.errors import (
     ModelLoadError,
 )
 from src.api.schemas import TaskStatus
+from src.api.schemas import TaskStatus
 from src.config import settings
+from src.config.model import LlmBackendType
 from src.utils.device import has_cuda, select_device
 from src.utils.sanitization import sanitize_metadata
 
@@ -1215,7 +1217,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
                 # CRITICAL: Ensure GPU memory is fully cleared before loading LLM
                 # This prevents fragmentation issues from previous models
-                if TORCH_AVAILABLE and torch is not None and has_cuda():
+                # Only clear cache if using local vLLM backend
+                if (
+                    TORCH_AVAILABLE
+                    and torch is not None
+                    and has_cuda()
+                    and settings.llm_backend == LlmBackendType.LOCAL_VLLM
+                ):
                     try:
                         torch.cuda.empty_cache()
                         torch.cuda.synchronize()  # Wait for all operations to complete
@@ -1413,7 +1421,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         llm_model.unload()
 
                     # Critical: Clear CUDA cache to free GPU memory
-                    if TORCH_AVAILABLE and torch is not None and has_cuda():
+                    # Only clear cache if using local vLLM backend
+                    if (
+                        TORCH_AVAILABLE
+                        and torch is not None
+                        and has_cuda()
+                        and settings.llm_backend == LlmBackendType.LOCAL_VLLM
+                    ):
                         torch.cuda.empty_cache()
                         logger.info("LLM model unloaded and GPU cache cleared")
                     else:
