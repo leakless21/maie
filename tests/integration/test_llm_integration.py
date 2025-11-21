@@ -53,6 +53,7 @@ class TestLLMIntegration:
             "max_num_seqs": None,
             "max_num_batched_tokens": None,
             "max_num_partial_prefills": None,
+            "structured_outputs_enabled": True,
         }
 
         if enhance_overrides:

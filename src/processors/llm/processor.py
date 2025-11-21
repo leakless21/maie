@@ -62,13 +62,13 @@ class LLMProcessor(LLMBackend):
         # Model state (local vLLM mode)
         self.model = None
         self._model_loaded = False
-        
+
         # Client state (both modes)
         # In server mode: two separate clients
         # In local mode: both reference same LocalVllmClient
         self.client_enhance: ChatCompletionClient | None = None
         self.client_summary: ChatCompletionClient | None = None
-        
+
         # Metadata
         self.tokenizer = None
         self.checkpoint_hash = None
@@ -154,31 +154,37 @@ class LLMProcessor(LLMBackend):
 
         # Determine model name based on task or use default
         model_name = kwargs.get("model_name", self.model_path)
-        logger.info(f"Initializing LLM backend: {settings.llm_backend} for model: {model_name}")
+        logger.info(
+            f"Initializing LLM backend: {settings.llm_backend} for model: {model_name}"
+        )
 
         if settings.llm_backend == LlmBackendType.VLLM_SERVER:
             # Server mode: create separate clients for enhancement and summary
             try:
-                logger.info(f"Initializing vLLM server clients - "
-                           f"enhance: {settings.llm_server.enhance_base_url}, "
-                           f"summary: {settings.llm_server.summary_url}")
-                
+                logger.info(
+                    f"Initializing vLLM server clients - "
+                    f"enhance: {settings.llm_server.enhance_base_url}, "
+                    f"summary: {settings.llm_server.summary_url}"
+                )
+
                 # Enhancement client
                 self.client_enhance = VllmServerClient(
                     base_url=settings.llm_server.enhance_base_url,
-                    api_key=settings.llm_server.enhance_api_key.get_secret_value() 
-                        if settings.llm_server.enhance_api_key else None,
+                    api_key=settings.llm_server.enhance_api_key.get_secret_value()
+                    if settings.llm_server.enhance_api_key
+                    else None,
                     model_name=settings.llm_server.enhance_model_name,
                 )
-                
+
                 # Summary client (may be same endpoint or different)
                 self.client_summary = VllmServerClient(
                     base_url=settings.llm_server.summary_url,
                     api_key=settings.llm_server.summary_api_key.get_secret_value()
-                        if settings.llm_server.summary_api_key else None,
+                    if settings.llm_server.summary_api_key
+                    else None,
                     model_name=settings.llm_server.summary_model_name,
                 )
-                
+
                 # Set metadata
                 self.checkpoint_hash = f"remote:{model_name}"
                 self.model_info = {
@@ -188,7 +194,7 @@ class LLMProcessor(LLMBackend):
                     "enhance_endpoint": settings.llm_server.enhance_base_url,
                     "summary_endpoint": settings.llm_server.summary_url,
                 }
-                
+
                 self._model_loaded = True
                 logger.info("vLLM server clients initialized successfully")
                 return
@@ -205,6 +211,8 @@ class LLMProcessor(LLMBackend):
                 raise
 
         # Local vLLM initialization (legacy path)
+        # Local vLLM is still supported as an option for single-machine or dev setups.
+        # The original in-process model-loading flow continues here (no-op if server is chosen).
         try:
             # Enforce GPU-only usage in all environments for vLLM
             try:
@@ -282,12 +290,12 @@ class LLMProcessor(LLMBackend):
 
             logger.debug(f"Calling LLM() constructor with args: {llm_args}")
             self.model = LLM(**llm_args)
-            
+
             # In local mode, both clients point to the same LocalVllmClient
             local_client = LocalVllmClient(self.model)
             self.client_enhance = local_client
             self.client_summary = local_client
-            
+
             logger.debug("LLM() constructor returned successfully")
 
             # Calculate checkpoint hash for versioning (NFR-1)
@@ -316,6 +324,7 @@ class LLMProcessor(LLMBackend):
 
             # DEBUG: Log model configuration details
             from src.utils.device import select_device
+
             device = select_device()
             logger.debug(
                 "LLM model configuration",
@@ -425,27 +434,25 @@ class LLMProcessor(LLMBackend):
         logger.info(f"First 200 chars of text: {text[:200]}")
         # Extract task for client selection
         task = kwargs.get("task", "general")
-        
+
         # Ensure model is loaded
         if not self._model_loaded:
-            self._load_model(**kwargs) # Keep original kwargs for _load_model
-        
+            self._load_model(**kwargs)  # Keep original kwargs for _load_model
+
         # Select client based on task type
         if task == "summary":
             client = self.client_summary
         else:
             client = self.client_enhance
-        
+
         # Verify client is available
         if not client:
+            # No fallback/legacy local LLM support: require server client in production
             logger.error(f"Client not available for task: {task}")
-            return LLMResult(
-                text=text, # Use original 'text' for consistency
-                tokens_used=None,
-                model_info=self.model_info or {"model_name": "unavailable", "reason": "LLM model not available"},
-                metadata={"task": task, "error": "LLM model not available"},
+            raise RuntimeError(
+                "No LLM client configured. Set APP_LLM_BACKEND=vllm_server and configure APP_LLM_SERVER__BASE_URL"
             )
-        
+
         retry_hint = kwargs.pop("retry_hint", None)  # Extract retry hint if provided
 
         # DEBUG: Log LLM input preview
@@ -469,7 +476,7 @@ class LLMProcessor(LLMBackend):
         final_prompt = None
         tokens_used = None
 
-        # Handle summary task with chat API and guided decoding
+        # Handle summary task with chat API and structured outputs enforcement
         if task == "summary":
             template_id = kwargs.get("template_id")
             if not template_id:
@@ -481,7 +488,7 @@ class LLMProcessor(LLMBackend):
                     metadata={"task": task, "error": "Missing template_id"},
                 )
 
-            # Load schema for guided decoding
+            # Load schema for structured outputs enforcement
             logger.info(f"About to load schema for template {template_id}")
             try:
                 schema = load_template_schema(template_id, settings.paths.templates_dir)
@@ -546,7 +553,7 @@ class LLMProcessor(LLMBackend):
 
             use_chat_api = True
 
-            # Set up guided decoding if not already provided
+            # Set up structured outputs (JSON schema enforcement) if enabled
             if settings.llm_sum.structured_outputs_enabled:
                 try:
                     from vllm.sampling_params import StructuredOutputsParams
@@ -717,7 +724,7 @@ class LLMProcessor(LLMBackend):
         tokens_used = None
         vllm_outputs = None  # Store outputs for metadata extraction
         current_model_info = self.model_info.copy() if self.model_info else {}
-        
+
         # Initialize timing variables to prevent UnboundLocalError in error handling
         inference_start = 0.0
         inference_end = 0.0
@@ -726,7 +733,11 @@ class LLMProcessor(LLMBackend):
         try:
             # Log GPU memory fragmentation before inference (NFR-10)
             # Only relevant for local vLLM
-            if settings.llm_backend == LlmBackendType.LOCAL_VLLM and has_cuda() and torch is not None:
+            if (
+                settings.llm_backend == LlmBackendType.LOCAL_VLLM
+                and has_cuda()
+                and torch is not None
+            ):
                 try:
                     mem_allocated = torch.cuda.memory_allocated(0) / (1024**3)
                     mem_reserved = torch.cuda.memory_reserved(0) / (1024**3)
@@ -780,11 +791,11 @@ class LLMProcessor(LLMBackend):
 
                 inference_start = time.time()
                 logger.debug("About to call client.chat()")
-                
+
                 # Use the task-specific client
                 # structured_outputs is already in sampling_params, no need to pass separately
                 outputs = client.chat(messages, sampling_params=sampling)
-                
+
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -832,15 +843,15 @@ class LLMProcessor(LLMBackend):
                         "backend": settings.llm_backend,
                     },
                 )
-                
+
                 # Wrap raw prompt in a user message
                 messages = [{"role": "user", "content": final_prompt}]
 
                 inference_start = time.time()
                 logger.debug("About to call client.chat() with wrapped prompt")
-                
+
                 outputs = client.chat(messages, sampling_params=sampling)
-                
+
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
 
@@ -870,26 +881,33 @@ class LLMProcessor(LLMBackend):
                 )
 
                 generated_text = outputs[0].outputs[0].text if outputs else ""
-                
+
                 # Extract usage stats
                 prompt_tokens = 0
                 completion_tokens = 0
                 if outputs and len(outputs) > 0:
-                    if hasattr(outputs[0], "prompt_token_ids") and outputs[0].prompt_token_ids:
+                    if (
+                        hasattr(outputs[0], "prompt_token_ids")
+                        and outputs[0].prompt_token_ids
+                    ):
                         prompt_tokens = len(outputs[0].prompt_token_ids)
-                    if outputs[0].outputs and hasattr(outputs[0].outputs[0], "token_ids"):
+                    if outputs[0].outputs and hasattr(
+                        outputs[0].outputs[0], "token_ids"
+                    ):
                         completion_tokens = len(outputs[0].outputs[0].token_ids)
-                
+
                 total_tokens = prompt_tokens + completion_tokens
-                
+
                 # Update model info with usage
                 current_model_info["usage"] = {
                     "prompt_tokens": prompt_tokens,
                     "completion_tokens": completion_tokens,
-                    "total_tokens": total_tokens
+                    "total_tokens": total_tokens,
                 }
 
-                tokens_used = prompt_tokens # Use the more robustly calculated prompt_tokens
+                tokens_used = (
+                    prompt_tokens  # Use the more robustly calculated prompt_tokens
+                )
             else:
                 # Fallback if neither path is available
                 logger.error("Neither chat API messages nor final_prompt available")
@@ -914,7 +932,9 @@ class LLMProcessor(LLMBackend):
                         generated_tokens = None
                 result_metadata.update(
                     {
-                        "finish_reason": getattr(first_output, "finish_reason", "unknown"),
+                        "finish_reason": getattr(
+                            first_output, "finish_reason", "unknown"
+                        ),
                         "generated_tokens": generated_tokens,
                         "output_length": len(generated_text),
                     }
@@ -923,7 +943,7 @@ class LLMProcessor(LLMBackend):
             # Mark method used for both summary and enhancement when chat API is used
             if use_chat_api:
                 result_metadata["method"] = "chat_api"
-            
+
             if task == "summary":
                 template_id = kwargs.get("template_id")
                 try:
@@ -944,7 +964,9 @@ class LLMProcessor(LLMBackend):
                             if validated_output is not None:
                                 result_metadata["structured_summary"] = validated_output
                                 result_metadata["validation"] = "passed"
-                                logger.info(f"Summary validation passed for {template_id}")
+                                logger.info(
+                                    f"Summary validation passed for {template_id}"
+                                )
                             else:
                                 result_metadata["validation"] = "failed"
                                 result_metadata["validation_error"] = error_message
@@ -966,7 +988,9 @@ class LLMProcessor(LLMBackend):
 
             # DEBUG: Log LLM output preview
             output_text = generated_text or text
-            output_preview = output_text[:200] + "..." if len(output_text) > 200 else output_text
+            output_preview = (
+                output_text[:200] + "..." if len(output_text) > 200 else output_text
+            )
             logger.debug(
                 "LLM output preview",
                 task=task,
@@ -1016,7 +1040,9 @@ class LLMProcessor(LLMBackend):
                 metadata={
                     "task": task,
                     "error": error_msg,
-                    "inference_time": inference_end - inference_start if inference_end > inference_start else 0.0,
+                    "inference_time": inference_end - inference_start
+                    if inference_end > inference_start
+                    else 0.0,
                     "finish_reason": output_info.get("finish_reason", "error"),
                 },
             )
@@ -1132,14 +1158,15 @@ class LLMProcessor(LLMBackend):
             None  # Track last validation error for retry feedback
         )
 
-        # Create guided decoding parameters for JSON schema constraint
-        guided_decoding = None
-        if settings.llm_sum.guided_decoding_enabled:
+        # Create structured outputs parameters for JSON schema constraint
+        sampling_override = None
+        if settings.llm_sum.structured_outputs_enabled:
             try:
-                from vllm.sampling_params import GuidedDecodingParams
-                guided_decoding = GuidedDecodingParams(json=json.dumps(schema))
+                from vllm.sampling_params import StructuredOutputsParams
+
+                sampling_override = StructuredOutputsParams(json=json.dumps(schema))
             except Exception as e:
-                logger.warning(f"Failed to initialize guided decoding: {e}")
+                logger.warning(f"Failed to initialize structured outputs: {e}")
 
         # Log schema details for debugging
         logger.info(
@@ -1155,7 +1182,7 @@ class LLMProcessor(LLMBackend):
                     "additional_properties": schema.get("additionalProperties", True),
                 },
                 "transcript_length": len(transcript),
-                "guided_decoding_enabled": settings.llm_sum.guided_decoding_enabled,
+                "structured_outputs_enabled": settings.llm_sum.structured_outputs_enabled,
             },
         )
 
@@ -1172,7 +1199,7 @@ class LLMProcessor(LLMBackend):
                         f"Retrying with error feedback (attempt {retry_count + 1})"
                     )
 
-                # Prepare sampling parameters with current temperature and guided decoding
+                # Prepare sampling parameters with current temperature and structured outputs
                 # NOTE: Do NOT pass max_tokens here - let execute() calculate it dynamically
                 # based on input length to avoid truncation issues
                 sampling_kwargs = {
@@ -1182,7 +1209,7 @@ class LLMProcessor(LLMBackend):
                     "stop": [
                         "<|im_end|>"
                     ],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
-                    "guided_decoding": guided_decoding,  # Add constrained decoding
+                    "structured_outputs": sampling_override,
                     **kwargs,
                 }
 
@@ -1219,7 +1246,7 @@ class LLMProcessor(LLMBackend):
                         "sampling_params": {
                             "temperature": current_temperature,
                             "max_tokens": sampling_kwargs.get("max_tokens"),
-                            "guided_decoding": sampling_kwargs.get("guided_decoding")
+                            "structured_outputs": sampling_kwargs.get("structured_outputs")
                             is not None,
                         },
                     },
@@ -1431,6 +1458,7 @@ class LLMProcessor(LLMBackend):
             # GPU mem before unload
             try:
                 import torch
+
                 alloc_before = torch.cuda.memory_allocated(0) / (1024**3)
                 reserved_before = torch.cuda.memory_reserved(0) / (1024**3)
             except:
@@ -1467,7 +1495,15 @@ class LLMProcessor(LLMBackend):
                         torch_module.cuda.empty_cache()
                         alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
                         reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
-                        logger.info("LLM unload GPU mem: alloc %.2fGB→%.2fGB (pre %.2fGB), reserved %.2fGB→%.2fGB (pre %.2fGB)", alloc_before, alloc_after, alloc_pre_cache, reserved_before, reserved_after, reserved_pre_cache)
+                        logger.info(
+                            "LLM unload GPU mem: alloc %.2fGB→%.2fGB (pre %.2fGB), reserved %.2fGB→%.2fGB (pre %.2fGB)",
+                            alloc_before,
+                            alloc_after,
+                            alloc_pre_cache,
+                            reserved_before,
+                            reserved_after,
+                            reserved_pre_cache,
+                        )
                     except Exception as e:
                         logger.warning(f"Failed to clear CUDA cache: {e}")
 

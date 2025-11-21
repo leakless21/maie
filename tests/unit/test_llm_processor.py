@@ -69,23 +69,35 @@ class TestLoadModel:
         mock_model = Mock()
         mock_model.get_default_sampling_params.return_value = Mock()
 
-        with patch("vllm.LLM") as mock_llm_class:
-            mock_llm_class.return_value = mock_model
+        with patch("src.processors.llm.processor.settings") as mock_settings:
+            mock_settings.llm_backend = LlmBackendType.LOCAL_VLLM
+            mock_settings.llm_enhance = SimpleNamespace(
+                enhance_base_url="http://test-server/v1",
+                enhance_api_key=None,
+                enhance_model_name="test-model",
+                summary_url="http://test-server/v1",
+                summary_api_key=None,
+                summary_model_name="test-model",
+                request_timeout_seconds=60.0,
+            )
 
-            with patch(
-                "src.processors.llm.processor.calculate_checkpoint_hash"
-            ) as mock_hash:
-                mock_hash.return_value = "test-hash"
+            with patch("vllm.LLM") as mock_llm_class:
+                mock_llm_class.return_value = mock_model
 
-                with patch("src.processors.llm.processor.get_model_info") as mock_info:
-                    mock_info.return_value = {"model_name": "test-model"}
+                with patch(
+                    "src.processors.llm.processor.calculate_checkpoint_hash"
+                ) as mock_hash:
+                    mock_hash.return_value = "test-hash"
 
-                    processor._load_model()
+                    with patch("src.processors.llm.processor.get_model_info") as mock_info:
+                        mock_info.return_value = {"model_name": "test-model"}
 
-                    assert processor.model == mock_model
-                    assert processor.checkpoint_hash == "test-hash"
-                    assert processor._model_loaded is True
-                    mock_llm_class.assert_called_once()
+                        processor._load_model()
+
+                        assert processor.model == mock_model
+                        assert processor.checkpoint_hash == "test-hash"
+                        assert processor._model_loaded is True
+                        mock_llm_class.assert_called_once()
 
     def test_load_model_advanced_scheduler_args(self):
         """Advanced scheduler overrides should be forwarded to vLLM."""
@@ -136,25 +148,32 @@ class TestLoadModel:
         """Test graceful handling when vLLM is not installed."""
         processor = LLMProcessor()
 
-        with patch("vllm.LLM", side_effect=ImportError("vLLM not installed")):
-            processor._load_model()
+        with patch("src.processors.llm.processor.settings") as mock_settings:
+            mock_settings.llm_backend = LlmBackendType.VLLM_SERVER
+            # Simulate server client initialization error
+            with patch("src.processors.llm.processor.VllmServerClient", side_effect=ImportError("vLLM server client not available")):
+                with pytest.raises(ImportError):
+                    processor._load_model()
 
-            assert processor.model is None
-            assert processor.checkpoint_hash == "vllm_not_installed"
+            assert processor.client_enhance is None
+            assert processor.client_summary is None
+            assert "init_error" in processor.checkpoint_hash
             assert processor._model_loaded is False
 
     def test_load_model_load_error(self):
         """Test handling of model loading errors."""
         processor = LLMProcessor()
 
-        with patch("vllm.LLM", side_effect=Exception("Load error")):
-            with pytest.raises(Exception, match="Load error"):
-                processor._load_model()
+        with patch("src.processors.llm.processor.settings") as mock_settings:
+            mock_settings.llm_backend = LlmBackendType.VLLM_SERVER
+            with patch("src.processors.llm.processor.VllmServerClient", side_effect=Exception("Load error")):
+                with pytest.raises(Exception, match="Load error"):
+                    processor._load_model()
 
     def test_load_model_server_backend(self):
         """Test loading model with VLLM_SERVER backend."""
         processor = LLMProcessor()
-        
+
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_backend = LlmBackendType.VLLM_SERVER
             mock_settings.llm_server.enhance_base_url = "http://test-server/v1"
@@ -164,19 +183,21 @@ class TestLoadModel:
             mock_settings.llm_server.summary_api_key = None
             mock_settings.llm_server.summary_model_name = "test-model"
             mock_settings.llm_server.request_timeout_seconds = 60.0
-            
-            with patch("src.processors.llm.processor.VllmServerClient") as mock_client_class:
+
+            with patch(
+                "src.processors.llm.processor.VllmServerClient"
+            ) as mock_client_class:
                 mock_client = Mock()
                 mock_client_class.return_value = mock_client
-                
+
                 processor._load_model()
-                
+
                 # Both clients should be initialized
                 assert processor.client_enhance == mock_client
                 assert processor.client_summary == mock_client
                 assert processor._model_loaded is True
                 assert processor.model_info["backend"] == "vllm_server"
-                
+
                 # Should be called twice (enhance + summary)
                 assert mock_client_class.call_count == 2
 
@@ -203,43 +224,37 @@ class TestExecute:
         processor = LLMProcessor()
         processor.model = None
         processor._model_loaded = True
-
-        result = processor.execute("test text")
-
-        assert isinstance(result, LLMResult)
-        assert result.text == "test text"
-        assert result.tokens_used is None
-        assert result.metadata["fallback"] is True
+        with pytest.raises(RuntimeError, match="No LLM client configured"):
+            processor.execute("test text")
 
     def test_execute_with_model(self):
         """Test execution when model is loaded."""
         processor = LLMProcessor()
         processor._model_loaded = True
-        processor.client = Mock()
-        
+        processor.client_enhance = Mock()
+        processor.client_summary = processor.client_enhance
+
         # Mock client response
         mock_output = Mock()
         mock_output.outputs = [Mock(text="generated text")]
         mock_output.prompt_token_ids = [1, 2, 3]
         mock_output.outputs[0].token_ids = [4, 5]
-        processor.client.chat.return_value = [mock_output]
+        processor.client_enhance.chat.return_value = [mock_output]
 
         result = processor.execute("test prompt")
 
         assert result.text == "generated text"
         assert result.model_info["usage"]["prompt_tokens"] == 3
         assert result.model_info["usage"]["completion_tokens"] == 2
-        processor.client.chat.assert_called_once()
+        processor.client_enhance.chat.assert_called_once()
 
     def test_execute_generation_error(self):
         """Test execution when generation fails."""
         processor = LLMProcessor()
         processor._model_loaded = True
-
-        mock_model = Mock()
-        mock_model.get_default_sampling_params.return_value = Mock()
-        mock_model.generate.side_effect = Exception("Generation error")
-        processor.model = mock_model
+        # Simulate server client raising generation error
+        processor.client_enhance = Mock()
+        processor.client_enhance.chat.side_effect = Exception("Generation error")
 
         with patch(
             "src.processors.llm.processor.apply_overrides_to_sampling"
@@ -256,6 +271,14 @@ class TestExecute:
         processor = LLMProcessor()
 
         with patch.object(processor, "_load_model") as mock_load:
+            # Patch _load_model to set _model_loaded and provide a client
+            def _fake_load():
+                processor._model_loaded = True
+                processor.client_enhance = Mock()
+                processor.client_enhance.chat.return_value = [Mock(outputs=[Mock(text="ok")])]
+
+            mock_load.side_effect = _fake_load
+
             processor.execute("test text")
 
             mock_load.assert_called_once()
@@ -264,13 +287,16 @@ class TestExecute:
         """Test execution when prompt rendering fails."""
         processor = LLMProcessor()
         processor._model_loaded = True
-        processor.client = Mock()
-        
+        processor.client_enhance = Mock()
+        processor.client_summary = processor.client_enhance
+
         # Manually mock prompt renderer
         processor.prompt_renderer = Mock()
         processor.prompt_renderer.render.side_effect = Exception("Render error")
 
-        with patch("src.processors.llm.processor.load_template_schema") as mock_load_schema:
+        with patch(
+            "src.processors.llm.processor.load_template_schema"
+        ) as mock_load_schema:
             mock_load_schema.return_value = {"type": "object"}
             result = processor.execute("transcript", task="summary", template_id="test")
 
@@ -285,7 +311,7 @@ class TestEnhanceText:
     def test_enhance_text_without_model(self):
         """Test enhancement when model is not available."""
         processor = LLMProcessor()
-        
+
         # Mock _load_model to simulate failure to load (does not set _model_loaded=True)
         with patch.object(processor, "_load_model") as mock_load:
             # _load_model does nothing, so _model_loaded remains False
@@ -328,6 +354,8 @@ class TestEnhanceText:
         processor = LLMProcessor()
         processor._model_loaded = True
         processor.model = Mock()
+        # Provide a server client to avoid no-client error
+        processor.client_enhance = Mock()
         processor.model_info = {"model_name": "test"}
 
         with patch.object(
@@ -377,15 +405,15 @@ class TestGenerateSummary:
     def test_generate_summary_without_model(self):
         """Test summarization when model is not available."""
         processor = LLMProcessor()
-        
+
         # Mock _load_model to simulate failure to load (does not set _model_loaded=True)
         with patch.object(processor, "_load_model") as mock_load:
-            # _load_model does nothing, so _model_loaded remains False
-            result = processor.generate_summary("transcript", "meeting_notes_v1")
-
-            assert result["summary"] is None
-            assert "error" in result
-            assert "LLM model not available" in result["error"]
+            # After load, if no client is configured we expect an error (no fallback)
+            processor._model_loaded = True
+            processor.client_summary = None
+            with pytest.raises(RuntimeError, match="No LLM client configured"):
+                processor.generate_summary("transcript", "meeting_notes_v1")
+            mock_load.assert_called_once()
             mock_load.assert_called_once()
 
     def test_generate_summary_schema_load_error(self, tmp_path):
@@ -429,7 +457,7 @@ class TestGenerateSummary:
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.paths.templates_dir = tmp_path
-            
+
             # Mock execute to return an error result directly
             # This verifies generate_summary handles errors from execute correctly
             with patch.object(processor, "execute") as mock_execute:
@@ -437,9 +465,9 @@ class TestGenerateSummary:
                     text="transcript",
                     tokens_used=None,
                     model_info={},
-                    metadata={"error": "Prompt rendering error: Render error"}
+                    metadata={"error": "Prompt rendering error: Render error"},
                 )
-                
+
                 result = processor.generate_summary("transcript", "meeting_notes_v1")
 
             assert result["summary"] is None
@@ -576,6 +604,103 @@ class TestGenerateSummary:
                     assert result["summary"] == {"title": "Test", "tags": ["meeting"]}
                     assert result["retry_count"] == 1  # One retry
 
+    def test_generate_summary_structured_outputs_toggle(self, tmp_path):
+        """Test that structured outputs are added only when enabled in settings."""
+                    processor = LLMProcessor()
+                    processor._model_loaded = True
+
+                    # Create valid schema file
+                    schemas_dir = tmp_path / "schemas"
+                    schemas_dir.mkdir()
+                    schema_file = schemas_dir / "meeting_notes_v1.json"
+                    schema = {
+                        "type": "object",
+                        "properties": {"title": {"type": "string"}},
+                    }
+                    schema_file.write_text(json.dumps(schema))
+
+                    # Mock client and outputs
+                    mock_output = Mock()
+                    mock_output.outputs = [Mock()]
+                    mock_output.outputs[0].text = "{}"
+
+                    processor.client_summary = Mock()
+                    processor.client_summary.chat.return_value = [mock_output]
+
+                    # Patch prompt rendering to avoid template logic
+                    processor.prompt_renderer = Mock()
+                    processor.prompt_renderer.render.return_value = "rendered prompt"
+
+        # Case 1: structured_outputs disabled - StructuredOutputsParams should not be called
+        with patch(
+                        "src.processors.llm.processor.settings"
+                    ) as mock_settings:
+                        mock_settings.paths.templates_dir = tmp_path
+                        mock_settings.llm_sum = SimpleNamespace(
+                            temperature=0.7,
+                            top_p=0.9,
+                            top_k=20,
+                            max_tokens=1000,
+                            structured_outputs_enabled=False,
+                        )
+
+                        with patch(
+                            "src.processors.llm.processor.settings"
+                        ) as mock_settings:
+                            # Already patched above; ensure structured outputs disabled
+                            mock_settings.paths.templates_dir = tmp_path
+                            mock_settings.llm_sum = SimpleNamespace(
+                                temperature=0.7,
+                                top_p=0.9,
+                                top_k=20,
+                                max_tokens=1000,
+                                structured_outputs_enabled=False,
+                            )
+
+                with patch.object(processor, "execute") as mock_execute:
+                                mock_execute.return_value = LLMResult(
+                                    text="{}",
+                                    tokens_used=None,
+                                    model_info={},
+                                    metadata={},
+                                )
+
+            result = processor.generate_summary("transcript", "meeting_notes_v1")
+
+                                # When disabled, there should be no structured_outputs in execute kwargs
+                                # and therefore we assert the execute was called without 'structured_outputs'.
+                                called_args, called_kwargs = mock_execute.call_args
+                                assert "structured_outputs" not in called_kwargs
+
+        # Case 2: structured_outputs enabled - StructuredOutputsParams should be called
+        with patch(
+                            "src.processors.llm.processor.settings"
+                        ) as mock_settings:
+                        mock_settings.paths.templates_dir = tmp_path
+            mock_settings.llm_sum = SimpleNamespace(
+                            temperature=0.7,
+                            top_p=0.9,
+                            top_k=20,
+                            max_tokens=1000,
+                            structured_outputs_enabled=True,
+                        )
+
+                            with patch.object(processor, "execute") as mock_execute:
+                                mock_execute.return_value = LLMResult(
+                                    text="{}",
+                                    tokens_used=None,
+                                    model_info={},
+                                    metadata={},
+                                )
+
+                                result = processor.generate_summary(
+                                    "transcript", "meeting_notes_v1"
+                                )
+
+                                # When enabled, structured_outputs should be present in execute kwargs
+            called_args, called_kwargs = mock_execute.call_args
+                                assert "structured_outputs" in called_kwargs
+
     def test_generate_summary_loads_model_lazily(self):
         """Test that model is loaded on first summarization."""
         processor = LLMProcessor()
@@ -597,17 +722,20 @@ class TestUnload:
         processor.current_template_id = "test"
         processor.current_schema_hash = "hash"
 
-        with patch("src.processors.llm.processor.torch") as mock_torch, patch(
-            "src.processors.llm.processor.has_cuda", return_value=True
+        with (
+            patch("src.processors.llm.processor.torch") as mock_torch,
+            patch("src.processors.llm.processor.has_cuda", return_value=True),
+            patch("src.processors.llm.processor.settings") as mock_settings,
         ):
-
+            mock_settings.llm_backend = LlmBackendType.VLLM_SERVER
             processor.unload()
 
             assert processor.model is None
             assert processor._model_loaded is False
             assert processor.current_template_id is None
             assert processor.current_schema_hash is None
-            mock_torch.cuda.empty_cache.assert_called_once()
+            # For server backend we should not clear CUDA cache during unload
+            mock_torch.cuda.empty_cache.assert_not_called()
 
     def test_unload_without_model(self):
         """Test unloading when no model is loaded."""
@@ -624,8 +752,9 @@ class TestUnload:
         processor = LLMProcessor()
         processor.model = Mock()
 
-        with patch("src.processors.llm.processor.torch") as mock_torch, patch(
-            "src.processors.llm.processor.has_cuda", return_value=True
+        with (
+            patch("src.processors.llm.processor.torch") as mock_torch,
+            patch("src.processors.llm.processor.has_cuda", return_value=True),
         ):
             mock_torch.cuda.empty_cache.side_effect = Exception("CUDA error")
 

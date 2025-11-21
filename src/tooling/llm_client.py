@@ -114,7 +114,7 @@ class VllmServerClient:
                     if val is not None:
                         payload[api_param] = val
 
-        # Handle structured_outputs if present in kwargs or sampling_params
+        # Handle structured_outputs (preferred) if present in kwargs or sampling_params
         # For OpenAI compatible server, we pass it in extra_body
         structured_outputs = kwargs.get("structured_outputs")
         
@@ -146,6 +146,8 @@ class VllmServerClient:
             if structured_output_payload:
                 payload["extra_body"] = {"structured_outputs": structured_output_payload}
                 logger.debug("Added structured_outputs to extra_body")
+
+        # Deprecated: 'guided_decoding' param removed. Use 'structured_outputs' instead.
 
         logger.debug(f"Sending request to {url}", extra={"payload_keys": list(payload.keys())})
 

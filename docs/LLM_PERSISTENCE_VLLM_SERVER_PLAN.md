@@ -42,7 +42,7 @@ For usage instructions, see [LLM_BACKEND_CONFIGURATION.md](LLM_BACKEND_CONFIGURA
     - Renders a **system prompt** (instructions + schema) using
       `PromptRenderer.render(template_id, schema=...)`.
     - Builds OpenAI‑format `messages = [{"role": "system", ...}, {"role": "user", ...}]`.
-    - Optionally sets `GuidedDecodingParams(json=...)` for vLLM's guided JSON decoding.
+    - Optionally sets `StructuredOutputsParams(json=...)` for vLLM's structured JSON output.
     - Calls `self.model.chat(messages, sampling_params=...)`.
     - Validates the JSON via `validate_llm_output` and post‑processes it.
   - For `task="enhancement"`:
@@ -167,7 +167,7 @@ class LlmServerSettings(BaseModel):
 - Add to `AppSettings`:
 
 ```python
-llm_backend: LlmBackendType = Field(default=LlmBackendType.LOCAL_VLLM)
+llm_backend: LlmBackendType = Field(default=LlmBackendType.VLLM_SERVER)
 llm_server: LlmServerSettings = Field(default_factory=LlmServerSettings)
 ```
 
@@ -193,7 +193,7 @@ Implementations:
 
 - `LocalVllmClient`
   - Wraps existing `self.model.chat()` / `self.model.generate()`.
-  - Uses `vllm.SamplingParams` and `GuidedDecodingParams` the same way
+  - Uses `vllm.SamplingParams` and `StructuredOutputsParams` the same way
     `LLMProcessor` does today.
 - `VllmServerClient`
   - Uses an HTTP client (e.g. `httpx` or `openai` with `base_url` override) to
@@ -265,13 +265,13 @@ In the vLLM server mode we will:
 - For `enhancement`:
   - Same chat flow using `text_enhancement_v1` system prompt.
 
-Guided decoding:
+Structured outputs / JSON schema enforcement:
 
-- Local vLLM uses `GuidedDecodingParams(json=schema_json)`.
+- Local vLLM uses `StructuredOutputsParams(json=schema_json)`.
 - vLLM OpenAI server supports JSON‑structured outputs via its API; for
   compatibility we can:
   - Phase 1 (minimal): rely purely on system prompt + schema text and keep the
-    existing JSON validation, **without** guided decoding.
+    existing JSON validation, **without** structured outputs enforcement.
   - Phase 2 (optional): use vLLM server's structured‑output features (e.g.
     `response_format={"type": "json_schema", ...}` or related options) to
     improve robustness, then adjust tests accordingly.
@@ -495,8 +495,8 @@ CI path.
 5. **Optional Optimizations**
    - Introduce client/processor singletons per worker process to reuse HTTP
      sessions.
-   - Investigate vLLM server JSON / schema features to replace or augment
-     local guided decoding.
+  - Investigate vLLM server JSON / schema features to replace or augment
+    local structured outputs enforcement.
    - Explore prompt‑profile / prefix‑caching for high‑volume templates.
 
 This plan keeps MAIE's current prompt and validation pipeline intact while

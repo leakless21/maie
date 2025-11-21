@@ -8,6 +8,7 @@ import pytest
 from unittest.mock import Mock, patch
 
 from src.processors.llm.config import calculate_dynamic_max_tokens
+from src.tooling.llm_client import LocalVllmClient
 from src.processors.llm.processor import LLMProcessor
 
 
@@ -195,6 +196,8 @@ class TestLLMProcessorTokenizerIntegration:
 
         processor = LLMProcessor()
         processor.model = mock_model
+        processor._model_loaded = True
+        processor.client_enhance = LocalVllmClient(mock_model)
         processor._ensure_tokenizer("test-model")
 
         assert processor.tokenizer == mock_vllm_tokenizer
@@ -237,6 +240,7 @@ class TestLLMProcessorTokenizerIntegration:
 
         processor = LLMProcessor()
         processor.model = mock_model
+        processor.client_enhance = LocalVllmClient(mock_model)
         processor.tokenizer = mock_tokenizer
         processor._model_loaded = True
 
@@ -274,6 +278,7 @@ class TestLLMProcessorTokenizerIntegration:
 
         processor = LLMProcessor()
         processor.model = mock_model
+        processor.client_enhance = LocalVllmClient(mock_model)
         processor.tokenizer = None  # No tokenizer
         processor._model_loaded = True
 
@@ -310,6 +315,7 @@ class TestLLMProcessorTokenizerIntegration:
 
         processor = LLMProcessor()
         processor.model = mock_model
+        processor.client_enhance = LocalVllmClient(mock_model)
         processor.tokenizer = mock_tokenizer
         processor._model_loaded = True
 

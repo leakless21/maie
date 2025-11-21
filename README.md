@@ -317,7 +317,7 @@ done
 | `GPU_MEMORY_UTILIZATION` | `0.9`                       | GPU memory usage limit   |
 | `LOG_LEVEL`              | `INFO`                      | Logging level            |
 | `ASR_DEVICE`             | `cuda`                      | Device for ASR (cuda/cpu)|
-| `LLM_BACKEND`            | `local_vllm`                | LLM backend type         |
+| `LLM_BACKEND`            | `vllm_server`               | LLM backend type (server-only)
 | `LLM_SERVER__ENHANCE_BASE_URL` | `http://localhost:8001/v1` | Enhancement server URL |
 | `LLM_SERVER__SUMMARY_BASE_URL` | (optional)               | Summary server URL (defaults to enhance) |
 
@@ -338,7 +338,7 @@ MAIE supports two LLM backend modes:
 
 **Local vLLM (Default):**
 ```bash
-export LLM_BACKEND=local_vllm
+export LLM_BACKEND=vllm_server
 ```
 
 **vLLM Server (Recommended for Production):**

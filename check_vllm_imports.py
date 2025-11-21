@@ -4,8 +4,6 @@ try:
 except ImportError:
     print('StructuredOutputsParams: NOT_FOUND')
 
-try:
-    from vllm.sampling_params import GuidedDecodingParams
-    print('GuidedDecodingParams: FOUND')
-except ImportError:
-    print('GuidedDecodingParams: NOT_FOUND')
+# The old GuidedDecodingParams alias is deprecated and intentionally not
+# checked here; prefer StructuredOutputsParams and the `structured_outputs`
+# parameter instead.

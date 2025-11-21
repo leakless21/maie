@@ -21,7 +21,7 @@
 - **Time per request**: ~49 seconds (for ~2000 tokens)
 - **Status**: ❌ **SLOW** - This is the bottleneck!
 
-## Root Cause: Guided JSON Decoding
+## Root Cause: Structured outputs / JSON schema enforcement
 
 The summary task uses **guided JSON decoding** (constrained generation) to ensure the output matches a specific JSON schema. This feature:
 
@@ -32,19 +32,19 @@ The summary task uses **guided JSON decoding** (constrained generation) to ensur
 ### Evidence
 From the logs:
 ```python
-2025-11-21 10:27:36.776 | DEBUG | src.processors.llm.processor:execute:557 - Set up guided JSON decoding
+2025-11-21 10:27:36.776 | DEBUG | src.processors.llm.processor:execute:557 - Set up structured outputs enforcement
 ```
 
-The guided decoding is enabled in `src/processors/llm/processor.py`:
+The structured outputs enforcement is enabled in `src/processors/llm/processor.py`:
 ```python
-from vllm.sampling_params import GuidedDecodingParams
+from vllm.sampling_params import StructuredOutputsParams
 
-kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
+kwargs["structured_outputs"] = StructuredOutputsParams(json=json.dumps(schema))
 ```
 
 ## Performance Comparison
 
-| Task Type | Throughput | Guided Decoding | Notes |
+| Task Type | Throughput | Structured Outputs | Notes |
 |-----------|-----------|-----------------|-------|
 | Simple completion | 78-80 tok/s | ❌ No | Baseline performance |
 | Enhancement | ~80 tok/s | ❌ No | Normal speed |
@@ -52,7 +52,7 @@ kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
 
 ## Recommendations
 
-### Option 1: Disable Guided Decoding (Fastest)
+### Option 1: Disable structured outputs (Fastest)
 **Pros**: 
 - 2x faster summary generation
 - Simpler implementation
@@ -63,8 +63,8 @@ kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
 
 **Implementation**:
 ```python
-# In src/processors/llm/processor.py, comment out guided decoding
-# kwargs["guided_decoding"] = GuidedDecodingParams(json=json.dumps(schema))
+# In src/processors/llm/processor.py, comment out structured outputs enforcement
+# kwargs["structured_outputs"] = StructuredOutputsParams(json=json.dumps(schema))
 ```
 
 ### Option 2: Optimize vLLM Server Configuration
@@ -105,7 +105,7 @@ vLLM supports speculative decoding with a smaller draft model to speed up genera
 - vLLM configuration changes
 
 ### Option 4: Hybrid Approach (Recommended)
-1. **Keep guided decoding** for reliability
+1. **Keep structured outputs** for reliability
 2. **Optimize vLLM server settings** (Option 2)
 3. **Add retry logic** with lower temperature if JSON is invalid
 4. **Consider caching** common summaries
@@ -180,9 +180,9 @@ Watch the vLLM server logs for throughput metrics:
 
 ## Additional Notes
 
-### Why is guided decoding slow?
+### Why can structured outputs be slower?
 
-Guided JSON decoding works by:
+Structured outputs (guided JSON generation) works by:
 1. **Parsing the JSON schema** into a finite state machine (FSM)
 2. **Constraining token selection** at each step to only valid tokens
 3. **Validating structure** as generation progresses
@@ -194,13 +194,13 @@ This adds significant overhead because:
 
 ### Alternative: Outlines Library
 
-vLLM uses the `outlines` library for guided decoding. You could try:
+vLLM uses the `outlines` library for schema-constraint decoding (structured outputs). You could try:
 - Simplifying your JSON schemas (fewer nested objects)
 - Using regex patterns instead of full JSON schemas
 - Implementing custom validation logic
 
 ## Conclusion
 
-Your vLLM server is **not slow** - it's performing well for unconstrained generation. The slowdown is caused by **guided JSON decoding** in the summary task, which is a necessary trade-off for structured output reliability.
+Your vLLM server is **not slow** - it's performing well for unconstrained generation. The slowdown is caused by **structured outputs** constraints in the summary task, which is a necessary trade-off for structured output reliability.
 
 **Recommended action**: Implement Option 4 (Hybrid Approach) to get 50-75% improvement while maintaining reliability.

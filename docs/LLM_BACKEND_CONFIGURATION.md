@@ -15,7 +15,7 @@ MAIE supports two LLM backend modes for text enhancement and summarizatiTwo back
 
 ## Backend Selection in `.env`
 
-### Local vLLM (Default)
+### Local vLLM (Optional)
 
 The traditional mode where vLLM is loaded and unloaded with each job.
 
@@ -29,13 +29,13 @@ The traditional mode where vLLM is loaded and unloaded with each job.
 - GPU memory fragmentation over time
 - Higher per-job latency
 
-**Configuration:**
+**Configuration (optional):**
 
 ```bash
 LLM_BACKEND=local_vllm
 ```
 
-### vLLM Server
+### vLLM Server (Recommended)
 
 Connects to a persistent vLLM server that keeps the model loaded in memory.
 
@@ -125,7 +125,7 @@ curl http://localhost:8000/v1/models
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `LLM_BACKEND` | `local_vllm` | Backend selection: `local_vllm` or `vllm_server` |
+| `LLM_BACKEND` | `vllm_server` | Backend selection: `vllm_server` (local_vllm deprecated) |
 | `LLM_SERVER__BASE_URL` | `http://localhost:8000/v1` | vLLM server OpenAI-compatible API endpoint |
 | `LLM_SERVER__API_KEY` | `EMPTY` | API key for vLLM server (use `EMPTY` if no auth) |
 | `LLM_SERVER__MODEL_ENHANCE` | - | Model name for text enhancement |

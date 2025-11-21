@@ -20,6 +20,12 @@ if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/lib/python3.12/site-packages/nv
     echo -e "${GREEN}✓ CUDA_HOME set to: $CUDA_HOME${NC}"
 fi
 
+# Disable TVM's optional torch C DLPack build when running inside the pixi env.
+if [ -z "${TVM_FFI_DISABLE_TORCH_C_DLPACK:-}" ]; then
+    export TVM_FFI_DISABLE_TORCH_C_DLPACK=1
+    echo -e "${YELLOW}TVM_FFI_DISABLE_TORCH_C_DLPACK not set; defaulting to 1 for pixi CUDA runtime${NC}"
+fi
+
 # Configuration
 MODEL_TYPE="${1:-enhance}"  # Default to "enhance" model config
 SHOW_CONFIG="${VLLM_SHOW_CONFIG:-true}"

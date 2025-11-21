@@ -99,5 +99,7 @@ class TestLLMServerMode:
         assert mock_urlopen.call_count == 1
         req = mock_urlopen.call_args[0][0]
         data = json.loads(req.data)
-        # Check for guided decoding
-        assert "guided_json" in data
+        # Check that structured_outputs body is present for JSON schema enforcement
+        assert "extra_body" in data
+        assert "structured_outputs" in data["extra_body"]
+        assert "json" in data["extra_body"]["structured_outputs"]

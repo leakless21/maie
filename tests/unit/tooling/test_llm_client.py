@@ -91,16 +91,18 @@ class TestVllmServerClient:
             client.chat([{"role": "user", "content": "hello"}])
 
     @patch("urllib.request.urlopen")
-    def test_chat_guided_decoding(self, mock_urlopen, client):
-        """Test chat request with guided decoding."""
+    def test_chat_structured_outputs(self, mock_urlopen, client):
+        """Test chat request with structured outputs (JSON schema) in request."""
         mock_response = Mock()
         mock_response.status = 200
         mock_response.read.return_value = json.dumps({"choices": []}).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
-        guided_decoding = {"json": {"type": "object"}}
-        client.chat([{"role": "user", "content": "hello"}], guided_decoding=guided_decoding)
+        # New API: pass structured_outputs to request
+        structured_outputs = {"json": {"type": "object"}}
+        client.chat([{"role": "user", "content": "hello"}], structured_outputs=structured_outputs)
 
         req = mock_urlopen.call_args[0][0]
         data = json.loads(req.data)
-        assert data["guided_json"] == {"type": "object"}
+        assert "extra_body" in data
+        assert data["extra_body"]["structured_outputs"]["json"] == {"type": "object"}
