@@ -42,12 +42,12 @@ DEVELOPMENT_PROFILE: ProfileData = {
         "emergency_cleanup": False,
     },
     "llm_enhance": {
-        "gpu_memory_utilization": 0.9,
-        "max_model_len": 32768,
+        "gpu_memory_utilization": 0.6,
+        "max_model_len": 16384,
     },
     "llm_sum": {
-        "gpu_memory_utilization": 0.9,
-        "max_model_len": 32768,
+        "gpu_memory_utilization": 0.6,
+        "max_model_len": 16384,
     },
     "features": {
         "enable_enhancement": False,

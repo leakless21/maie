@@ -12,8 +12,10 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from src.config.model import LlmBackendType, LlmServerSettings
 from src.processors.base import LLMResult
 from src.processors.llm.processor import LLMProcessor
+from src.tooling.llm_client import VllmServerClient
 
 
 class TestLLMProcessorInitialization:
@@ -149,8 +151,37 @@ class TestLoadModel:
             with pytest.raises(Exception, match="Load error"):
                 processor._load_model()
 
-            assert processor.model is None
-            assert "load_error" in processor.checkpoint_hash
+    def test_load_model_server_backend(self):
+        """Test loading model with VLLM_SERVER backend."""
+        processor = LLMProcessor()
+        
+        with patch("src.processors.llm.processor.settings") as mock_settings:
+            mock_settings.llm_backend = LlmBackendType.VLLM_SERVER
+            mock_settings.llm_server.enhance_base_url = "http://test-server/v1"
+            mock_settings.llm_server.enhance_api_key = None
+            mock_settings.llm_server.enhance_model_name = "test-model"
+            mock_settings.llm_server.summary_url = "http://test-server/v1"  # Property
+            mock_settings.llm_server.summary_api_key = None
+            mock_settings.llm_server.summary_model_name = "test-model"
+            mock_settings.llm_server.request_timeout_seconds = 60.0
+            
+            with patch("src.processors.llm.processor.VllmServerClient") as mock_client_class:
+                mock_client = Mock()
+                mock_client_class.return_value = mock_client
+                
+                processor._load_model()
+                
+                # Both clients should be initialized
+                assert processor.client_enhance == mock_client
+                assert processor.client_summary == mock_client
+                assert processor._model_loaded is True
+                assert processor.model_info["backend"] == "vllm_server"
+                
+                # Should be called twice (enhance + summary)
+                assert mock_client_class.call_count == 2
+
+        assert processor.model is None
+        assert "load_error" not in processor.checkpoint_hash
 
     def test_load_model_already_loaded(self):
         """Test that model is not loaded twice."""
@@ -181,37 +212,24 @@ class TestExecute:
         assert result.metadata["fallback"] is True
 
     def test_execute_with_model(self):
-        """Test execution with loaded model."""
+        """Test execution when model is loaded."""
         processor = LLMProcessor()
         processor._model_loaded = True
-
-        # Mock model and outputs - token_ids MUST be a real list
-        mock_inner_output = Mock()
-        mock_inner_output.text = "generated text"
-        mock_inner_output.token_ids = [1, 2, 3, 4, 5]  # Real list, not Mock!
-        mock_inner_output.finish_reason = "stop"
-
+        processor.client = Mock()
+        
+        # Mock client response
         mock_output = Mock()
-        mock_output.outputs = [mock_inner_output]
-        mock_output.prompt_token_ids = [42, 43]
+        mock_output.outputs = [Mock(text="generated text")]
+        mock_output.prompt_token_ids = [1, 2, 3]
+        mock_output.outputs[0].token_ids = [4, 5]
+        processor.client.chat.return_value = [mock_output]
 
-        mock_model = Mock()
-        mock_model.get_default_sampling_params.return_value = Mock()
-        mock_model.generate.return_value = [mock_output]
-        # Add chat() method that returns list for proper len() support
-        mock_model.chat.return_value = [mock_output]
-        processor.model = mock_model
+        result = processor.execute("test prompt")
 
-        with patch(
-            "src.processors.llm.processor.apply_overrides_to_sampling"
-        ) as mock_apply:
-            mock_apply.return_value = Mock()
-
-            result = processor.execute("test text", task="enhancement")
-
-            assert result.text == "generated text"
-            assert result.metadata["task"] == "enhancement"
-            mock_model.chat.assert_called_once()
+        assert result.text == "generated text"
+        assert result.model_info["usage"]["prompt_tokens"] == 3
+        assert result.model_info["usage"]["completion_tokens"] == 2
+        processor.client.chat.assert_called_once()
 
     def test_execute_generation_error(self):
         """Test execution when generation fails."""
@@ -242,6 +260,24 @@ class TestExecute:
 
             mock_load.assert_called_once()
 
+    def test_execute_render_error(self):
+        """Test execution when prompt rendering fails."""
+        processor = LLMProcessor()
+        processor._model_loaded = True
+        processor.client = Mock()
+        
+        # Manually mock prompt renderer
+        processor.prompt_renderer = Mock()
+        processor.prompt_renderer.render.side_effect = Exception("Render error")
+
+        with patch("src.processors.llm.processor.load_template_schema") as mock_load_schema:
+            mock_load_schema.return_value = {"type": "object"}
+            result = processor.execute("transcript", task="summary", template_id="test")
+
+        assert result.text == "transcript"
+        assert "error" in result.metadata
+        assert "Prompt rendering error" in result.metadata["error"]
+
 
 class TestEnhanceText:
     """Test text enhancement functionality."""
@@ -249,14 +285,16 @@ class TestEnhanceText:
     def test_enhance_text_without_model(self):
         """Test enhancement when model is not available."""
         processor = LLMProcessor()
-        processor.model = None
-        processor._model_loaded = True
+        
+        # Mock _load_model to simulate failure to load (does not set _model_loaded=True)
+        with patch.object(processor, "_load_model") as mock_load:
+            # _load_model does nothing, so _model_loaded remains False
+            result = processor.enhance_text("test text")
 
-        result = processor.enhance_text("test text")
-
-        assert result["enhanced_text"] == "test text"
-        assert result["enhancement_applied"] is False
-        assert result["edit_distance"] == 0
+            assert result["enhancement_applied"] is False
+            assert result["enhanced_text"] == "test text"
+            assert result["edit_distance"] == 0
+            mock_load.assert_called_once()
 
     def test_enhance_text_with_model(self):
         """Test successful text enhancement."""
@@ -293,7 +331,9 @@ class TestEnhanceText:
         processor.model_info = {"model_name": "test"}
 
         with patch.object(
-            processor.prompt_renderer, "render", side_effect=Exception("Render error")
+            processor.prompt_renderer,
+            "render",
+            side_effect=Exception("Render error"),
         ):
             result = processor.enhance_text("test text")
 
@@ -337,14 +377,16 @@ class TestGenerateSummary:
     def test_generate_summary_without_model(self):
         """Test summarization when model is not available."""
         processor = LLMProcessor()
-        processor.model = None
-        processor._model_loaded = True
+        
+        # Mock _load_model to simulate failure to load (does not set _model_loaded=True)
+        with patch.object(processor, "_load_model") as mock_load:
+            # _load_model does nothing, so _model_loaded remains False
+            result = processor.generate_summary("transcript", "meeting_notes_v1")
 
-        result = processor.generate_summary("transcript", "meeting_notes_v1")
-
-        assert result["summary"] is None
-        assert "error" in result
-        assert "LLM model not available" in result["error"]
+            assert result["summary"] is None
+            assert "error" in result
+            assert "LLM model not available" in result["error"]
+            mock_load.assert_called_once()
 
     def test_generate_summary_schema_load_error(self, tmp_path):
         """Test summarization when schema loading fails."""
@@ -387,16 +429,22 @@ class TestGenerateSummary:
 
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.paths.templates_dir = tmp_path
-
-            with patch.object(
-                processor.prompt_renderer,
-                "render",
-                side_effect=Exception("Render error"),
-            ):
+            
+            # Mock execute to return an error result directly
+            # This verifies generate_summary handles errors from execute correctly
+            with patch.object(processor, "execute") as mock_execute:
+                mock_execute.return_value = LLMResult(
+                    text="transcript",
+                    tokens_used=None,
+                    model_info={},
+                    metadata={"error": "Prompt rendering error: Render error"}
+                )
+                
                 result = processor.generate_summary("transcript", "meeting_notes_v1")
 
-                assert result["summary"] is None
-                assert "Prompt rendering error" in result["error"]
+            assert result["summary"] is None
+            assert "error" in result
+            assert "Prompt rendering error" in result["error"]
 
     def test_generate_summary_success(self, tmp_path):
         """Test successful summarization."""

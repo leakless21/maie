@@ -196,7 +196,7 @@ X-API-Key: your_api_key_here
 | `features`           | array   | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
 | `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)   |
 | `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                     |
-| `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |                         |
+| `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |
 
 **Features Options:**
 

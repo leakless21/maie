@@ -116,13 +116,13 @@ def main() -> int:
 
     if metadata.get("normalized_path"):
         logger.info(
-            "Audio normalized",
+            "Audio normalized: format={original_format} duration={duration}s",
             original_format=metadata.get("format"),
             duration=metadata.get("duration"),
         )
 
     logger.info(
-        "Audio preprocessing complete",
+        "Audio preprocessing complete: duration={duration}s sample_rate={sample_rate} channels={channels} normalized={normalized}",
         duration=metadata.get("duration"),
         sample_rate=metadata.get("sample_rate"),
         channels=metadata.get("channels"),
@@ -140,7 +140,7 @@ def main() -> int:
             vad_config = VADSettings(silero_threshold=args.vad_threshold, device="cuda")
             vad = VADFactory.create("silero", **vad_config.model_dump())
             logger.info(
-                "VAD model loaded",
+                "VAD model loaded: backend={backend} threshold={threshold} device={device}",
                 backend="silero",
                 threshold=args.vad_threshold,
                 device=vad_config.device,
@@ -154,7 +154,7 @@ def main() -> int:
             vad_time = time.time() - start_time
 
             logger.info(
-                "VAD detection complete",
+                "VAD detection complete: segments={num_segments} ratio={speech_ratio} duration={total_duration} speech={speech_duration} time={processing_time}",
                 num_segments=len(vad_result.segments),
                 speech_ratio=f"{vad_result.speech_ratio:.1%}",
                 total_duration=f"{vad_result.total_duration:.2f}s",
@@ -208,7 +208,7 @@ def main() -> int:
             else "unknown"
         )
         logger.info(
-            "ASR transcription complete",
+            "ASR transcription complete: rtf={rtf} time={processing_time} confidence={confidence}",
             rtf=f"{rtf:.2f}x",
             processing_time=f"{processing_time:.2f}s",
             confidence=confidence_str,
@@ -238,7 +238,7 @@ def main() -> int:
             # Log VAD statistics if available
             if vad_result:
                 logger.info(
-                    "VAD Results",
+                    "VAD Results: segments={speech_segments} ratio={speech_ratio} duration={speech_duration}",
                     speech_segments=len(vad_result.segments),
                     speech_ratio=f"{vad_result.speech_ratio:.1%}",
                     speech_duration=f"{vad_result.speech_duration:.2f}s / {vad_result.total_duration:.2f}s",
@@ -253,14 +253,14 @@ def main() -> int:
                     text = segment.get("text", "").strip()
                     if text:
                         logger.info(
-                            "Segment",
+                            "{start}-{end}: {text}",
                             start=f"{start:.2f}s",
                             end=f"{end:.2f}s",
                             text=text,
                         )
             else:
                 # Log full transcript if no segments
-                logger.info("Full Transcript", text=asr_result.text)
+                logger.info("Full Transcript: {text}", text=asr_result.text)
 
         return 0
     except Exception as e:  # noqa: BLE001 - top-level CLI error reporting

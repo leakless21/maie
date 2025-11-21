@@ -76,7 +76,34 @@ curl http://localhost:8000/health
 # Expected: {"status":"healthy"}
 ```
 
-### Step 3: Start Worker (Terminal 2)
+### Step 2b: (Optional) Start vLLM Server for LLM Backend
+
+If you want to use `vllm_server` backend instead of `local_vllm` (recommended for faster inference):
+
+```bash
+# In Terminal 2 (or a separate terminal)
+./scripts/start-vllm-server.sh
+
+# Wait for server to finish loading (you'll see):
+# INFO:     Application startup complete.
+# INFO:     Uvicorn running on http://0.0.0.0:8001
+```
+
+Then update your `.env`:
+```bash
+LLM_BACKEND=vllm_server
+LLM_SERVER__ENHANCE_BASE_URL=http://localhost:8001/v1
+LLM_SERVER__ENHANCE_MODEL_NAME=data/models/qwen3-4b-instruct-2507-awq
+```
+
+**Benefits:**
+- ✅ No model loading overhead per job (faster processing)
+- ✅ Consistent GPU memory usage
+- ✅ Lower per-job latency
+
+**Note:** If you skip this step, the worker will use `local_vllm` mode (default) which loads the model for each job.
+
+### Step 3: Start Worker (Terminal 2 or 3)
 
 ```bash
 # Start worker process
@@ -92,7 +119,7 @@ Loading LLM model...
 Worker ready!
 ```
 
-### Step 4: Run E2E Tests (Terminal 3)
+### Step 4: Run E2E Tests (Terminal 3 or 4)
 
 ```bash
 # Set environment variables
@@ -185,6 +212,32 @@ ls -lh data/models/
 
 # If missing, download them
 ./scripts/download-models.sh
+```
+
+### vLLM Server Startup Errors
+
+**Error:** `api_server.py: error: unrecognized arguments: ...`
+
+This was a bug in `scripts/vllm_server_config.py` where log messages were mixed with command-line arguments.
+
+**Solution:**
+```bash
+# Verify the fix is applied
+python scripts/vllm_server_config.py --model-type enhance --show-config 2>/dev/null
+
+# Should only show vLLM arguments, no log messages
+# Expected: --host 0.0.0.0 --port 8001 --model data/models/...
+```
+
+If you still see log messages in the output, ensure `configure_logging()` is not called in the script.
+
+**Check server is running:**
+```bash
+# Wait for server to fully start (may take 1-2 minutes)
+curl http://localhost:8001/health
+
+# Check server logs
+# Look for: "Application startup complete"
 ```
 
 ## Redis Persistence (Optional - Not Recommended for E2E)

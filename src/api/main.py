@@ -141,6 +141,24 @@ def _handle_validation_exception(_: Any, exc: ValidationException) -> Response:
     return Response(payload, status_code=HTTP_422_UNPROCESSABLE_ENTITY)
 
 
+@get("/", summary="API root", tags=["Info"])
+async def root() -> Dict[str, Any]:
+    """Return API information and available endpoints."""
+    return {
+        "name": "Modular Audio Intelligence Engine (MAIE) API",
+        "version": "1.0.0",
+        "status": "running",
+        "endpoints": {
+            "health": "/health",
+            "process": "/v1/process",
+            "status": "/v1/status/{task_id}",
+            "models": "/v1/models",
+            "templates": "/v1/templates",
+            "docs": "/schema",
+        },
+    }
+
+
 @get("/health", summary="API health", tags=["Health"])
 async def health() -> HealthResponse:
     """Return a comprehensive health response suitable for orchestration checks."""
@@ -189,7 +207,7 @@ async def health() -> HealthResponse:
 
 
 litestar_kwargs: Dict[str, Any] = {
-    "route_handlers": [*route_handlers, health],
+    "route_handlers": [*route_handlers, root, health],
     "openapi_config": openapi_config,
     "dependencies": {"validate_request_data": validate_request_data},
     "exception_handlers": {
