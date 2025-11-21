@@ -547,16 +547,18 @@ class LLMProcessor(LLMBackend):
             use_chat_api = True
 
             # Set up guided decoding if not already provided
-            if "guided_decoding" not in kwargs:
+            if settings.llm_sum.structured_outputs_enabled:
                 try:
-                    from vllm.sampling_params import GuidedDecodingParams
+                    from vllm.sampling_params import StructuredOutputsParams
 
-                    kwargs["guided_decoding"] = GuidedDecodingParams(
+                    kwargs["structured_outputs"] = StructuredOutputsParams(
                         json=json.dumps(schema)
                     )
-                    logger.debug("Set up guided JSON decoding")
+                    logger.debug("Set up structured output (JSON)")
                 except Exception as e:
-                    logger.warning(f"Failed to set up guided decoding: {e}")
+                    logger.warning(f"Failed to set up structured outputs: {e}")
+            else:
+                logger.debug("Structured outputs disabled by configuration")
         elif task == "enhancement":
             # Handle enhancement task with chat API (matching summary pattern)
             try:
@@ -692,8 +694,8 @@ class LLMProcessor(LLMBackend):
 
         runtime_config = GenerationConfig(**runtime_overrides_dict)
 
-        # Extract guided_decoding if present
-        guided_decoding = kwargs.get("guided_decoding", None)
+        # Extract structured_outputs if present
+        structured_outputs = kwargs.get("structured_outputs", None)
 
         # Build final config using hierarchy
         model_path = Path(self.model_path) if Path(self.model_path).exists() else None
@@ -707,8 +709,8 @@ class LLMProcessor(LLMBackend):
         sampling_params_dict = final_config.to_sampling_params()
 
         overrides = dict(sampling_params_dict)
-        if guided_decoding is not None:
-            overrides["guided_decoding"] = guided_decoding
+        if structured_outputs is not None:
+            overrides["structured_outputs"] = structured_outputs
 
         # Initialize output variables before try block
         generated_text = text  # Default fallback
@@ -780,7 +782,8 @@ class LLMProcessor(LLMBackend):
                 logger.debug("About to call client.chat()")
                 
                 # Use the task-specific client
-                outputs = client.chat(messages, sampling_params=sampling, guided_decoding=guided_decoding)
+                # structured_outputs is already in sampling_params, no need to pass separately
+                outputs = client.chat(messages, sampling_params=sampling)
                 
                 vllm_outputs = outputs  # Store for metadata extraction
                 inference_end = time.time()
@@ -1130,9 +1133,13 @@ class LLMProcessor(LLMBackend):
         )
 
         # Create guided decoding parameters for JSON schema constraint
-        from vllm.sampling_params import GuidedDecodingParams
-
-        guided_decoding = GuidedDecodingParams(json=json.dumps(schema))
+        guided_decoding = None
+        if settings.llm_sum.guided_decoding_enabled:
+            try:
+                from vllm.sampling_params import GuidedDecodingParams
+                guided_decoding = GuidedDecodingParams(json=json.dumps(schema))
+            except Exception as e:
+                logger.warning(f"Failed to initialize guided decoding: {e}")
 
         # Log schema details for debugging
         logger.info(
@@ -1148,7 +1155,7 @@ class LLMProcessor(LLMBackend):
                     "additional_properties": schema.get("additionalProperties", True),
                 },
                 "transcript_length": len(transcript),
-                "guided_decoding_enabled": True,
+                "guided_decoding_enabled": settings.llm_sum.guided_decoding_enabled,
             },
         )
 

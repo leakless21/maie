@@ -251,6 +251,10 @@ class LlmSumSettings(BaseModel):
         ge=1,
         description="Chunked prefill configuration for summary workloads",
     )
+    structured_outputs_enabled: bool = Field(
+        default=True,
+        description="Enable structured output generation for summary (slower but more reliable)",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 

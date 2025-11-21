@@ -52,6 +52,7 @@ class LocalVllmClient:
         sampling_params = kwargs.get("sampling_params")
         
         # vLLM's chat() expects messages as the first argument
+        # structured_outputs should be in sampling_params, not as a separate kwarg
         return self.model.chat(messages, sampling_params=sampling_params)
 
 
@@ -113,20 +114,38 @@ class VllmServerClient:
                     if val is not None:
                         payload[api_param] = val
 
-        # Handle guided decoding if present in kwargs (not usually in SamplingParams directly for API)
-        # But vLLM server supports 'extra_body' or specific fields for guided decoding
-        # For now, we'll assume basic params. Guided decoding via schema might need specific handling
-        # if the server supports 'response_format' or 'guided_json'.
+        # Handle structured_outputs if present in kwargs or sampling_params
+        # For OpenAI compatible server, we pass it in extra_body
+        structured_outputs = kwargs.get("structured_outputs")
         
-        # Check for guided_decoding in kwargs (passed separately in processor)
-        guided_decoding = kwargs.get("guided_decoding")
-        if guided_decoding:
-                # vLLM server specific: guided_json, guided_regex, etc.
-                # If guided_decoding is a GuidedDecodingParams object, extract json
-                if hasattr(guided_decoding, "json") and guided_decoding.json:
-                    payload["guided_json"] = guided_decoding.json
-                elif isinstance(guided_decoding, dict) and "json" in guided_decoding:
-                    payload["guided_json"] = guided_decoding["json"]
+        # Also check if it's embedded in sampling_params (for offline/online consistency)
+        if not structured_outputs and sampling_params and hasattr(sampling_params, "structured_outputs"):
+            structured_outputs = sampling_params.structured_outputs
+
+        if structured_outputs:
+            # If it's a StructuredOutputsParams object, we need to convert it to the API format
+            # The API expects a dictionary like {"json": schema} or {"choice": [...]}
+            # We extract the set field from the params object
+            
+            structured_output_payload = {}
+            
+            # Check for known fields in StructuredOutputsParams
+            # Note: In vLLM < 0.6.0 this might be different, but we target latest
+            if hasattr(structured_outputs, "json") and structured_outputs.json:
+                structured_output_payload["json"] = structured_outputs.json
+            elif hasattr(structured_outputs, "regex") and structured_outputs.regex:
+                structured_output_payload["regex"] = structured_outputs.regex
+            elif hasattr(structured_outputs, "choice") and structured_outputs.choice:
+                structured_output_payload["choice"] = structured_outputs.choice
+            elif hasattr(structured_outputs, "grammar") and structured_outputs.grammar:
+                structured_output_payload["grammar"] = structured_outputs.grammar
+            elif isinstance(structured_outputs, dict):
+                # If it's already a dict, pass it through (e.g. from kwargs directly)
+                structured_output_payload = structured_outputs
+                
+            if structured_output_payload:
+                payload["extra_body"] = {"structured_outputs": structured_output_payload}
+                logger.debug("Added structured_outputs to extra_body")
 
         logger.debug(f"Sending request to {url}", extra={"payload_keys": list(payload.keys())})
 

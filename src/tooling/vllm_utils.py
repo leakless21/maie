@@ -60,6 +60,7 @@ def apply_overrides_to_sampling(base_params: Any, overrides: Dict[str, Any]) -> 
                 "min_p",
                 "stop",
                 "seed",
+                "structured_outputs",  # Support structured outputs
             ]:
                 if hasattr(base_params, attr):
                     current_params[attr] = getattr(base_params, attr)
