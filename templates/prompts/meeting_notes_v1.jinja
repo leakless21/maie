@@ -17,6 +17,15 @@ Language & Budget:
 - The ENTIRE output must be in Vietnamese.
 - Summaries, decisions, and action items should be concise but comprehensive, reflecting the detail in the transcript.
 
+Schema Limits (Enforce these strictly):
+- Title: Max 200 characters.
+- Summary: Max 2000 characters.
+- Participants: Max 100 items. Each item max 100 characters.
+- Agenda: Min 1, Max 20 items. Each item max 300 characters.
+- Decisions: Max 100 items. Each item max 300 characters.
+- Action Items: Max 200 items. Description max 500 chars, Assignee max 100 chars.
+- Tags: Min 1, Max 10 items. Each item max 50 characters.
+
 JSON Schema:
 Your output MUST strictly follow this JSON schema:
 {{ schema }}

@@ -39,6 +39,17 @@ class TestSafeParseJson:
         assert error is not None  # error should not be None
         assert "template_id" in error
 
+    def test_safe_parse_json_with_markdown_fence(self):
+        """Test safe_parse_json handles Markdown-fenced JSON payloads."""
+        fenced_json = """```json
+{
+  "key": "value"
+}
+```"""
+        data, error = safe_parse_json(fenced_json)
+        assert data == {"key": "value"}
+        assert error is None
+
 
 class TestValidateJsonSchema:
     """Tests for validate_json_schema function."""

@@ -5,6 +5,7 @@ Tests cover schema loading, validation, error handling, and retry logic.
 """
 
 import json
+from pathlib import Path
 
 import jsonschema
 import pytest
@@ -18,6 +19,12 @@ from src.processors.llm.schema_validator import (
     validate_llm_output,
     validate_schema_completeness,
     validate_tags_field,
+)
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+TEMPLATES_DIR = REPO_ROOT / "templates"
+TEMPLATE_SCHEMA_IDS = sorted(
+    path.stem for path in (TEMPLATES_DIR / "schemas").glob("*.json")
 )
 
 
@@ -39,7 +46,7 @@ class TestLoadTemplateSchema:
                 "tags": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 10,
                     "items": {"type": "string"},
                 },
             },
@@ -147,7 +154,7 @@ class TestValidateLLMOutput:
             "type": "object",
             "properties": {
                 "title": {"type": "string"},
-                "tags": {"type": "array", "minItems": 1, "maxItems": 5},
+                "tags": {"type": "array", "minItems": 1, "maxItems": 10},
             },
             "required": ["title", "tags"],
         }
@@ -224,7 +231,7 @@ class TestValidateTagsField:
                 "tags": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 10,
                     "items": {"type": "string"},
                 }
             }
@@ -252,7 +259,7 @@ class TestValidateTagsField:
                 "tags": {
                     "type": "array",
                     "minItems": 0,  # Should be >= 1
-                    "maxItems": 5,
+                    "maxItems": 10,
                 }
             }
         }
@@ -264,7 +271,7 @@ class TestValidateTagsField:
                 "tags": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 10,  # Should be <= 5
+                    "maxItems": 11,  # Should be <= 10
                 }
             }
         }
@@ -277,7 +284,7 @@ class TestValidateTagsField:
                 "tags": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 10,
                     "items": {"type": "number"},  # Should be string
                 }
             }
@@ -400,7 +407,7 @@ class TestValidateSchemaCompleteness:
                 "tags": {
                     "type": "array",
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 10,
                     "items": {"type": "string"},
                 },
             },
@@ -460,3 +467,14 @@ class TestValidateSchemaCompleteness:
 
         assert complete is False
         assert "required (must be array)" in missing
+
+
+class TestRepositoryTemplates:
+    """Ensure built-in template schemas keep the required tags structure."""
+
+    @pytest.mark.parametrize("template_id", TEMPLATE_SCHEMA_IDS)
+    def test_schema_tags_field_is_valid(self, template_id: str):
+        schema = load_template_schema(template_id, TEMPLATES_DIR)
+        assert (
+            validate_tags_field(schema) is True
+        ), f"{template_id} should define tags as 1-10 short strings"

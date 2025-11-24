@@ -15,7 +15,16 @@ Analyze the meeting transcript and generate a single, valid JSON object that str
     - **Dates (`meeting_date`, `due_date`):** If a date is mentioned (e.g., `2025-10-21`, "ngày mai"), include it as-is. If not found, the value must be `null`.
     - **Participants:** Use explicit names if mentioned. Otherwise, you may use neutral, role-based placeholders (e.g., "Người điều phối"). Do not invent names.
 - **Empty Content:** If the transcript has no real meeting content, populate fields with neutral statements indicating the lack of information.
-- **Schema Adherence:** The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+- Schema Adherence: The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+
+Schema Limits (Enforce these strictly):
+- Title: Max 200 characters.
+- Summary: Max 2000 characters.
+- Participants: Max 100 items. Each item max 100 characters.
+- Agenda: Min 1, Max 20 items. Each item max 300 characters.
+- Decisions: Max 100 items. Each item max 300 characters.
+- Action Items: Max 200 items. Description max 500 chars, Assignee max 100 chars.
+- Tags: Min 1, Max 10 items. Each item max 50 characters.
 
 JSON Schema:
 Your output MUST strictly follow this JSON schema:

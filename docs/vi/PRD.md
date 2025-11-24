@@ -47,7 +47,7 @@ Tổng quan kiến trúc: Hệ thống sử dụng kiến trúc ba tầng với 
 
 - FR-5: Số liệu Thời gian chạy — Kết quả PHẢI bao gồm các số liệu tự báo cáo để giúp người dùng đánh giá chất lượng và hiệu suất của quá trình xử lý. Chúng bao gồm: `rtf` (Hệ số Thời gian thực), `asr_confidence_avg`, `vad_coverage`, và `edit_rate_cleaning`.
 
-- FR-6: Phân loại Tự động (Nhúng trong Tóm tắt) — Hệ thống PHẢI tạo ra các thẻ danh mục có liên quan (1-5 thẻ) cho âm thanh đầu vào. Điều này được thực hiện bằng cách bao gồm một trường `tags` trong lược đồ mẫu tóm tắt (FR-4). Các thẻ được tạo ra trong cùng một lượt suy luận LLM với bản tóm tắt, đảm bảo sự mạch lạc về ngữ nghĩa và giảm thời gian xử lý. Thẻ KHÔNG phải là một tính năng riêng biệt mà được nhúng trong cấu trúc tóm tắt.
+- FR-6: Phân loại Tự động (Nhúng trong Tóm tắt) — Hệ thống PHẢI tạo ra các thẻ danh mục có liên quan (1-10 thẻ) cho âm thanh đầu vào. Điều này được thực hiện bằng cách bao gồm một trường `tags` trong lược đồ mẫu tóm tắt (FR-4). Các thẻ được tạo ra trong cùng một lượt suy luận LLM với bản tóm tắt, đảm bảo sự mạch lạc về ngữ nghĩa và giảm thời gian xử lý. Thẻ KHÔNG phải là một tính năng riêng biệt mà được nhúng trong cấu trúc tóm tắt.
 
 - FR-7: Điểm cuối & Hợp đồng API
 
@@ -94,7 +94,7 @@ Nội dung Yêu cầu (`multipart/form-data`)
   - Lưu ý: `tags` KHÔNG CÒN là một tính năng riêng biệt. Các thẻ được nhúng trong đầu ra `summary` thông qua lược đồ mẫu.
 - `asr_backend`: Lựa chọn backend giữa `"chunkformer"` (mặc định) và `"whisper"` cho các trường hợp sử dụng khác nhau.
 - `template_id` (str): Định dạng tóm tắt. (Bắt buộc nếu `summary` có trong `features`)
-  - Các mẫu nên bao gồm một trường `tags` (mảng từ 1-5 chuỗi) để phân loại tự động.
+  - Các mẫu nên bao gồm một trường `tags` (mảng từ 1-10 chuỗi) để phân loại tự động.
 
 ---
 

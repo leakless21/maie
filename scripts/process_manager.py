@@ -8,6 +8,7 @@ It can detect processes by:
 - Command line arguments
 - Port usage
 - Worker names in Redis
+- Parent dev.sh scripts (to prevent automatic restarts)
 """
 
 import argparse
@@ -45,8 +46,23 @@ class MAIEProcessManager:
             try:
                 cmdline = " ".join(proc.info["cmdline"] or [])
 
+                # Look for dev.sh script processes (when running full stack)
+                # Only include if it's running API (check for --api-only or default mode)
+                if "bash" in cmdline and "scripts/dev.sh" in cmdline:
+                    # Check if this dev.sh is running API by looking for child processes
+                    # We'll add it to API processes if it has uvicorn children
+                    try:
+                        children = proc.children(recursive=True)
+                        for child in children:
+                            child_cmdline = " ".join(child.cmdline())
+                            if "uvicorn" in child_cmdline or ("pixi" in child_cmdline and "api" in child_cmdline):
+                                processes.append(proc)
+                                break
+                    except (psutil.NoSuchProcess, psutil.AccessDenied):
+                        pass
+
                 # Look for uvicorn processes with MAIE app
-                if "uvicorn" in cmdline and "src.api.main:app" in cmdline:
+                elif "uvicorn" in cmdline and "src.api.main:app" in cmdline:
                     processes.append(proc)
 
                 # Look for pixi run api processes
@@ -66,8 +82,12 @@ class MAIEProcessManager:
             try:
                 cmdline = " ".join(proc.info["cmdline"] or [])
 
+                # Look for dev.sh script processes (parent processes that restart workers)
+                if "bash" in cmdline and "scripts/dev.sh" in cmdline:
+                    processes.append(proc)
+
                 # Look for python processes running worker main
-                if "python" in cmdline and "src/worker/main.py" in cmdline:
+                elif "python" in cmdline and "src/worker/main.py" in cmdline:
                     processes.append(proc)
 
                 # Look for pixi run worker processes

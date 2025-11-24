@@ -16,6 +16,12 @@ Language & Budget:
 - The ENTIRE output must be in Vietnamese, except for the `participant_sentiment` field, which must be in English.
 - Summaries and key insights should be concise but comprehensive, reflecting the detail in the transcript.
 
+Schema Limits (Enforce these strictly):
+- Interview Summary: Max 2000 characters.
+- Key Insights: Min 1, Max 15 items. Each item max 500 characters.
+- Tags: Min 1, Max 10 items. Each item max 50 characters.
+- Participant Sentiment: Must be one of ["positive", "neutral", "negative", "mixed"].
+
 JSON Schema:
 Your output MUST strictly follow this JSON schema:
 {{ schema }}

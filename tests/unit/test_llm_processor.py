@@ -606,100 +606,70 @@ class TestGenerateSummary:
 
     def test_generate_summary_structured_outputs_toggle(self, tmp_path):
         """Test that structured outputs are added only when enabled in settings."""
-                    processor = LLMProcessor()
-                    processor._model_loaded = True
+        processor = LLMProcessor()
+        processor._model_loaded = True
 
-                    # Create valid schema file
-                    schemas_dir = tmp_path / "schemas"
-                    schemas_dir.mkdir()
-                    schema_file = schemas_dir / "meeting_notes_v1.json"
-                    schema = {
-                        "type": "object",
-                        "properties": {"title": {"type": "string"}},
-                    }
-                    schema_file.write_text(json.dumps(schema))
+        # Create minimal schema file
+        schemas_dir = tmp_path / "schemas"
+        schemas_dir.mkdir()
+        schema_file = schemas_dir / "meeting_notes_v1.json"
+        schema = {
+            "type": "object",
+            "properties": {"title": {"type": "string"}},
+        }
+        schema_file.write_text(json.dumps(schema))
 
-                    # Mock client and outputs
-                    mock_output = Mock()
-                    mock_output.outputs = [Mock()]
-                    mock_output.outputs[0].text = "{}"
-
-                    processor.client_summary = Mock()
-                    processor.client_summary.chat.return_value = [mock_output]
-
-                    # Patch prompt rendering to avoid template logic
-                    processor.prompt_renderer = Mock()
-                    processor.prompt_renderer.render.return_value = "rendered prompt"
-
-        # Case 1: structured_outputs disabled - StructuredOutputsParams should not be called
-        with patch(
-                        "src.processors.llm.processor.settings"
-                    ) as mock_settings:
-                        mock_settings.paths.templates_dir = tmp_path
-                        mock_settings.llm_sum = SimpleNamespace(
-                            temperature=0.7,
-                            top_p=0.9,
-                            top_k=20,
-                            max_tokens=1000,
-                            structured_outputs_enabled=False,
-                        )
-
-                        with patch(
-                            "src.processors.llm.processor.settings"
-                        ) as mock_settings:
-                            # Already patched above; ensure structured outputs disabled
-                            mock_settings.paths.templates_dir = tmp_path
-                            mock_settings.llm_sum = SimpleNamespace(
-                                temperature=0.7,
-                                top_p=0.9,
-                                top_k=20,
-                                max_tokens=1000,
-                                structured_outputs_enabled=False,
-                            )
-
-                with patch.object(processor, "execute") as mock_execute:
-                                mock_execute.return_value = LLMResult(
-                                    text="{}",
-                                    tokens_used=None,
-                                    model_info={},
-                                    metadata={},
-                                )
-
-            result = processor.generate_summary("transcript", "meeting_notes_v1")
-
-                                # When disabled, there should be no structured_outputs in execute kwargs
-                                # and therefore we assert the execute was called without 'structured_outputs'.
-                                called_args, called_kwargs = mock_execute.call_args
-                                assert "structured_outputs" not in called_kwargs
-
-        # Case 2: structured_outputs enabled - StructuredOutputsParams should be called
-        with patch(
-                            "src.processors.llm.processor.settings"
-                        ) as mock_settings:
-                        mock_settings.paths.templates_dir = tmp_path
+        # Disable structured outputs: execute() should not receive structured_outputs
+        with (
+            patch("src.processors.llm.processor.settings") as mock_settings,
+            patch.object(processor, "execute") as mock_execute,
+        ):
+            mock_settings.paths.templates_dir = tmp_path
             mock_settings.llm_sum = SimpleNamespace(
-                            temperature=0.7,
-                            top_p=0.9,
-                            top_k=20,
-                            max_tokens=1000,
-                            structured_outputs_enabled=True,
-                        )
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
+                structured_outputs_enabled=False,
+            )
 
-                            with patch.object(processor, "execute") as mock_execute:
-                                mock_execute.return_value = LLMResult(
-                                    text="{}",
-                                    tokens_used=None,
-                                    model_info={},
-                                    metadata={},
-                                )
+            mock_execute.return_value = LLMResult(
+                text="{}",
+                tokens_used=None,
+                model_info={},
+                metadata={},
+            )
 
-                                result = processor.generate_summary(
-                                    "transcript", "meeting_notes_v1"
-                                )
+            processor.generate_summary("transcript", "meeting_notes_v1")
 
-                                # When enabled, structured_outputs should be present in execute kwargs
-            called_args, called_kwargs = mock_execute.call_args
-                                assert "structured_outputs" in called_kwargs
+            _, called_kwargs = mock_execute.call_args
+            assert "structured_outputs" not in called_kwargs
+
+        # Enable structured outputs: execute() should receive structured_outputs
+        with (
+            patch("src.processors.llm.processor.settings") as mock_settings,
+            patch.object(processor, "execute") as mock_execute,
+        ):
+            mock_settings.paths.templates_dir = tmp_path
+            mock_settings.llm_sum = SimpleNamespace(
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
+                structured_outputs_enabled=True,
+            )
+
+            mock_execute.return_value = LLMResult(
+                text="{}",
+                tokens_used=None,
+                model_info={},
+                metadata={},
+            )
+
+            processor.generate_summary("transcript", "meeting_notes_v1")
+
+            _, called_kwargs = mock_execute.call_args
+            assert "structured_outputs" in called_kwargs
 
     def test_generate_summary_loads_model_lazily(self):
         """Test that model is loaded on first summarization."""
@@ -779,7 +749,12 @@ class TestGetVersionInfo:
             mock_settings.llm_enhance_model = "default-model"
             mock_settings.llm_enhance = SimpleNamespace(model="default-model")
             mock_settings.llm_sum = SimpleNamespace(
-                temperature=0.7, top_p=0.9, top_k=20, max_tokens=1000
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
+                structured_outputs_enabled=True,
+                structured_outputs_backend="guidance",
             )
 
             info = processor.get_version_info()
@@ -787,6 +762,7 @@ class TestGetVersionInfo:
             assert info["name"] == "test-model"
             assert info["checkpoint_hash"] == "test-hash"
             assert info["quantization"] == "awq-4bit"
+            assert info["structured_output"]["backend"] == "guidance"
             assert info["structured_output"]["schema_id"] == "template"
             assert info["structured_output"]["schema_hash"] == "schema-hash"
 
@@ -800,7 +776,12 @@ class TestGetVersionInfo:
             mock_settings.llm_enhance_model = "default-model"
             mock_settings.llm_enhance = SimpleNamespace(model="default-model")
             mock_settings.llm_sum = SimpleNamespace(
-                temperature=0.7, top_p=0.9, top_k=20, max_tokens=1000
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
+                structured_outputs_enabled=False,
+                structured_outputs_backend="xgrammar",
             )
 
             info = processor.get_version_info()

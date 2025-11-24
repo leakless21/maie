@@ -1,6 +1,7 @@
 """
 Integration tests for LLM server mode.
 """
+
 import json
 import pytest
 from unittest.mock import Mock, patch
@@ -32,16 +33,14 @@ class TestLLMServerMode:
         # Mock server response
         mock_response = Mock()
         mock_response.status = 200
-        mock_response.read.return_value = json.dumps({
-            "choices": [{
-                "message": {"content": "Enhanced text."},
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 5
+        mock_response.read.return_value = json.dumps(
+            {
+                "choices": [
+                    {"message": {"content": "Enhanced text."}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 5},
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         processor = LLMProcessor()
@@ -50,7 +49,7 @@ class TestLLMServerMode:
         assert result["enhanced_text"] == "Enhanced text."
         assert result["enhancement_applied"] is True
         assert result["model_info"]["backend"] == "vllm_server"
-        
+
         # Verify request
         assert mock_urlopen.call_count == 1
         req = mock_urlopen.call_args[0][0]
@@ -59,7 +58,9 @@ class TestLLMServerMode:
         assert data["model"] == "test-model"
         # Check that messages contain the prompt
         assert len(data["messages"]) > 0
-        assert "raw text" in data["messages"][-1]["content"] or "raw text" in str(data["messages"])
+        assert "raw text" in data["messages"][-1]["content"] or "raw text" in str(
+            data["messages"]
+        )
 
     @patch("urllib.request.urlopen")
     def test_generate_summary_server_mode(self, mock_urlopen):
@@ -68,38 +69,43 @@ class TestLLMServerMode:
         summary_json = {"summary": "Test summary", "key_points": ["Point 1"]}
         mock_response = Mock()
         mock_response.status = 200
-        mock_response.read.return_value = json.dumps({
-            "choices": [{
-                "message": {"content": json.dumps(summary_json)},
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 50,
-                "completion_tokens": 20
+        mock_response.read.return_value = json.dumps(
+            {
+                "choices": [
+                    {
+                        "message": {"content": json.dumps(summary_json)},
+                        "finish_reason": "stop",
+                    }
+                ],
+                "usage": {"prompt_tokens": 50, "completion_tokens": 20},
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         processor = LLMProcessor()
-        
+
         # Mock template loading
         with patch("src.processors.llm.processor.load_template_schema") as mock_schema:
             mock_schema.return_value = {"type": "object"}
-            
+
             # Mock validation to pass
-            with patch("src.processors.llm.processor.validate_llm_output") as mock_validate:
+            with patch(
+                "src.processors.llm.processor.validate_llm_output"
+            ) as mock_validate:
                 mock_validate.return_value = (summary_json, None)
-                
-                result = processor.generate_summary("transcript", template_id="meeting_notes_v1")
+
+                result = processor.generate_summary(
+                    "transcript", template_id="meeting_notes_v1"
+                )
 
         assert result["summary"] == summary_json
         assert result["model_info"]["backend"] == "vllm_server"
-        
+
         # Verify request
         assert mock_urlopen.call_count == 1
         req = mock_urlopen.call_args[0][0]
         data = json.loads(req.data)
         # Check that structured_outputs body is present for JSON schema enforcement
-        assert "extra_body" in data
-        assert "structured_outputs" in data["extra_body"]
-        assert "json" in data["extra_body"]["structured_outputs"]
+        # vLLM server expects structured_outputs at the top-level
+        assert "structured_outputs" in data
+        assert "json" in data["structured_outputs"]

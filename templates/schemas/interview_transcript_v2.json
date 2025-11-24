@@ -7,7 +7,7 @@
     "interview_date": {
       "type": ["string", "null"],
       "description": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
-      "pattern": "^\d{4}-\d{2}-\d{2}$"
+      "pattern": "^d{4}-d{2}-d{2}$"
     },
     "interview_summary": {
       "type": "string",
@@ -37,7 +37,7 @@
         "maxLength": 50
       },
       "minItems": 1,
-      "maxItems": 5
+      "maxItems": 10
     }
   },
   "required": [

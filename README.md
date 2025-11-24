@@ -307,19 +307,19 @@ done
 
 ### Environment Variables
 
-| Variable                 | Default                     | Description              |
-| ------------------------ | --------------------------- | ------------------------ |
-| `SECRET_API_KEY`         | -                           | API authentication key   |
-| `REDIS_URL`              | `redis://localhost:6379/0`  | Redis connection URL     |
-| `MAX_FILE_SIZE_MB`       | `500`                       | Maximum upload file size |
-| `WHISPER_MODEL_VARIANT`  | `erax-wow-turbo`            | Whisper model variant    |
-| `LLM_MODEL_NAME`         | `cpatonn/Qwen3-4B-Instruct` | VLLM model name          |
-| `GPU_MEMORY_UTILIZATION` | `0.9`                       | GPU memory usage limit   |
-| `LOG_LEVEL`              | `INFO`                      | Logging level            |
-| `ASR_DEVICE`             | `cuda`                      | Device for ASR (cuda/cpu)|
-| `LLM_BACKEND`            | `vllm_server`               | LLM backend type (server-only)
-| `LLM_SERVER__ENHANCE_BASE_URL` | `http://localhost:8001/v1` | Enhancement server URL |
-| `LLM_SERVER__SUMMARY_BASE_URL` | (optional)               | Summary server URL (defaults to enhance) |
+| Variable                       | Default                     | Description                              |
+| ------------------------------ | --------------------------- | ---------------------------------------- |
+| `SECRET_API_KEY`               | -                           | API authentication key                   |
+| `REDIS_URL`                    | `redis://localhost:6379/0`  | Redis connection URL                     |
+| `MAX_FILE_SIZE_MB`             | `500`                       | Maximum upload file size                 |
+| `WHISPER_MODEL_VARIANT`        | `erax-wow-turbo`            | Whisper model variant                    |
+| `LLM_MODEL_NAME`               | `cpatonn/Qwen3-4B-Instruct` | VLLM model name                          |
+| `GPU_MEMORY_UTILIZATION`       | `0.9`                       | GPU memory usage limit                   |
+| `LOG_LEVEL`                    | `INFO`                      | Logging level                            |
+| `ASR_DEVICE`                   | `cuda`                      | Device for ASR (cuda/cpu)                |
+| `LLM_BACKEND`                  | `vllm_server`               | LLM backend type (server-only)           |
+| `LLM_SERVER__ENHANCE_BASE_URL` | `http://localhost:8001/v1`  | Enhancement server URL                   |
+| `LLM_SERVER__SUMMARY_BASE_URL` | (optional)                  | Summary server URL (defaults to enhance) |
 
 ### GPU Configuration
 
@@ -337,11 +337,13 @@ export LLM_MAX_MODEL_LEN=32768
 MAIE supports two LLM backend modes:
 
 **Local vLLM (Default):**
+
 ```bash
 export LLM_BACKEND=vllm_server
 ```
 
 **vLLM Server (Recommended for Production):**
+
 ```bash
 export LLM_BACKEND=vllm_server
 
@@ -354,6 +356,7 @@ export LLM_SERVER__SUMMARY_BASE_URL=http://localhost:8002/v1  # Faster model
 ```
 
 **Deploy Local vLLM Server:**
+
 ```bash
 # Single server for both tasks
 ./scripts/start-vllm-server.sh
@@ -364,6 +367,7 @@ VLLM_SERVER_PORT=8002 ./scripts/start-vllm-server.sh summary
 ```
 
 **Or Deploy with Docker:**
+
 ```bash
 docker run --gpus all -p 8001:8001 vllm/vllm-openai:latest \
   --model data/models/qwen3-4b-instruct-2507-awq \
@@ -381,6 +385,111 @@ export OMP_NUM_THREADS=4
 export WHISPER_BEAM_SIZE=5
 export LLM_TEMPERATURE=0.3
 ```
+
+### ASR Hallucination Filtering
+
+MAIE includes built-in filtering to remove common ASR hallucinations - spurious transcriptions that ASR models (particularly Whisper) generate from silence, noise, or low-quality audio.
+
+**Common Hallucinations:**
+
+- Repeated phrases ("thank you thank you thank you")
+- Background music transcriptions ("Thanks for watching", "Subscribe")
+- Noise interpreted as speech
+- Low-confidence segments
+- Common filler patterns
+
+**Enable Filtering:**
+
+```bash
+# Enable hallucination filtering
+export ASR__HALLUCINATION_FILTER_ENABLED=true
+
+# Configure detection parameters
+export ASR__HALLUCINATION_MAX_REPEATED_WORDS=3
+export ASR__HALLUCINATION_MAX_REPEATED_PHRASES=2
+export ASR__HALLUCINATION_MIN_SEGMENT_LENGTH=1
+
+# Optional: Set quality thresholds
+export ASR__HALLUCINATION_MIN_SEGMENT_CONFIDENCE=0.7
+export ASR__HALLUCINATION_MIN_WORD_PROBABILITY=0.6
+
+# Optional: Use custom patterns file
+export ASR__HALLUCINATION_PATTERN_FILE=data/asr_hallucinations.json
+```
+
+**Filter Configuration:**
+
+| Variable                                     | Default | Description                                       |
+| -------------------------------------------- | ------- | ------------------------------------------------- |
+| `ASR__HALLUCINATION_FILTER_ENABLED`          | `false` | Enable hallucination filtering                    |
+| `ASR__HALLUCINATION_MAX_REPEATED_WORDS`      | `3`     | Max consecutive identical words before filtering  |
+| `ASR__HALLUCINATION_MAX_REPEATED_PHRASES`    | `2`     | Max repeated phrases (3-5 words) before filtering |
+| `ASR__HALLUCINATION_MIN_SEGMENT_CONFIDENCE`  | `None`  | Minimum confidence threshold (0.0-1.0)            |
+| `ASR__HALLUCINATION_MIN_WORD_PROBABILITY`    | `None`  | Minimum average word probability (0.0-1.0)        |
+| `ASR__HALLUCINATION_PATTERN_FILE`            | `None`  | Path to custom hallucination patterns JSON        |
+| `ASR__HALLUCINATION_MIN_SEGMENT_LENGTH`      | `1`     | Minimum words per segment                         |
+| `ASR__HALLUCINATION_MAX_SEGMENT_LENGTH`      | `None`  | Maximum words per segment                         |
+
+**Hallucination Patterns:**
+
+MAIE includes pre-configured patterns for common hallucinations in multiple languages (English, Vietnamese, Chinese, Japanese, Korean, and more). The patterns are loaded from `data/asr_hallucinations.json` and include:
+
+- **Exact matches**: Common phrases like "thank you for watching", "subscribe"
+- **Regex patterns**: Flexible matching for variations and filler words
+- **Language-specific**: Tailored patterns for each supported language
+
+**Custom Patterns:**
+
+Create a custom patterns file to add your own hallucination patterns:
+
+```json
+{
+  "common": {
+    "exact": ["custom phrase", "another phrase"],
+    "regex": ["(?i)^pattern.*$", "(?i)repeated\\s+word"]
+  },
+  "en": {
+    "exact": ["english specific phrase"],
+    "regex": ["(?i)^custom.*pattern$"]
+  }
+}
+```
+
+**Filtering Behavior:**
+
+- **Segment-level**: Filters individual transcription segments, not entire transcripts
+- **Non-destructive**: Original segments available in debug logs
+- **Metrics**: Logs number of filtered segments for monitoring
+- **Performance**: Minimal overhead (~1-2% processing time)
+
+**LLM Hallucination Filtering:**
+
+The LLM processor additionally supports exact-match removal of known problematic phrases via `src/config/llm_hallucinations.json`. Any LLM output that exactly matches a normalized phrase in the config will be removed from results and parsed fields.
+
+Configuration format:
+```json
+{
+  "exact": [
+    "Exact phrase to match and remove"
+  ]
+}
+```
+
+**Example:**
+
+```bash
+# Before filtering (with hallucinations)
+[0.00s - 1.50s] Thank you
+[1.50s - 3.00s] Thank you
+[3.00s - 4.50s] Thank you
+[4.50s - 6.00s] This is the actual content
+[6.00s - 7.50s] Subscribe and like
+
+# After filtering (clean)
+[4.50s - 6.00s] This is the actual content
+```
+
+For detailed implementation and testing, see `src/utils/asr_filters.py` and `tests/unit/test_asr_filters.py`.
 
 ## 🔧 Development
 

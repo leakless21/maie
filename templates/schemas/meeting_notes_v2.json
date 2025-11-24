@@ -62,10 +62,10 @@
     },
     "tags": {
       "type": "array",
-      "description": "Thẻ phân loại ngắn (1-5 thẻ)",
+      "description": "Thẻ phân loại ngắn (1-10 thẻ)",
       "items": { "type": "string", "maxLength": 50 },
       "minItems": 1,
-      "maxItems": 5
+      "maxItems": 10
     }
   },
   "required": ["title", "participants", "summary", "tags"],

@@ -50,7 +50,7 @@ class LocalVllmClient:
         """
         # Extract sampling params from kwargs
         sampling_params = kwargs.get("sampling_params")
-        
+
         # vLLM's chat() expects messages as the first argument
         # structured_outputs should be in sampling_params, not as a separate kwarg
         return self.model.chat(messages, sampling_params=sampling_params)
@@ -59,7 +59,12 @@ class LocalVllmClient:
 class VllmServerClient:
     """Client for interacting with a remote vLLM OpenAI-compatible server."""
 
-    def __init__(self, base_url: str, api_key: Optional[str] = None, model_name: Optional[str] = None):
+    def __init__(
+        self,
+        base_url: str,
+        api_key: Optional[str] = None,
+        model_name: Optional[str] = None,
+    ):
         """
         Initialize the server client.
 
@@ -77,7 +82,7 @@ class VllmServerClient:
         Send chat completion request to the server.
         """
         url = f"{self.base_url}/chat/completions"
-        
+
         # Prepare headers
         headers = {
             "Content-Type": "application/json",
@@ -107,7 +112,7 @@ class VllmServerClient:
                 "repetition_penalty": "repetition_penalty",
                 "seed": "seed",
             }
-            
+
             for sp_attr, api_param in params_map.items():
                 if hasattr(sampling_params, sp_attr):
                     val = getattr(sampling_params, sp_attr)
@@ -117,18 +122,28 @@ class VllmServerClient:
         # Handle structured_outputs (preferred) if present in kwargs or sampling_params
         # For OpenAI compatible server, we pass it in extra_body
         structured_outputs = kwargs.get("structured_outputs")
-        
+
         # Also check if it's embedded in sampling_params (for offline/online consistency)
-        if not structured_outputs and sampling_params and hasattr(sampling_params, "structured_outputs"):
+        if (
+            not structured_outputs
+            and sampling_params
+            and hasattr(sampling_params, "structured_outputs")
+        ):
             structured_outputs = sampling_params.structured_outputs
+
+        if structured_outputs and not settings.llm_sum.structured_outputs_enabled:
+            logger.debug(
+                "Skipping structured outputs because they are disabled in configuration"
+            )
+            structured_outputs = None
 
         if structured_outputs:
             # If it's a StructuredOutputsParams object, we need to convert it to the API format
             # The API expects a dictionary like {"json": schema} or {"choice": [...]}
             # We extract the set field from the params object
-            
+
             structured_output_payload = {}
-            
+
             # Check for known fields in StructuredOutputsParams
             # Note: In vLLM < 0.6.0 this might be different, but we target latest
             if hasattr(structured_outputs, "json") and structured_outputs.json:
@@ -142,26 +157,37 @@ class VllmServerClient:
             elif isinstance(structured_outputs, dict):
                 # If it's already a dict, pass it through (e.g. from kwargs directly)
                 structured_output_payload = structured_outputs
-                
+
             if structured_output_payload:
-                payload["extra_body"] = {"structured_outputs": structured_output_payload}
-                logger.debug("Added structured_outputs to extra_body")
+                # vLLM OpenAI-compatible server expects structured_outputs at
+                # the top-level of the request body (see vLLM docs)
+                # If you want to pass it to an OpenAI server via the
+                # official OpenAI client, use `extra_body` in the client's
+                # method call - that client merges extra_body into the body.
+                # Here we make a request directly to a vLLM server, so add
+                # structured_outputs at the root of the payload.
+                payload["structured_outputs"] = structured_output_payload
+                logger.debug("Added structured_outputs to request body")
 
         # Deprecated: 'guided_decoding' param removed. Use 'structured_outputs' instead.
 
-        logger.debug(f"Sending request to {url}", extra={"payload_keys": list(payload.keys())})
+        logger.debug(
+            f"Sending request to {url}", extra={"payload_keys": list(payload.keys())}
+        )
 
         try:
             data = json.dumps(payload).encode("utf-8")
             req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-            
-            with urllib.request.urlopen(req, timeout=settings.llm_server.request_timeout_seconds) as response:
+
+            with urllib.request.urlopen(
+                req, timeout=settings.llm_server.request_timeout_seconds
+            ) as response:
                 if response.status != 200:
                     raise RuntimeError(f"Server returned status {response.status}")
-                
+
                 response_body = response.read().decode("utf-8")
                 response_json = json.loads(response_body)
-                
+
                 # Convert OpenAI response to vLLM-like output structure
                 # vLLM local returns a list of RequestOutput objects
                 # We need to mimic that structure enough for the processor to work
@@ -182,7 +208,7 @@ class VllmServerClient:
         # We need to return a list containing one object that has an 'outputs' attribute,
         # which is a list of objects with 'text', 'token_ids', 'finish_reason'.
         # Also 'prompt_token_ids'.
-        
+
         choices = response_json.get("choices", [])
         if not choices:
             return []
@@ -191,16 +217,16 @@ class VllmServerClient:
         message = choice.get("message", {})
         content = message.get("content", "")
         finish_reason = choice.get("finish_reason", "unknown")
-        
+
         usage = response_json.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)
         completion_tokens = usage.get("completion_tokens", 0)
-        
+
         # Create a mock object structure
         class MockCompletionOutput:
             def __init__(self, text, token_ids, finish_reason):
                 self.text = text
-                self.token_ids = token_ids # We might not have actual IDs, just count
+                self.token_ids = token_ids  # We might not have actual IDs, just count
                 self.finish_reason = finish_reason
 
         class MockRequestOutput:
@@ -211,14 +237,11 @@ class VllmServerClient:
         # We don't have actual token IDs from standard OpenAI API, so we mock them with a list of zeros of correct length
         # This is sufficient for metrics that count tokens.
         mock_completion_output = MockCompletionOutput(
-            text=content,
-            token_ids=[0] * completion_tokens,
-            finish_reason=finish_reason
+            text=content, token_ids=[0] * completion_tokens, finish_reason=finish_reason
         )
-        
+
         mock_request_output = MockRequestOutput(
-            outputs=[mock_completion_output],
-            prompt_token_ids=[0] * prompt_tokens
+            outputs=[mock_completion_output], prompt_token_ids=[0] * prompt_tokens
         )
-        
+
         return [mock_request_output]

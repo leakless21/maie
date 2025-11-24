@@ -12,7 +12,13 @@ Analyze the content and generate a single, valid JSON object that strictly adher
 **Key Guidelines:**
 - **Grounding:** Every piece of information in the JSON must come directly from the transcript. Do not add outside information or make assumptions.
 - **Completeness:** If a required field cannot be filled from the transcript, generate a concise, neutral value that is factually derived from the source (e.g., a title like "Bản ghi âm ngắn" for a short transcript). Avoid placeholders like "N/A".
-- **Schema Adherence:** The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+- Schema Adherence: The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+
+Schema Limits (Enforce these strictly):
+- Title: Max 200 characters.
+- Summary: Max 2000 characters.
+- Key Topics: Min 1, Max 15 items. Each item max 200 characters.
+- Tags: Min 1, Max 10 items. Each item max 50 characters.
 
 JSON Schema:
 Your output MUST strictly follow this JSON schema:

@@ -54,6 +54,7 @@ class TestLLMIntegration:
             "max_num_batched_tokens": None,
             "max_num_partial_prefills": None,
             "structured_outputs_enabled": True,
+            "structured_outputs_backend": "xgrammar",
         }
 
         if enhance_overrides:
@@ -164,7 +165,7 @@ class TestLLMIntegration:
                     "type": "array",
                     "items": {"type": "string", "maxLength": 50},
                     "minItems": 1,
-                    "maxItems": 5,
+                    "maxItems": 10,
                 },
             },
             "required": ["title", "abstract", "main_points", "tags"],
@@ -190,7 +191,7 @@ class TestLLMIntegration:
         - title: Brief, descriptive title
         - abstract: 2-3 sentence summary
         - main_points: Key discussion points (array)
-        - tags: Category tags (array, 1-5 items)
+        - tags: Category tags (array, 1-10 items)
         """
         )
 
@@ -367,7 +368,7 @@ class TestLLMIntegration:
             make_output("Second enhanced text"),
             make_output("Third enhanced text"),
         ]
-        
+
         mock_model.generate.side_effect = [
             make_output("First enhanced text"),
             make_output("Second enhanced text"),
@@ -427,8 +428,9 @@ class TestLLMIntegration:
         with (
             patch("src.processors.llm.processor.settings") as mock_settings,
             patch("src.processors.llm.processor.has_cuda", return_value=True),
-            patch("src.processors.llm.processor.apply_overrides_to_sampling")
-            as mock_apply,
+            patch(
+                "src.processors.llm.processor.apply_overrides_to_sampling"
+            ) as mock_apply,
         ):
             mock_apply.return_value = Mock()
             self._configure_llm_settings(
@@ -471,8 +473,9 @@ class TestLLMIntegration:
                         mock_info.return_value = {"model_name": "test-model"}
 
                         with (
-                            patch("src.processors.llm.processor.settings")
-                            as mock_settings,
+                            patch(
+                                "src.processors.llm.processor.settings"
+                            ) as mock_settings,
                             patch(
                                 "src.processors.llm.processor.has_cuda",
                                 return_value=True,
@@ -685,7 +688,7 @@ class TestLLMIntegration:
                         assert version_info["reasoning_parser"] is None
                         assert (
                             version_info["structured_output"]["backend"]
-                            == "json_schema"
+                            == "xgrammar"
                         )
                         assert "decoding_params" in version_info
                         assert version_info["decoding_params"]["temperature"] == 0.7

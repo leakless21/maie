@@ -1,11 +1,13 @@
 """
 Unit tests for LLM clients.
 """
+
 import json
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import urllib.error
 
+from src.config import settings
 from src.tooling.llm_client import LocalVllmClient, VllmServerClient
 
 
@@ -16,23 +18,30 @@ class TestLocalVllmClient:
         """Test that chat delegates to the model's chat method."""
         mock_model = Mock()
         client = LocalVllmClient(mock_model)
-        
+
         messages = [{"role": "user", "content": "hello"}]
         sampling_params = Mock()
-        
+
         client.chat(messages, sampling_params=sampling_params)
-        
-        mock_model.chat.assert_called_once_with(messages, sampling_params=sampling_params)
+
+        mock_model.chat.assert_called_once_with(
+            messages, sampling_params=sampling_params
+        )
 
 
 from types import SimpleNamespace
+
 
 class TestVllmServerClient:
     """Test VllmServerClient."""
 
     @pytest.fixture
     def client(self):
-        return VllmServerClient(base_url="http://test-server/v1", api_key="test-key", model_name="test-model")
+        return VllmServerClient(
+            base_url="http://test-server/v1",
+            api_key="test-key",
+            model_name="test-model",
+        )
 
     @patch("urllib.request.urlopen")
     def test_chat_success(self, mock_urlopen, client):
@@ -40,16 +49,14 @@ class TestVllmServerClient:
         # Mock response
         mock_response = Mock()
         mock_response.status = 200
-        mock_response.read.return_value = json.dumps({
-            "choices": [{
-                "message": {"content": "response text"},
-                "finish_reason": "stop"
-            }],
-            "usage": {
-                "prompt_tokens": 10,
-                "completion_tokens": 20
+        mock_response.read.return_value = json.dumps(
+            {
+                "choices": [
+                    {"message": {"content": "response text"}, "finish_reason": "stop"}
+                ],
+                "usage": {"prompt_tokens": 10, "completion_tokens": 20},
             }
-        }).encode("utf-8")
+        ).encode("utf-8")
         mock_urlopen.return_value.__enter__.return_value = mock_response
 
         messages = [{"role": "user", "content": "hello"}]
@@ -64,7 +71,7 @@ class TestVllmServerClient:
         assert req.full_url == "http://test-server/v1/chat/completions"
         assert req.headers["Authorization"] == "Bearer test-key"
         assert req.headers["Content-type"] == "application/json"
-        
+
         data = json.loads(req.data)
         assert data["messages"] == messages
         assert data["model"] == "test-model"
@@ -100,9 +107,44 @@ class TestVllmServerClient:
 
         # New API: pass structured_outputs to request
         structured_outputs = {"json": {"type": "object"}}
-        client.chat([{"role": "user", "content": "hello"}], structured_outputs=structured_outputs)
+        original_flag = settings.llm_sum.structured_outputs_enabled
+        settings.llm_sum.structured_outputs_enabled = True
+        try:
+            client.chat(
+                [{"role": "user", "content": "hello"}],
+                structured_outputs=structured_outputs,
+            )
+        finally:
+            settings.llm_sum.structured_outputs_enabled = original_flag
 
         req = mock_urlopen.call_args[0][0]
         data = json.loads(req.data)
-        assert "extra_body" in data
-        assert data["extra_body"]["structured_outputs"]["json"] == {"type": "object"}
+        # vLLM server expects structured_outputs at the top-level
+        assert "structured_outputs" in data
+        assert data["structured_outputs"]["json"] == {"type": "object"}
+
+    @patch("urllib.request.urlopen")
+    def test_chat_structured_outputs_disabled(self, mock_urlopen, client):
+        """Ensure structured outputs are not sent when disabled in config."""
+        mock_response = Mock()
+        mock_response.status = 200
+        mock_response.read.return_value = json.dumps({"choices": []}).encode("utf-8")
+        mock_urlopen.return_value.__enter__.return_value = mock_response
+
+        sampling_params = SimpleNamespace(
+            structured_outputs={"json": {"type": "object", "properties": {}}}
+        )
+
+        original_flag = settings.llm_sum.structured_outputs_enabled
+        settings.llm_sum.structured_outputs_enabled = False
+        try:
+            client.chat(
+                [{"role": "user", "content": "hello"}],
+                sampling_params=sampling_params,
+            )
+        finally:
+            settings.llm_sum.structured_outputs_enabled = original_flag
+
+        req = mock_urlopen.call_args[0][0]
+        data = json.loads(req.data)
+        assert "structured_outputs" not in data

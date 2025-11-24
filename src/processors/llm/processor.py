@@ -6,6 +6,7 @@ Supports Qwen3-4B-Instruct AWQ-4bit model via direct vLLM integration.
 import json
 import time
 from pathlib import Path
+import unicodedata
 from typing import Any, Dict, Optional
 
 from Levenshtein import distance as levenshtein_distance
@@ -79,6 +80,10 @@ class LLMProcessor(LLMBackend):
         # Initialize prompt rendering system
         template_loader = TemplateLoader(settings.paths.templates_dir / "prompts")
         self.prompt_renderer = PromptRenderer(template_loader)
+
+        # Load local LLM-specific hallucination phrases (exact-match)
+        self._llm_hallu_phrases: set[str] = set()
+        self._load_llm_hallu_file()
 
         # Build environment configs for different tasks
         self.env_config_enhancement = GenerationConfig(
@@ -369,6 +374,75 @@ class LLMProcessor(LLMBackend):
                 "reason": f"Load error: {e}",
             }
             raise
+
+    # ---- Hallucination utilities (LLM-specific) ----
+    def _load_llm_hallu_file(self) -> None:
+        """Load exact-match hallucination phrases from src/config/llm_hallucinations.json."""
+        try:
+            config_path = Path(__file__).parent.parent.parent / "config" / "llm_hallucinations.json"
+            if not config_path.exists():
+                logger.debug("LLM hallucination config file not found", path=str(config_path))
+                return
+
+            with open(config_path, encoding="utf-8") as fh:
+                data = json.load(fh)
+
+            def _norm(s: str) -> str:
+                # Normalize unicode and collapse whitespace
+                return " ".join(unicodedata.normalize("NFC", s).strip().split()).lower()
+
+            exact_phrases = data.get("exact", [])
+            self._llm_hallu_phrases = {_norm(p) for p in exact_phrases if isinstance(p, str)}
+            if self._llm_hallu_phrases:
+                logger.debug("Loaded LLM hallucination phrases", count=len(self._llm_hallu_phrases), source="config")
+        except (json.JSONDecodeError, KeyError) as e:
+            logger.warning(f"Failed to load LLM hallucination config: {e}")
+        except Exception as e:
+            logger.warning(f"Unexpected error loading LLM hallucination config: {e}")
+
+    def _normalize_text(self, text: str) -> str:
+        """Normalize string for exact matching (unicode NFC, collapse whitespace, lowercase)."""
+        if not text:
+            return ""
+        return " ".join(unicodedata.normalize("NFC", text).strip().split()).lower()
+
+    def _remove_exact_hallu(self, text: str) -> str:
+        """If the entire text equals an exact LLM hallucination phrase, return empty string.
+
+        Otherwise return original text unchanged.
+        """
+        if not text:
+            return text
+
+        norm = self._normalize_text(text)
+        if norm in self._llm_hallu_phrases:
+            logger.info("LLM output matched exact hallucination phrase and was removed", text=text[:120])
+            return ""
+        return text
+
+    def _strip_exact_hallu_in_data(self, data: Dict[str, Any]) -> Dict[str, Any]:
+        """Recursively strip exact-match hallucination phrases from dict/list values.
+
+        Strings that exactly match a hallu phrase are set to None; lists have matching
+        entries removed.
+        """
+        if not self._llm_hallu_phrases or not data:
+            return data
+
+        def norm(s: str) -> str:
+            return self._normalize_text(s)
+
+        for k, v in list(data.items()):
+            try:
+                if isinstance(v, str) and norm(v) in self._llm_hallu_phrases:
+                    data[k] = None
+                elif isinstance(v, list):
+                    data[k] = [x for x in v if not (isinstance(x, str) and norm(x) in self._llm_hallu_phrases)]
+            except Exception:
+                # Best-effort only; don't fail the pipeline on strange types
+                continue
+
+        return data
 
     def _ensure_tokenizer(self, model_name: str) -> None:
         """
@@ -1000,8 +1074,11 @@ class LLMProcessor(LLMBackend):
                 tokens_used=tokens_used if "tokens_used" in locals() else None,
             )
 
+            # Remove any exact-match LLM hallucination phrases from the result
+            final_text = self._remove_exact_hallu(generated_text or text)
+
             return LLMResult(
-                text=generated_text or text,
+                text=final_text,
                 tokens_used=tokens_used,
                 model_info=current_model_info,
                 metadata=result_metadata,
@@ -1033,8 +1110,11 @@ class LLMProcessor(LLMBackend):
             generated_text = text
 
             # Return an LLMResult even on error, with error info
+            # Apply exact-match filtering to error fallback text as well
+            final_text = self._remove_exact_hallu(generated_text)
+
             return LLMResult(
-                text=generated_text,
+                text=final_text,
                 tokens_used=None,
                 model_info=current_model_info,
                 metadata={
@@ -1246,7 +1326,9 @@ class LLMProcessor(LLMBackend):
                         "sampling_params": {
                             "temperature": current_temperature,
                             "max_tokens": sampling_kwargs.get("max_tokens"),
-                            "structured_outputs": sampling_kwargs.get("structured_outputs")
+                            "structured_outputs": sampling_kwargs.get(
+                                "structured_outputs"
+                            )
                             is not None,
                         },
                     },
@@ -1519,6 +1601,19 @@ class LLMProcessor(LLMBackend):
         Returns:
             Dictionary containing comprehensive version metadata
         """
+        # Determine structured outputs backend from settings, respecting enable flag.
+        # This is metadata only; actual backend selection is controlled by vLLM's
+        # structured outputs configuration (see vLLM docs).
+        try:
+            structured_backend = (
+                settings.llm_sum.structured_outputs_backend
+                if settings.llm_sum.structured_outputs_enabled
+                else "none"
+            )
+        except Exception:
+            # Fallback for legacy or partially-mocked settings
+            structured_backend = "none"
+
         return {
             "name": (
                 self.model_info.get("model_name", settings.llm_enhance.model)
@@ -1530,7 +1625,7 @@ class LLMProcessor(LLMBackend):
             "thinking": False,
             "reasoning_parser": None,
             "structured_output": {
-                "backend": "json_schema",
+                "backend": structured_backend,
                 "schema_id": self.current_template_id or "none",
                 "schema_hash": self.current_schema_hash or "none",
             },
@@ -1576,6 +1671,12 @@ class LLMProcessor(LLMBackend):
         except Exception:
             # Best-effort; never fail the pipeline on guardrails
             return data
+
+        # Finally strip any exact-match LLM hallucination phrases from parsed fields
+        try:
+            data = self._strip_exact_hallu_in_data(data)
+        except Exception:
+            pass
 
         return data
 

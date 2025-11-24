@@ -47,7 +47,7 @@ Architecture Overview: The system uses a three-tier architecture with API server
 
 - FR-5: Runtime Metrics — Result MUST include self-reported metrics to help users gauge the quality and performance of the processing. These include: `rtf` (Real-Time Factor), `asr_confidence_avg`, `vad_coverage`, and `edit_rate_cleaning`.
 
-- FR-6: Auto-Categorization (Embedded in Summarization) — The system MUST generate relevant category tags (1-5 tags) for the input audio. This is accomplished by including a `tags` field in the summarization template schema (FR-4). Tags are generated in the same LLM inference pass as the summary, ensuring semantic coherence and reducing processing time. Tags are NOT a separate feature but are embedded within the summary structure.
+- FR-6: Auto-Categorization (Embedded in Summarization) — The system MUST generate relevant category tags (1-10 tags) for the input audio. This is accomplished by including a `tags` field in the summarization template schema (FR-4). Tags are generated in the same LLM inference pass as the summary, ensuring semantic coherence and reducing processing time. Tags are NOT a separate feature but are embedded within the summary structure.
 
 - FR-7: API Endpoints & Contracts
 
@@ -94,7 +94,7 @@ Request Body (`multipart/form-data`)
   - Note: `tags` is NO LONGER a separate feature. Tags are embedded in the `summary` output via the template schema.
 - `asr_backend`: Backend selection between `"chunkformer"` (default) and `"whisper"` for different use cases.
 - `template_id` (str): The summary format. (Required if `summary` is in `features`)
-  - Templates should include a `tags` field (array of 1-5 strings) for automatic categorization.
+  - Templates should include a `tags` field (array of 1-10 strings) for automatic categorization.
 
 ---
 

@@ -7,16 +7,19 @@
 ## Benchmark Results
 
 ### 1. Direct Server Performance (Raw vLLM API)
+
 - **Simple completions**: ~78-80 tokens/s
 - **Chat completions**: ~78-80 tokens/s
 - **Status**: ✅ **GOOD** - Server is performing well
 
 ### 2. MAIE Enhancement Task Performance
+
 - **Throughput**: ~900 tokens/s (includes prompt + completion)
 - **Actual generation**: ~80 tokens/s
 - **Status**: ✅ **EXCELLENT** - No bottleneck here
 
 ### 3. MAIE Summary Task Performance
+
 - **Throughput**: ~40 tokens/s
 - **Time per request**: ~49 seconds (for ~2000 tokens)
 - **Status**: ❌ **SLOW** - This is the bottleneck!
@@ -30,12 +33,15 @@ The summary task uses **guided JSON decoding** (constrained generation) to ensur
 3. **Is computationally expensive** because vLLM must validate each token against the schema
 
 ### Evidence
+
 From the logs:
+
 ```python
 2025-11-21 10:27:36.776 | DEBUG | src.processors.llm.processor:execute:557 - Set up structured outputs enforcement
 ```
 
 The structured outputs enforcement is enabled in `src/processors/llm/processor.py`:
+
 ```python
 from vllm.sampling_params import StructuredOutputsParams
 
@@ -44,31 +50,37 @@ kwargs["structured_outputs"] = StructuredOutputsParams(json=json.dumps(schema))
 
 ## Performance Comparison
 
-| Task Type | Throughput | Structured Outputs | Notes |
-|-----------|-----------|-----------------|-------|
-| Simple completion | 78-80 tok/s | ❌ No | Baseline performance |
-| Enhancement | ~80 tok/s | ❌ No | Normal speed |
-| Summary | **~40 tok/s** | ✅ Yes | **50% slower** |
+| Task Type         | Throughput    | Structured Outputs | Notes                |
+| ----------------- | ------------- | ------------------ | -------------------- |
+| Simple completion | 78-80 tok/s   | ❌ No              | Baseline performance |
+| Enhancement       | ~80 tok/s     | ❌ No              | Normal speed         |
+| Summary           | **~40 tok/s** | ✅ Yes             | **50% slower**       |
 
 ## Recommendations
 
 ### Option 1: Disable structured outputs (Fastest)
-**Pros**: 
+
+**Pros**:
+
 - 2x faster summary generation
 - Simpler implementation
 
 **Cons**:
+
 - May generate invalid JSON occasionally
 - Requires post-processing validation and retry logic
 
 **Implementation**:
+
 ```python
 # In src/processors/llm/processor.py, comment out structured outputs enforcement
 # kwargs["structured_outputs"] = StructuredOutputsParams(json=json.dumps(schema))
 ```
 
 ### Option 2: Optimize vLLM Server Configuration
+
 **Current settings** (from config):
+
 ```python
 max_num_seqs: 4                    # Max concurrent sequences
 max_num_batched_tokens: 8192       # Token budget per scheduler step
@@ -79,16 +91,19 @@ max_model_len: 16384               # Context window (reduced from 32768)
 **Recommended optimizations**:
 
 1. **Increase `max_num_batched_tokens`** to allow more tokens per step:
+
    ```python
    max_num_batched_tokens: 16384  # Double the current value
    ```
 
 2. **Reduce `max_num_seqs`** to focus on single-request throughput:
+
    ```python
    max_num_seqs: 1  # Process one request at a time for maximum speed
    ```
 
 3. **Enable chunked prefill** for long prompts:
+
    ```python
    max_num_partial_prefills: 2  # Enable chunked prefill
    ```
@@ -99,12 +114,15 @@ max_model_len: 16384               # Context window (reduced from 32768)
    ```
 
 ### Option 3: Use Speculative Decoding (Advanced)
+
 vLLM supports speculative decoding with a smaller draft model to speed up generation. This requires:
+
 - A smaller draft model (e.g., Qwen2-1.5B)
 - Additional GPU memory
 - vLLM configuration changes
 
 ### Option 4: Hybrid Approach (Recommended)
+
 1. **Keep structured outputs** for reliability
 2. **Optimize vLLM server settings** (Option 2)
 3. **Add retry logic** with lower temperature if JSON is invalid
@@ -138,7 +156,9 @@ class LlmEnhanceSettings(BaseModel):
 ```
 
 ### Restart vLLM Server
+
 After making configuration changes:
+
 ```bash
 # Stop current server
 pkill -f "vllm.entrypoints.openai.api_server"
@@ -150,6 +170,7 @@ pkill -f "vllm.entrypoints.openai.api_server"
 ## Expected Improvements
 
 With optimized settings:
+
 - **Summary task**: 40 tok/s → **60-70 tok/s** (50-75% improvement)
 - **Enhancement task**: Unchanged (~80 tok/s)
 - **Memory usage**: May increase slightly
@@ -172,6 +193,7 @@ python scripts/benchmark_maie_llm.py --task summary --template-id generic_summar
 ## Monitoring
 
 Watch the vLLM server logs for throughput metrics:
+
 ```bash
 # In the vLLM server terminal
 # Look for lines like:
@@ -183,11 +205,13 @@ Watch the vLLM server logs for throughput metrics:
 ### Why can structured outputs be slower?
 
 Structured outputs (guided JSON generation) works by:
+
 1. **Parsing the JSON schema** into a finite state machine (FSM)
 2. **Constraining token selection** at each step to only valid tokens
 3. **Validating structure** as generation progresses
 
 This adds significant overhead because:
+
 - The model can't use its normal sampling strategy
 - Each token must be validated against the FSM
 - The search space is dramatically reduced
@@ -195,6 +219,7 @@ This adds significant overhead because:
 ### Alternative: Outlines Library
 
 vLLM uses the `outlines` library for schema-constraint decoding (structured outputs). You could try:
+
 - Simplifying your JSON schemas (fewer nested objects)
 - Using regex patterns instead of full JSON schemas
 - Implementing custom validation logic

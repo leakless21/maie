@@ -913,7 +913,7 @@ _Refer to implementation guide for complete error handling and retry logic._
 - **Chat Templates**: Use a Jinja ChatML template by default. Mount templates
   under `/app/assets/chat-templates/` and configure vLLM with
   `--chat-template /app/assets/chat-templates/qwen3_nonthinking.jinja`.
-- **Tags Integration**: Templates include a `tags` field (array of 1-5 strings) for content categorization
+- **Tags Integration**: Templates include a `tags` field (array of 1-10 strings) for content categorization
 - **Validation**: JSON Schema validation post-generation
 - **Constrained Decoding**: LLM generates valid JSON with all required fields in single pass
 - **Efficiency**: Single LLM inference generates both summary and tags simultaneously
@@ -935,7 +935,7 @@ _Refer to implementation guide for complete error handling and retry logic._
       "type": "array",
       "items": { "type": "string" },
       "minItems": 1,
-      "maxItems": 5
+      "maxItems": 10
     }
   },
   "required": ["title", "abstract", "main_points", "tags"]
@@ -999,7 +999,7 @@ To ensure that prompts are easy to manage, version, and iterate on, they are ext
 **Template Schema Requirements:**
 
 - Root type: `"object"` with `properties` and `required` fields
-- Must include `tags` array field (1-5 items, FR-6)
+- Must include `tags` array field (1-10 items, FR-6)
 - Follow JSON Schema Draft 7 standard
 
 **Example Template Structure:**
@@ -1010,7 +1010,7 @@ To ensure that prompts are easy to manage, version, and iterate on, they are ext
   "properties": {
     "title": { "type": "string", "maxLength": 200 },
     "main_points": { "type": "array", "items": { "type": "string" } },
-    "tags": { "type": "array", "minItems": 1, "maxItems": 5 }
+    "tags": { "type": "array", "minItems": 1, "maxItems": 10 }
   },
   "required": ["title", "main_points", "tags"]
 }
@@ -1475,7 +1475,7 @@ Response: 202 Accepted
 **Important Changes:**
 
 - Tags are automatically included in the `summary` output via the template schema
-- Templates should define a `tags` field (array, 1-5 items) for categorization
+- Templates should define a `tags` field (array, 1-10 items) for categorization
 - This reduces LLM inference calls and improves coherence
 
 ### 4.2. Response Schema (FR-7.2)

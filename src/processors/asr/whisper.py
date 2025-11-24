@@ -347,7 +347,9 @@ class WhisperBackend(ASRBackend):
                 "on",
             }
         else:
-            word_timestamps = getattr(cfg.settings.asr, "whisper_word_timestamps", False)
+            word_timestamps = getattr(
+                cfg.settings.asr, "whisper_word_timestamps", False
+            )
         transcribe_kwargs["word_timestamps"] = word_timestamps
 
         # Apply VAD filter settings (env overrides config)
@@ -446,6 +448,7 @@ class WhisperBackend(ASRBackend):
 
             # DEBUG: Log ASR input metadata
             import os
+
             if os.path.exists(audio_path):
                 file_size = os.path.getsize(audio_path)
                 logger.debug(
@@ -471,9 +474,9 @@ class WhisperBackend(ASRBackend):
                     "end": segment.end,
                     "text": segment.text,
                 }
-                
+
                 # Capture word-level timestamps if available
-                if hasattr(segment, 'words') and segment.words:
+                if hasattr(segment, "words") and segment.words:
                     words_list = []
                     for word in segment.words:
                         word_dict = {
@@ -484,9 +487,28 @@ class WhisperBackend(ASRBackend):
                         }
                         words_list.append(word_dict)
                     segment_dict["words"] = words_list
-                
+
                 segments_dict.append(segment_dict)
                 text_parts.append(segment.text)
+
+            # Apply hallucination filtering if enabled
+            if getattr(cfg.settings.asr, "hallucination_filter_enabled", False):
+                from src.utils.asr_filters import create_filter_from_config
+
+                filter = create_filter_from_config()
+                original_count = len(segments_dict)
+                segments_dict = filter.filter_segments(segments_dict)
+
+                if len(segments_dict) < original_count:
+                    logger.info(
+                        "Hallucination filter removed segments",
+                        original_count=original_count,
+                        filtered_count=len(segments_dict),
+                        removed_count=original_count - len(segments_dict),
+                    )
+
+                # Rebuild text from filtered segments
+                text_parts = [seg.get("text", "") for seg in segments_dict]
 
             # Combine all segment texts
             text = " ".join(text_parts).strip()
@@ -497,7 +519,7 @@ class WhisperBackend(ASRBackend):
 
             # Note: faster-whisper doesn't provide a single confidence score
             # Individual segments may have their own scores
-            
+
             # DEBUG: Log ASR output preview
             text_preview = text[:200] + "..." if len(text) > 200 else text
             logger.debug(
@@ -509,7 +531,7 @@ class WhisperBackend(ASRBackend):
                 char_count=len(text),
                 word_count=len(text.split()) if text else 0,
             )
-            
+
             return ASRResult(
                 text=text,
                 segments=segments_dict,

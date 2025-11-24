@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Quick script to kill MAIE processes
+# Quick script to kill MAIE processes (API server, workers, and Redis worker instances)
 
 set -euo pipefail
 
@@ -21,7 +21,7 @@ if [[ ! -f "scripts/process_manager.py" ]]; then
 fi
 
 # Show current processes
-echo -e "${YELLOW}📊 Current MAIE processes:${NC}"
+echo -e "${YELLOW}📊 Current MAIE processes (API, workers, and Redis instances):${NC}"
 pixi run python scripts/process_manager.py
 
 echo ""

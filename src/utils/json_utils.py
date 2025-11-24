@@ -11,6 +11,19 @@ from jsonschema import validate, ValidationError
 from .types import JSONDict, JSONParseResult, ErrorContext, ValidationResult
 
 
+def _strip_markdown_code_fence(text: str) -> str:
+    """Remove surrounding Markdown code fences to recover raw payload."""
+    stripped = text.strip()
+    if not stripped.startswith("```"):
+        return stripped
+
+    lines = stripped.splitlines()
+    if len(lines) >= 2 and lines[-1].strip() == "```":
+        # Drop the opening fence (with optional language) and closing fence
+        return "\n".join(lines[1:-1]).strip()
+    return stripped
+
+
 def safe_parse_json(
     json_str: str, *, error_context: Optional[ErrorContext] = None
 ) -> JSONParseResult:
@@ -30,7 +43,8 @@ def safe_parse_json(
         (None, "JSON decode error: Expecting value: line 1 column 1 (char 0)")
     """
     try:
-        parsed_data = json.loads(json_str)
+        normalized_json = _strip_markdown_code_fence(json_str)
+        parsed_data = json.loads(normalized_json)
         return parsed_data, None
     except json.JSONDecodeError as e:
         error_msg = f"JSON decode error: {str(e)}"

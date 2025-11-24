@@ -87,8 +87,8 @@ def validate_summary_schema(result: dict) -> bool:
             logger.error(f"❌ Missing summary field: {field}")
             return False
     tags = summary["tags"]
-    if not isinstance(tags, list) or len(tags) < 1 or len(tags) > 5:
-        logger.info(f"❌ Invalid tags: {tags} (must be list of 1-5 items)")
+    if not isinstance(tags, list) or len(tags) < 1 or len(tags) > 10:
+        logger.info(f"❌ Invalid tags: {tags} (must be list of 1-10 items)")
         return False
     return True
 

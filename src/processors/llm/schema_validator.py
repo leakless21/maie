@@ -238,7 +238,7 @@ def validate_tags_field(schema: Dict[str, Any]) -> bool:
     The tags field must be:
     - Present in properties
     - Type array
-    - MinItems 1, MaxItems 5
+    - MinItems 1, MaxItems 10
     - Items type string
 
     Args:
@@ -248,7 +248,7 @@ def validate_tags_field(schema: Dict[str, Any]) -> bool:
         True if tags field is valid, False otherwise
 
     Example:
-        >>> schema = {"properties": {"tags": {"type": "array", "minItems": 1, "maxItems": 5}}}
+        >>> schema = {"properties": {"tags": {"type": "array", "minItems": 1, "maxItems": 10}}}
         >>> validate_tags_field(schema)  # True
     """
     properties = schema.get("properties", {})
@@ -268,7 +268,7 @@ def validate_tags_field(schema: Dict[str, Any]) -> bool:
     min_items = tags_field.get("minItems", 0)
     max_items = tags_field.get("maxItems", float("inf"))
 
-    if min_items < 1 or max_items > 5:
+    if min_items < 1 or max_items > 10:
         return False
 
     # Check items type is string

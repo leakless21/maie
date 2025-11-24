@@ -32,7 +32,7 @@
         "maxLength": 50
       },
       "minItems": 1,
-      "maxItems": 5
+      "maxItems": 10
     }
   },
   "required": ["title", "summary", "key_topics", "tags"],

@@ -14,7 +14,13 @@ Analyze the interview and generate a single, valid JSON object that strictly adh
 - **Field Specifics:**
     - `interview_date`: If a date is mentioned (e.g., "2024-12-01", "hôm qua"), include it as-is. If not, this field must be `null`.
     - `participant_sentiment`: Choose one of the four allowed values based on the participant's overall tone and explicit statements.
-- **Schema Adherence:** The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+- Schema Adherence: The final output must be a single, valid JSON object that perfectly matches the schema below. Do not add extra fields, notes, or markdown.
+
+Schema Limits (Enforce these strictly):
+- Interview Summary: Max 2000 characters.
+- Key Insights: Min 1, Max 15 items. Each item max 500 characters.
+- Tags: Min 1, Max 10 items. Each item max 50 characters.
+- Participant Sentiment: Must be one of ["positive", "neutral", "negative", "mixed"].
 
 JSON Schema:
 Your output MUST strictly follow this JSON schema:

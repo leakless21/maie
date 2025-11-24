@@ -17,34 +17,32 @@ class LlmBackendType(str, Enum):
 
 class LlmServerSettings(BaseModel):
     """vLLM Server configuration for enhancement and summary tasks."""
-    
+
     # Enhancement endpoint (required)
     enhance_base_url: str = Field(
         default="http://localhost:8001/v1",
-        description="vLLM server endpoint for enhancement tasks"
+        description="vLLM server endpoint for enhancement tasks",
     )
     enhance_api_key: SecretStr | None = Field(default=None)
     enhance_model_name: str | None = Field(
-        default="maie-enhance",
-        description="Model name for enhancement (optional)"
+        default="maie-enhance", description="Model name for enhancement (optional)"
     )
-    
+
     # Summary endpoint (defaults to enhancement if not set)
     summary_base_url: str | None = Field(
         default=None,
-        description="vLLM server for summary (uses enhance_base_url if None)"
+        description="vLLM server for summary (uses enhance_base_url if None)",
     )
     summary_api_key: SecretStr | None = Field(default=None)
     summary_model_name: str | None = Field(
-        default="maie-enhance",
-        description="Model name for summary (optional)"
+        default="maie-enhance", description="Model name for summary (optional)"
     )
-    
+
     # Common settings
     request_timeout_seconds: float = Field(default=300.0)
-    
+
     model_config = ConfigDict(validate_assignment=True)
-    
+
     @property
     def summary_url(self) -> str:
         """Get summary endpoint, defaulting to enhance endpoint."""
@@ -143,6 +141,48 @@ class AsrSettings(BaseModel):
         description="Enable word-level timestamps. Required for accurate segment timestamps in faster-whisper.",
     )
 
+    # Hallucination filtering settings
+    hallucination_filter_enabled: bool = Field(
+        default=True,
+        description="Enable filtering of common ASR hallucinations (repeated phrases, noise transcriptions, etc.)",
+    )
+    hallucination_max_repeated_words: int = Field(
+        default=3,
+        ge=2,
+        description="Maximum consecutive identical words before filtering (e.g., 'thank thank thank')",
+    )
+    hallucination_max_repeated_phrases: int = Field(
+        default=3,
+        ge=2,
+        description="Maximum repeated phrases (3-5 words) before filtering",
+    )
+    hallucination_min_segment_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum segment confidence threshold (filters low-confidence segments)",
+    )
+    hallucination_min_word_probability: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum average word probability threshold for segments",
+    )
+    hallucination_pattern_file: str | None = Field(
+        default="src/config/llm_hallucinations.json",
+        description="Path to JSON file containing hallucination patterns (defaults to data/asr_hallucinations.json)",
+    )
+    hallucination_min_segment_length: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum words per segment (filters very short segments)",
+    )
+    hallucination_max_segment_length: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum words per segment (filters unusually long segments)",
+    )
+
     model_config = ConfigDict(validate_assignment=True)
 
     @field_validator("whisper_language", mode="before")
@@ -150,10 +190,17 @@ class AsrSettings(BaseModel):
     def empty_languages_to_none(cls, value: Any) -> str | None:
         return blank_to_none(value)
 
-    @field_validator("whisper_cpu_threads", mode="before")
+    @field_validator(
+        "whisper_cpu_threads", "hallucination_max_segment_length", mode="before"
+    )
     @classmethod
     def convert_optional_threads(cls, value: Any) -> int | None:
         return coerce_optional_int(value)
+
+    @field_validator("hallucination_pattern_file", mode="before")
+    @classmethod
+    def empty_pattern_file_to_none(cls, value: Any) -> str | None:
+        return blank_to_none(value)
 
 
 class ChunkformerSettings(BaseModel):
@@ -252,8 +299,17 @@ class LlmSumSettings(BaseModel):
         description="Chunked prefill configuration for summary workloads",
     )
     structured_outputs_enabled: bool = Field(
-        default=True,
+        default=False,
         description="Enable structured output generation for summary (slower but more reliable)",
+    )
+    structured_outputs_backend: Literal[
+        "xgrammar", "guidance", "outlines", "lm-format-enforcer", "auto"
+    ] = Field(
+        default="xgrammar",
+        description=(
+            "Structured outputs backend to use for summary tasks. "
+            "See vLLM structured outputs docs for supported backends."
+        ),
     )
 
     model_config = ConfigDict(validate_assignment=True)

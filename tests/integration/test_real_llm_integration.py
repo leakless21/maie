@@ -95,7 +95,7 @@ class TestRealLLMIntegration:
                         "type": "array",
                         "items": {"type": "string", "maxLength": 50},
                         "minItems": 1,
-                        "maxItems": 5,
+                        "maxItems": 10,
                     },
                 },
                 "required": ["title", "abstract", "main_points", "tags"],
@@ -106,7 +106,7 @@ class TestRealLLMIntegration:
             prompts_dir.mkdir()
             prompt_template = prompts_dir / "meeting_notes_v1.jinja"
             prompt_template.write_text(
-                "\nHãy tóm tắt đoạn ghi âm cuộc họp sau theo định dạng JSON được chỉ định:\n\nBản ghi âm:\n{{ transcript }}\n\nLược đồ:\n{{ schema }}\n\nTạo tóm tắt có cấu trúc với các trường sau:\n- title: Tiêu đề ngắn gọn, mô tả\n- abstract: Tóm tắt 2-3 câu\n- main_points: Các điểm thảo luận chính (mảng)\n- tags: Thẻ phân loại (mảng, 1-5 mục)\n\nChỉ trả về JSON hợp lệ khớp với lược đồ:\n"
+                "\nHãy tóm tắt đoạn ghi âm cuộc họp sau theo định dạng JSON được chỉ định:\n\nBản ghi âm:\n{{ transcript }}\n\nLược đồ:\n{{ schema }}\n\nTạo tóm tắt có cấu trúc với các trường sau:\n- title: Tiêu đề ngắn gọn, mô tả\n- abstract: Tóm tắt 2-3 câu\n- main_points: Các điểm thảo luận chính (mảng)\n- tags: Thẻ phân loại (mảng, 1-10 mục)\n\nChỉ trả về JSON hợp lệ khớp với lược đồ:\n"
             )
             processor = LLMProcessor()
             if real_llm_config["model_path"]:

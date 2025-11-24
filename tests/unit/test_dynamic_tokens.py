@@ -225,14 +225,14 @@ class TestLLMProcessorTokenizerIntegration:
         mock_output_text.text = "generated text"
         mock_output_text.token_ids = [1, 2, 3, 4, 5]
         mock_output_text.finish_reason = "length"
-        
+
         mock_completion = Mock()
         mock_completion.outputs = [mock_output_text]
         mock_completion.prompt_token_ids = [1, 2, 3]
-        
+
         # Make outputs a real list to support len() and indexing
         outputs_list = [mock_completion]
-        
+
         # Configure mock methods
         mock_model.generate.return_value = outputs_list
         mock_model.chat.return_value = outputs_list
@@ -257,20 +257,20 @@ class TestLLMProcessorTokenizerIntegration:
         """Test that execute skips dynamic calculation when no tokenizer."""
         # Mock model without tokenizer
         mock_model = Mock()
-        
+
         # Mock generation output with proper structure
         mock_output_text = Mock()
         mock_output_text.text = "generated text"
         mock_output_text.token_ids = [1, 2, 3, 4, 5]
         mock_output_text.finish_reason = "length"
-        
+
         mock_completion = Mock()
         mock_completion.outputs = [mock_output_text]
         mock_completion.prompt_token_ids = [1, 2, 3]
-        
+
         # Make outputs a real list to support len() and indexing
         outputs_list = [mock_completion]
-        
+
         mock_model.generate.return_value = outputs_list
         # Add chat() method that returns list
         mock_model.chat.return_value = outputs_list
@@ -300,11 +300,11 @@ class TestLLMProcessorTokenizerIntegration:
         mock_output_text.text = "generated text"
         mock_output_text.token_ids = [1, 2, 3, 4, 5]
         mock_output_text.finish_reason = "length"
-        
+
         mock_completion = Mock()
         mock_completion.outputs = [mock_output_text]
         mock_completion.prompt_token_ids = [1, 2, 3]
-        
+
         # Make outputs a real list to support len() and indexing
         outputs_list = [mock_completion]
 
