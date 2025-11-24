@@ -354,15 +354,26 @@ class TestCreateFilterFromConfig:
     """Tests for filter factory that reads application settings."""
 
     def test_create_filter_from_config_uses_app_settings(self):
-        """Factory should build config from application settings module."""
+        """Test that filter is created using application settings."""
         from src import config as cfg
+        from src.utils.asr_filters import create_filter_from_config
+
+        # Ensure settings are what we expect
+        assert cfg.settings.asr.hallucination.enabled is True
+        assert cfg.settings.asr.hallucination.max_repeated_words == 3
 
         filter = create_filter_from_config()
 
         assert isinstance(filter, HallucinationFilter)
-        assert filter.config.enabled is cfg.settings.asr.hallucination_filter_enabled
-        assert filter.config.pattern_file == cfg.settings.asr.hallucination_pattern_file
-        assert filter.config.language == cfg.settings.asr.whisper_language
+        assert filter.config.enabled is cfg.settings.asr.hallucination.enabled
+        assert (
+            filter.config.max_repeated_words
+            == cfg.settings.asr.hallucination.max_repeated_words
+        )
+        assert (
+            filter.config.max_repeated_phrases
+            == cfg.settings.asr.hallucination.max_repeated_phrases
+        )
 
 
 class TestFilterEdgeCases:

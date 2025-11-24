@@ -29,7 +29,15 @@ def reset_backends():
     """Reset factory state before each test."""
     original = dict(asr_factory.ASRFactory.BACKENDS)
     asr_factory.ASRFactory.BACKENDS = {}
+    
+    # Default to disabled filtering for existing tests
+    from src import config as cfg
+    original_enabled = cfg.settings.asr.hallucination.enabled
+    cfg.settings.asr.hallucination.enabled = False
+    
     yield
+    
+    cfg.settings.asr.hallucination.enabled = original_enabled
     asr_factory.ASRFactory.BACKENDS = original
 
 
@@ -107,3 +115,19 @@ def test_smoke_factory_creation_fast():
     asr_factory.ASRFactory.register_backend("dummy", DummyBackend)
     inst = asr_factory.ASRFactory.create("dummy")
     assert isinstance(inst, DummyBackend)
+
+
+def test_create_backend_with_filtering():
+    """Test that backend is wrapped when filtering is enabled."""
+    from src import config as cfg
+    from src.processors.asr.filtering import FilteringASRBackend
+
+    # Enable filtering
+    cfg.settings.asr.hallucination.enabled = True
+    
+    asr_factory.ASRFactory.register_backend("dummy", DummyBackend)
+    inst = asr_factory.ASRFactory.create("dummy", foo="bar")
+    
+    assert isinstance(inst, FilteringASRBackend)
+    assert isinstance(inst.inner_backend, DummyBackend)
+    assert inst.inner_backend.kwargs == {"foo": "bar"}

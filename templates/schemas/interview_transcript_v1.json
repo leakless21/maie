@@ -22,7 +22,7 @@
         "maxLength": 500
       },
       "minItems": 1,
-      "maxItems": 15
+      "maxItems": 10
     },
     "participant_sentiment": {
       "type": "string",
@@ -37,7 +37,7 @@
         "maxLength": 50
       },
       "minItems": 1,
-      "maxItems": 10
+      "maxItems": 7
     }
   },
   "required": [

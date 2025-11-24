@@ -402,19 +402,18 @@ def create_filter_from_config() -> HallucinationFilter:
     from src import config as cfg
 
     # Build filter config from settings
+    # Use the new HallucinationSettings structure
+    hallucination_settings = cfg.settings.asr.hallucination
+    
     filter_config = FilterConfig(
-        enabled=getattr(cfg.settings.asr, "hallucination_filter_enabled", False),
-        max_repeated_words=getattr(cfg.settings.asr, "hallucination_max_repeated_words", 3),
-        max_repeated_phrases=getattr(cfg.settings.asr, "hallucination_max_repeated_phrases", 2),
-        min_segment_confidence=getattr(
-            cfg.settings.asr, "hallucination_min_segment_confidence", None
-        ),
-        min_word_probability=getattr(
-            cfg.settings.asr, "hallucination_min_word_probability", None
-        ),
-        pattern_file=getattr(cfg.settings.asr, "hallucination_pattern_file", None),
-        min_segment_length=getattr(cfg.settings.asr, "hallucination_min_segment_length", 1),
-        max_segment_length=getattr(cfg.settings.asr, "hallucination_max_segment_length", None),
+        enabled=hallucination_settings.enabled,
+        max_repeated_words=hallucination_settings.max_repeated_words,
+        max_repeated_phrases=hallucination_settings.max_repeated_phrases,
+        min_segment_confidence=hallucination_settings.min_segment_confidence,
+        min_word_probability=hallucination_settings.min_word_probability,
+        pattern_file=hallucination_settings.pattern_file,
+        min_segment_length=hallucination_settings.min_segment_length,
+        max_segment_length=hallucination_settings.max_segment_length,
         language=getattr(cfg.settings.asr, "whisper_language", None),
     )
 

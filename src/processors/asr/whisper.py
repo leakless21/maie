@@ -491,25 +491,6 @@ class WhisperBackend(ASRBackend):
                 segments_dict.append(segment_dict)
                 text_parts.append(segment.text)
 
-            # Apply hallucination filtering if enabled
-            if getattr(cfg.settings.asr, "hallucination_filter_enabled", False):
-                from src.utils.asr_filters import create_filter_from_config
-
-                filter = create_filter_from_config()
-                original_count = len(segments_dict)
-                segments_dict = filter.filter_segments(segments_dict)
-
-                if len(segments_dict) < original_count:
-                    logger.info(
-                        "Hallucination filter removed segments",
-                        original_count=original_count,
-                        filtered_count=len(segments_dict),
-                        removed_count=original_count - len(segments_dict),
-                    )
-
-                # Rebuild text from filtered segments
-                text_parts = [seg.get("text", "") for seg in segments_dict]
-
             # Combine all segment texts
             text = " ".join(text_parts).strip()
 

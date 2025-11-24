@@ -121,6 +121,67 @@ class RedisSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
 
+class HallucinationSettings(BaseModel):
+    """Configuration for ASR hallucination filtering."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable filtering of common ASR hallucinations (repeated phrases, noise transcriptions, etc.)",
+    )
+    max_repeated_words: int = Field(
+        default=3,
+        ge=2,
+        description="Maximum consecutive identical words before filtering (e.g., 'thank thank thank')",
+    )
+    max_repeated_phrases: int = Field(
+        default=3,
+        ge=2,
+        description="Maximum repeated phrases (3-5 words) before filtering",
+    )
+    min_segment_confidence: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum segment confidence threshold (filters low-confidence segments)",
+    )
+    min_word_probability: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=1.0,
+        description="Minimum average word probability threshold for segments",
+    )
+    pattern_file: str | None = Field(
+        default="data/asr_hallucinations.json",
+        description=(
+            "Path to JSON file containing ASR hallucination patterns. "
+            "Defaults to `data/asr_hallucinations.json`. Note: the LLM processor "
+            "uses an independent exact-match config at `src/config/llm_hallucinations.json`."
+        ),
+    )
+    min_segment_length: int = Field(
+        default=1,
+        ge=1,
+        description="Minimum words per segment (filters very short segments)",
+    )
+    max_segment_length: int | None = Field(
+        default=None,
+        ge=1,
+        description="Maximum words per segment (filters unusually long segments)",
+    )
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("pattern_file", mode="before")
+    @classmethod
+    def empty_pattern_file_to_none(cls, value: Any) -> str | None:
+        return blank_to_none(value)
+
+    @field_validator("max_segment_length", mode="before")
+    @classmethod
+    def convert_optional_int(cls, value: Any) -> int | None:
+        return coerce_optional_int(value)
+
+
 class AsrSettings(BaseModel):
     whisper_model_path: str = Field(
         default="data/models/openai-whisper-large",
@@ -142,46 +203,7 @@ class AsrSettings(BaseModel):
     )
 
     # Hallucination filtering settings
-    hallucination_filter_enabled: bool = Field(
-        default=True,
-        description="Enable filtering of common ASR hallucinations (repeated phrases, noise transcriptions, etc.)",
-    )
-    hallucination_max_repeated_words: int = Field(
-        default=3,
-        ge=2,
-        description="Maximum consecutive identical words before filtering (e.g., 'thank thank thank')",
-    )
-    hallucination_max_repeated_phrases: int = Field(
-        default=3,
-        ge=2,
-        description="Maximum repeated phrases (3-5 words) before filtering",
-    )
-    hallucination_min_segment_confidence: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Minimum segment confidence threshold (filters low-confidence segments)",
-    )
-    hallucination_min_word_probability: float | None = Field(
-        default=None,
-        ge=0.0,
-        le=1.0,
-        description="Minimum average word probability threshold for segments",
-    )
-    hallucination_pattern_file: str | None = Field(
-        default="src/config/llm_hallucinations.json",
-        description="Path to JSON file containing hallucination patterns (defaults to data/asr_hallucinations.json)",
-    )
-    hallucination_min_segment_length: int = Field(
-        default=1,
-        ge=1,
-        description="Minimum words per segment (filters very short segments)",
-    )
-    hallucination_max_segment_length: int | None = Field(
-        default=None,
-        ge=1,
-        description="Maximum words per segment (filters unusually long segments)",
-    )
+    hallucination: HallucinationSettings = Field(default_factory=HallucinationSettings)
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -190,17 +212,10 @@ class AsrSettings(BaseModel):
     def empty_languages_to_none(cls, value: Any) -> str | None:
         return blank_to_none(value)
 
-    @field_validator(
-        "whisper_cpu_threads", "hallucination_max_segment_length", mode="before"
-    )
+    @field_validator("whisper_cpu_threads", mode="before")
     @classmethod
     def convert_optional_threads(cls, value: Any) -> int | None:
         return coerce_optional_int(value)
-
-    @field_validator("hallucination_pattern_file", mode="before")
-    @classmethod
-    def empty_pattern_file_to_none(cls, value: Any) -> str | None:
-        return blank_to_none(value)
 
 
 class ChunkformerSettings(BaseModel):

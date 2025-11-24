@@ -10,6 +10,7 @@ from src.processors.audio.preprocessor import AudioPreprocessor
 from src.processors.base import ASRBackend
 from src.processors.vad.factory import VADFactory
 from src.config.model import VADSettings
+from src import config as cfg
 
 
 class ASRFactory:
@@ -54,7 +55,15 @@ class ASRFactory:
             )
 
         backend_class = cls.BACKENDS[backend_type]
-        return backend_class(**kwargs)
+        backend = backend_class(**kwargs)
+
+        # Apply hallucination filtering if enabled
+        # Note: We check the config directly here.
+        if getattr(cfg.settings.asr.hallucination, "enabled", False):
+            from src.processors.asr.filtering import FilteringASRBackend
+            return FilteringASRBackend(backend)
+            
+        return backend
 
     @classmethod
     def create_with_audio_processing(

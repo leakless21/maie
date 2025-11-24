@@ -65,7 +65,7 @@
       "description": "Thẻ phân loại ngắn (1-10 thẻ)",
       "items": { "type": "string", "maxLength": 50 },
       "minItems": 1,
-      "maxItems": 10
+      "maxItems": 7
     }
   },
   "required": ["title", "participants", "summary", "tags"],

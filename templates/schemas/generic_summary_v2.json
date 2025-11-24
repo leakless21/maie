@@ -22,7 +22,7 @@
         "maxLength": 200
       },
       "minItems": 1,
-      "maxItems": 15
+      "maxItems": 10
     },
     "tags": {
       "type": "array",
@@ -32,7 +32,7 @@
         "maxLength": 50
       },
       "minItems": 1,
-      "maxItems": 10
+      "maxItems": 7
     }
   },
   "required": ["title", "summary", "key_topics", "tags"],
