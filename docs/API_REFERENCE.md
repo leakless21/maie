@@ -197,6 +197,8 @@ X-API-Key: your_api_key_here
 | `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)   |
 | `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                     |
 | `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |
+| `enable_vad`         | boolean | No          | Enable Voice Activity Detection (default: system setting)            |
+| `vad_threshold`      | float   | No          | VAD confidence threshold 0.0-1.0 (default: 0.5)                      |
 
 **Features Options:**
 
@@ -583,6 +585,125 @@ curl -X GET 'http://localhost:8000/v1/templates' \
 | Code  | Description                      |
 | ----- | -------------------------------- |
 | `200` | Templates retrieved successfully |
+
+### GET /v1/templates/{template_id}
+
+Retrieve full details for a specific template, including its schema and prompt.
+
+#### Request Format
+
+**Path Parameters:**
+
+- `template_id` (string) - Unique identifier of the template
+
+**Headers:**
+
+```
+X-API-Key: your_api_key_here
+```
+
+#### Response Format
+
+**200 OK**
+
+```json
+{
+  "id": "meeting_notes_v1",
+  "name": "Meeting Notes v1",
+  "description": "Structured format for meeting transcripts",
+  "schema_url": "/v1/templates/meeting_notes_v1/schema",
+  "parameters": {},
+  "prompt_template": "...",
+  "schema_data": { ... },
+  "example": { ... }
+}
+```
+
+### POST /v1/templates
+
+Create a new processing template.
+
+#### Request Format
+
+**Headers:**
+
+```
+X-API-Key: your_api_key_here
+Content-Type: application/json
+```
+
+**Body Parameters:**
+
+| Parameter         | Type   | Required | Description                                      |
+| ----------------- | ------ | -------- | ------------------------------------------------ |
+| `id`              | string | Yes      | Unique identifier (alphanumeric, `_`, `-`)       |
+| `schema_data`     | object | Yes      | JSON Schema defining the structured output       |
+| `prompt_template` | string | Yes      | Jinja2 prompt template content                   |
+| `example`         | object | No       | Optional example JSON output                     |
+
+**Note:** The schema definition **MUST** be passed in the `schema_data` field.
+
+**Example Request:**
+
+```json
+{
+  "id": "new_template_v1",
+  "schema_data": {
+    "title": "New Template",
+    "type": "object",
+    "properties": { ... }
+  },
+  "prompt_template": "Summarize this: {{ transcript }}",
+  "example": { ... }
+}
+```
+
+### PUT /v1/templates/{template_id}
+
+Update an existing processing template.
+
+#### Request Format
+
+**Path Parameters:**
+
+- `template_id` (string) - Unique identifier of the template to update
+
+**Headers:**
+
+```
+X-API-Key: your_api_key_here
+Content-Type: application/json
+```
+
+**Body Parameters:**
+
+| Parameter         | Type   | Required | Description                                      |
+| ----------------- | ------ | -------- | ------------------------------------------------ |
+| `schema_data`     | object | No       | JSON Schema defining the structured output       |
+| `prompt_template` | string | No       | Jinja2 prompt template content                   |
+| `example`         | object | No       | Optional example JSON output                     |
+
+**Note:** To update the schema, use the `schema_data` field.
+
+### DELETE /v1/templates/{template_id}
+
+Delete a processing template.
+
+#### Request Format
+
+**Path Parameters:**
+
+- `template_id` (string) - Unique identifier of the template to delete
+
+**Headers:**
+
+```
+X-API-Key: your_api_key_here
+```
+
+#### Response Format
+
+**200 OK** (No content)
 
 ## Best Practices
 

@@ -74,6 +74,13 @@ try:
 except Exception:
     CORSConfig = None
 
+try:
+    from litestar.middleware.rate_limit import RateLimitConfig
+    from litestar.stores.redis import RedisStore
+except Exception:
+    RateLimitConfig = None
+    RedisStore = None
+
 from src.api.dependencies import validate_request_data
 from src.api.routes import route_handlers
 from src.api.schemas import HealthResponse
@@ -218,9 +225,64 @@ litestar_kwargs: Dict[str, Any] = {
     },
     "debug": settings.debug,
     "request_max_body_size": settings.api.max_file_size_mb * 1024 * 1024,
-    # Bind correlation ID per request and echo it back in response headers
-    "middleware": [DefineMiddleware(CorrelationIdMiddleware)],
 }
+
+# Configure middleware list
+middleware_list = [DefineMiddleware(CorrelationIdMiddleware)]
+
+# Add rate limiting middleware if enabled and available
+if (
+    settings.rate_limit.enabled
+    and RateLimitConfig is not None
+    and RedisStore is not None
+):
+    try:
+        # Create RedisStore for rate limiting
+        rate_limit_store = RedisStore.with_client(url=settings.redis.url)
+        
+        # Define endpoints to exclude from rate limiting (lightweight operations)
+        # These are regex patterns that must match the full path
+        exclude_paths = [
+            r"^/$",                         # API info - very light
+            r"^/health$",                   # Health check - very light
+            r"^/schema.*",                  # OpenAPI schema endpoints
+            r"^/v1/models$",                # List models - read-only, static
+            r"^/v1/templates$",             # List templates - read-only (GET only)
+            r"^/v1/templates/[^/]+$",      # Get template details - read-only
+            r"^/v1/templates/[^/]+/schema$", # Get template schema - read-only
+            r"^/v1/status/[0-9a-f-]+$",    # Status lookup - light read from Redis
+        ]
+        
+        # Create rate limit config with exclusions
+        # This applies rate limiting only to resource-intensive operations:
+        # - POST /v1/process (audio processing)
+        # - POST/PUT/DELETE /v1/templates (write operations)
+        rate_limit_config = RateLimitConfig(
+            rate_limit=settings.rate_limit.limit,
+            store=rate_limit_store,
+            exclude=exclude_paths,
+        )
+        
+        middleware_list.append(DefineMiddleware(rate_limit_config.middleware))
+        unit, count = settings.rate_limit.limit
+        logger.info(
+            "Rate limiting enabled: {} requests per {} (excluding {} lightweight endpoints)",
+            count,
+            unit,
+            len(exclude_paths),
+        )
+    except Exception as e:
+        logger.warning("Failed to configure rate limiting: {}", e)
+else:
+    if not settings.rate_limit.enabled:
+        logger.info("Rate limiting is disabled in configuration")
+    else:
+        logger.warning(
+            "Rate limiting not available (RateLimitConfig or RedisStore not imported)"
+        )
+
+litestar_kwargs["middleware"] = middleware_list
+
 if CORSConfig is not None:
     litestar_kwargs["cors_config"] = CORSConfig(
         allow_origins=["*"], allow_methods=["GET", "POST", "OPTIONS"]

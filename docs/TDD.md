@@ -178,7 +178,9 @@ For `POST /v1/process`:
    - For `"whisper"`, model variant determined by `WHISPER_MODEL_VARIANT` (default: `erax-wow-turbo`, org CT2 default)
    - For `"chunkformer"`, model name determined by `CHUNKFORMER_MODEL_NAME` (default: `khanhld/chunkformer-rnnt-large-vie`)
 4. Validate `template_id` is provided if `"summary"` in features (FR-4)
-5. Generate UUID v4 as `task_id`
+5. Validate `enable_diarization` (optional boolean, default: `false`)
+6. Validate `enable_vad` (optional boolean) and `vad_threshold` (optional float 0.0-1.0)
+7. Generate UUID v4 as `task_id`
 6. Check queue depth for backpressure
 7. Initialize task record in Redis DB 1 with status `PENDING`
 8. Enqueue job to Redis DB 0 with timeout=600s, retries=2

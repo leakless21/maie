@@ -50,7 +50,6 @@ class TemplateLoader:
             >>> template = loader.get_template("my_template.jinja")  # Also works
         """
         # Handle .jinja extension - if already present, don't add it again
-        if template_name.endswith(".jinja"):
-            return self.env.get_template(template_name)
-        else:
-            return self.env.get_template(f"{template_name}.jinja")
+        # Handle .jinja extension - if already present, don't add it again
+        # Enforce bundle path: {template_name}/prompt.jinja
+        return self.env.get_template(f"{template_name}/prompt.jinja")

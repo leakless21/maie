@@ -78,7 +78,7 @@ class LLMProcessor(LLMBackend):
         self.current_schema_hash = None
 
         # Initialize prompt rendering system
-        template_loader = TemplateLoader(settings.paths.templates_dir / "prompts")
+        template_loader = TemplateLoader(settings.paths.templates_dir)
         self.prompt_renderer = PromptRenderer(template_loader)
 
         # Load local LLM-specific hallucination phrases (exact-match)
@@ -1644,13 +1644,13 @@ class LLMProcessor(LLMBackend):
     ) -> Dict[str, Any]:
         """Lightweight guardrails to curb hallucinated names/dates.
 
-        - For meeting_notes_v1: ensure meeting_date appears in transcript; else null.
+        - For meeting_notes_v2: ensure meeting_date appears in transcript; else null.
           Ensure participants are verbatim substrings of transcript; else drop.
-        - For interview_transcript_v1: ensure interview_date appears in transcript; else null.
+        - For interview_transcript_v2: ensure interview_date appears in transcript; else null.
         """
         try:
             t_lower = (transcript or "").lower()
-            if template_id == "meeting_notes_v1":
+            if template_id == "meeting_notes_v2":
                 md = data.get("meeting_date")
                 if isinstance(md, str) and md and (md.lower() not in t_lower):
                     data["meeting_date"] = None
@@ -1663,7 +1663,7 @@ class LLMProcessor(LLMBackend):
                             filtered.append(p)
                     data["participants"] = filtered
 
-            elif template_id == "interview_transcript_v1":
+            elif template_id == "interview_transcript_v2":
                 md = data.get("interview_date")
                 if isinstance(md, str) and md and (md.lower() not in t_lower):
                     data["interview_date"] = None

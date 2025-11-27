@@ -148,3 +148,4 @@ requirements-dev.txt
 !.pixi/config.toml
 
 .claude/
+.gemini/

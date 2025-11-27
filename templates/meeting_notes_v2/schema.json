@@ -1,0 +1,5 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Biên bản cuộc họp",
+  "description": "Biên bản cuộc họp có cấu trúc đơn giản cho các bản ghi tiếng Việt. Không giả định quyền truy cập công cụ; các vai trò và trường hành chính bị loại trừ. Tùy chọn bao gồm meeting_date nếu bản ghi chứa nó một cách rõ ràng."
+}

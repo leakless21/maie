@@ -122,6 +122,8 @@ This section details the end-to-end flow, including functions, files, Redis keys
   - `template_id`: string
   - `file_path`: string
   - `asr_backend`: string
+  - `enable_vad`: boolean
+  - `vad_threshold`: float
 - TTL: `settings.result_ttl`
 
 ### 6) Enqueue background job
@@ -129,6 +131,7 @@ This section details the end-to-end flow, including functions, files, Redis keys
 - Queue: `get_rq_queue()` (synchronous Redis client)
 - Enqueues `src/worker/pipeline.process_audio_task` with parameters:
   - `task_id`, `audio_path`, `features`, `template_id`, `asr_backend`
+  - `enable_diarization`, `enable_vad`, `vad_threshold`
   - `redis_host`, `redis_port`, `redis_db` (results DB)
 - Options: `job_id = str(task_id)`, `job_timeout = settings.job_timeout`, `result_ttl = settings.result_ttl`
 
@@ -145,6 +148,9 @@ Location: `src/worker/pipeline.py`
 - `asr_backend`: e.g., `whisper`, `chunkformer`
 - `features`: e.g., `["clean_transcript", "summary"]`
 - `template_id`: required if `summary` requested
+- `enable_diarization`: boolean
+- `enable_vad`: boolean
+- `vad_threshold`: float
 - `redis_host`, `redis_port`, `redis_db`: results Redis connection
 
 ### Lifecycle and status transitions
@@ -196,6 +202,9 @@ Location: `src/worker/pipeline.py`
   - `template_id`: string
   - `file_path`: string (upload location)
   - `asr_backend`: string
+  - `enable_diarization`: boolean
+  - `enable_vad`: boolean
+  - `vad_threshold`: float
   - `versions`: JSON string
   - `metrics`: JSON string
   - `results`: JSON string (contains selected outputs)

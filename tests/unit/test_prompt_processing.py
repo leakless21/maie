@@ -25,7 +25,8 @@ class TestTemplateLoader:
         """Test successful initialization with valid template directory."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "test.jinja").write_text("Hello {{ name }}!")
+        (template_dir / "test").mkdir()
+        (template_dir / "test/prompt.jinja").write_text("Hello {{ name }}!")
 
         loader = TemplateLoader(template_dir)
 
@@ -46,7 +47,8 @@ class TestTemplateLoader:
         """Test loading existing template."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        template_file = template_dir / "test.jinja"
+        (template_dir / "test").mkdir()
+        template_file = template_dir / "test/prompt.jinja"
         template_file.write_text("Hello {{ name }}!")
 
         loader = TemplateLoader(template_dir)
@@ -65,25 +67,34 @@ class TestTemplateLoader:
         with pytest.raises(TemplateNotFound):
             loader.get_template("nonexistent")
 
-    def test_template_name_normalization(self, tmp_path):
-        """Test .jinja extension is handled correctly."""
+    def test_bundle_structure_enforcement(self, tmp_path):
+        """Test that templates are loaded from bundle structure."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "test.jinja").write_text("Test template")
+        
+        # Create valid bundle
+        (template_dir / "valid").mkdir()
+        (template_dir / "valid/prompt.jinja").write_text("Valid bundle")
+
+        # Create invalid structure (root file)
+        (template_dir / "invalid.jinja").write_text("Invalid structure")
 
         loader = TemplateLoader(template_dir)
 
-        # Should work with or without .jinja extension
-        template1 = loader.get_template("test")
-        template2 = loader.get_template("test.jinja")
+        # Should load valid bundle
+        template = loader.get_template("valid")
+        assert template.render() == "Valid bundle"
 
-        assert template1.render() == template2.render()
+        # Should fail to load root file (as 'invalid' expects 'invalid/prompt.jinja')
+        with pytest.raises(TemplateNotFound):
+            loader.get_template("invalid")
 
     def test_lru_cache_working(self, tmp_path):
         """Test that lru_cache is working."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "test.jinja").write_text("Cached")
+        (template_dir / "test").mkdir()
+        (template_dir / "test/prompt.jinja").write_text("Cached")
 
         loader = TemplateLoader(template_dir)
 
@@ -103,7 +114,8 @@ class TestTemplateLoader:
 
         # Create 130 templates
         for i in range(130):
-            (template_dir / f"template_{i}.jinja").write_text(f"Template {i}")
+            (template_dir / f"template_{i}").mkdir()
+            (template_dir / f"template_{i}/prompt.jinja").write_text(f"Template {i}")
 
         loader = TemplateLoader(template_dir)
 
@@ -144,7 +156,8 @@ class TestPromptRenderer:
         """Test rendering simple template with variables."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "hello.jinja").write_text("Hello {{ name }}!")
+        (template_dir / "hello").mkdir()
+        (template_dir / "hello/prompt.jinja").write_text("Hello {{ name }}!")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -156,7 +169,8 @@ class TestPromptRenderer:
         """Test rendering template with multiple variables."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "multi.jinja").write_text("Hello {{ first }} {{ last }}!")
+        (template_dir / "multi").mkdir()
+        (template_dir / "multi/prompt.jinja").write_text("Hello {{ first }} {{ last }}!")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -168,7 +182,8 @@ class TestPromptRenderer:
         """Test rendering template with nested context."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "nested.jinja").write_text(
+        (template_dir / "nested").mkdir()
+        (template_dir / "nested/prompt.jinja").write_text(
             "Name: {{ user.name }}, Age: {{ user.age }}"
         )
 
@@ -193,7 +208,8 @@ class TestPromptRenderer:
         """Test that extra variables are ignored gracefully."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "simple.jinja").write_text("Hello World!")
+        (template_dir / "simple").mkdir()
+        (template_dir / "simple/prompt.jinja").write_text("Hello World!")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -215,7 +231,8 @@ class TestPromptSecurity:
         """Test HTML injection is escaped."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "xss.jinja").write_text("Content: {{ content }}")
+        (template_dir / "xss").mkdir()
+        (template_dir / "xss/prompt.jinja").write_text("Content: {{ content }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -231,7 +248,8 @@ class TestPromptSecurity:
         """Test JavaScript injection is escaped."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "js.jinja").write_text("Message: {{ message }}")
+        (template_dir / "js").mkdir()
+        (template_dir / "js/prompt.jinja").write_text("Message: {{ message }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -246,7 +264,8 @@ class TestPromptSecurity:
         """Test Server-Side Template Injection prevention."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "ssti.jinja").write_text("User input: {{ user_input }}")
+        (template_dir / "ssti").mkdir()
+        (template_dir / "ssti/prompt.jinja").write_text("User input: {{ user_input }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -263,7 +282,8 @@ class TestPromptSecurity:
         """Test that dangerous objects cannot be executed."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "dangerous.jinja").write_text("Object: {{ obj }}")
+        (template_dir / "dangerous").mkdir()
+        (template_dir / "dangerous/prompt.jinja").write_text("Object: {{ obj }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -279,7 +299,8 @@ class TestPromptSecurity:
         """Test path traversal attacks are prevented."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "secure.jinja").write_text("Secure content")
+        (template_dir / "secure").mkdir()
+        (template_dir / "secure/prompt.jinja").write_text("Secure content")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -296,7 +317,8 @@ class TestPromptSecurity:
         """Test that context is isolated between renders."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "isolated.jinja").write_text("Value: {{ value }}")
+        (template_dir / "isolated").mkdir()
+        (template_dir / "isolated/prompt.jinja").write_text("Value: {{ value }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -313,7 +335,8 @@ class TestPromptSecurity:
         """Test large context handling (memory limits)."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "large.jinja").write_text("Count: {{ count }}")
+        (template_dir / "large").mkdir()
+        (template_dir / "large/prompt.jinja").write_text("Count: {{ count }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -353,7 +376,8 @@ class TestPromptIntegration:
 - {{ point }}
 {% endfor %}
 """
-        (template_dir / "document.jinja").write_text(template_content)
+        (template_dir / "document").mkdir()
+        (template_dir / "document/prompt.jinja").write_text(template_content)
 
         # Initialize components
         template_loader = TemplateLoader(template_dir)
@@ -381,9 +405,12 @@ class TestPromptIntegration:
         template_dir.mkdir()
 
         # Create multiple templates
-        (template_dir / "template1.jinja").write_text("Template 1: {{ value }}")
-        (template_dir / "template2.jinja").write_text("Template 2: {{ value }}")
-        (template_dir / "template3.jinja").write_text("Template 3: {{ value }}")
+        (template_dir / "template1").mkdir()
+        (template_dir / "template1/prompt.jinja").write_text("Template 1: {{ value }}")
+        (template_dir / "template2").mkdir()
+        (template_dir / "template2/prompt.jinja").write_text("Template 2: {{ value }}")
+        (template_dir / "template3").mkdir()
+        (template_dir / "template3/prompt.jinja").write_text("Template 3: {{ value }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)
@@ -402,7 +429,8 @@ class TestPromptIntegration:
         """Test that output is consistent across multiple renders."""
         template_dir = tmp_path / "templates"
         template_dir.mkdir()
-        (template_dir / "consistent.jinja").write_text("Value: {{ value }}")
+        (template_dir / "consistent").mkdir()
+        (template_dir / "consistent/prompt.jinja").write_text("Value: {{ value }}")
 
         template_loader = TemplateLoader(template_dir)
         renderer = PromptRenderer(template_loader)

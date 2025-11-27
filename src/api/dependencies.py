@@ -17,6 +17,7 @@ from rq import Queue
 
 from src.api.schemas import Feature, ProcessRequestSchema
 from src.config import settings
+from src.utils.template_manager import TemplateManager
 
 # ============================================================================
 # Redis Dependencies (Official redis-py 5.x patterns)
@@ -274,3 +275,13 @@ async def validate_request_data(data: Any) -> bool:
         raise ValueError(f"Schema validation failed: {e}")
 
     return True
+
+
+def get_template_manager() -> TemplateManager:
+    """
+    Get TemplateManager instance.
+    
+    Returns:
+        TemplateManager: Instance for managing templates
+    """
+    return TemplateManager()

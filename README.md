@@ -302,6 +302,9 @@ done
   - `enhancement_metrics`: Processing quality metrics
 - `template_id` (optional): Summary format template
 - `asr_backend` (optional): ASR engine (`whisper` or `chunkformer`)
+- `enable_diarization` (optional): Enable speaker diarization (default: `false`)
+- `enable_vad` (optional): Enable Voice Activity Detection (default: system setting)
+- `vad_threshold` (optional): VAD confidence threshold 0.0-1.0 (default: 0.5)
 
 ## ⚙️ Configuration
 

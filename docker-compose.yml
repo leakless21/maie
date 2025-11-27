@@ -103,7 +103,7 @@ services:
       - "8000:8000"
     volumes:
       - audio_data:/data/audio
-      - ./templates:/app/templates:ro
+      - ./templates:/app/templates
     environment:
       - REDIS_URL=redis://redis:6379/0
       - AUDIO_DIR=/data/audio

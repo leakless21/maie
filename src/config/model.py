@@ -121,6 +121,64 @@ class RedisSettings(BaseModel):
     model_config = ConfigDict(validate_assignment=True)
 
 
+class RateLimitSettings(BaseModel):
+    """Rate limiting configuration for API endpoints."""
+
+    enabled: bool = Field(
+        default=True,
+        description="Enable rate limiting for API endpoints",
+    )
+    limit: Tuple[str, int] = Field(
+        default=("minute", 60),
+        description=(
+            "Rate limit specification in format (unit, count) where unit can be "
+            "'second', 'minute', 'hour', or 'day' and count is the max requests "
+            "allowed within that time unit. For example, ('minute', 60) allows "
+            "60 requests per minute."
+        ),
+    )
+
+    model_config = ConfigDict(validate_assignment=True)
+
+    @field_validator("limit")
+    @classmethod
+    def validate_limit_format(cls, value: Tuple[str, int]) -> Tuple[str, int]:
+        """Validate rate limit format."""
+        valid_units = {"second", "minute", "hour", "day"}
+        
+        if len(value) != 2:
+            raise ValueError(
+                f"Rate limit must be a tuple of (unit, count), got {value}"
+            )
+        
+        unit, count = value
+        
+        if not isinstance(unit, str):
+            raise ValueError(
+                f"Rate limit unit must be a string, got {type(unit).__name__}"
+            )
+        
+        unit_lower = unit.lower()
+        if unit_lower not in valid_units:
+            raise ValueError(
+                f"Invalid rate limit unit '{unit}'. "
+                f"Must be one of: {', '.join(sorted(valid_units))}"
+            )
+        
+        if not isinstance(count, int):
+            raise ValueError(
+                f"Rate limit count must be an integer, got {type(count).__name__}"
+            )
+        
+        if count <= 0:
+            raise ValueError(
+                f"Rate limit count must be positive, got {count}"
+            )
+        
+        # Return with normalized unit (lowercase)
+        return (unit_lower, count)
+
+
 class HallucinationSettings(BaseModel):
     """Configuration for ASR hallucination filtering."""
 
@@ -572,6 +630,7 @@ class AppSettings(BaseSettings):
     logging: LoggingSettings = Field(default_factory=LoggingSettings)
     api: ApiSettings = Field(default_factory=ApiSettings)
     redis: RedisSettings = Field(default_factory=RedisSettings)
+    rate_limit: RateLimitSettings = Field(default_factory=RateLimitSettings)
     asr: AsrSettings = Field(default_factory=AsrSettings)
     chunkformer: ChunkformerSettings = Field(default_factory=ChunkformerSettings)
     diarization: DiarizationSettings = Field(default_factory=DiarizationSettings)

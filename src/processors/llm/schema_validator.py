@@ -42,7 +42,7 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
         >>> schema = load_template_schema("meeting_notes_v1", Path("templates"))
         >>> print(schema["type"])  # "object"
     """
-    template_file = templates_dir / "schemas" / f"{template_id}.json"
+    template_file = templates_dir / template_id / "schema.json"
 
     if not template_file.exists():
         raise FileNotFoundError(f"Template file not found: {template_file}")

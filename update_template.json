@@ -1,0 +1,13 @@
+{
+  "schema_data": {
+    "title": "Updated Test Template",
+    "type": "object",
+    "properties": {
+      "summary": { "type": "string" },
+      "tags": { "type": "array", "items": { "type": "string" } },
+      "extra": { "type": "string" }
+    },
+    "required": ["summary", "tags"]
+  },
+  "prompt_template": "Updated prompt: {{ transcript }}"
+}

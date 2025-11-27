@@ -73,11 +73,11 @@ class ProcessRequestSchema(BaseModel):
     template_id: Optional[str] = Field(
         None,
         description="The summary format template ID. Required if 'summary' is in features. Use /v1/templates to get available templates.",
-        json_schema_extra={"examples": ["meeting_notes_v1", "interview_summary_v1"]},
+        json_schema_extra={"examples": ["meeting_notes_v2", "interview_transcript_v2"]},
     )
     asr_backend: Optional[str] = Field(
-        default="chunkformer",
-        description="ASR backend selection. Available options: 'whisper', 'chunkformer'(default). Use /v1/models to get available backends.",
+        default="whisper",
+        description="ASR backend selection. Available options: 'whisper'(default), 'chunkformer'. Use /v1/models to get available backends.",
         json_schema_extra={
             "examples": ["whisper", "chunkformer"],
             "enum": ["whisper", "chunkformer"],
@@ -164,7 +164,7 @@ class ProcessRequestSchema(BaseModel):
                     "description": "Basic processing with default settings",
                     "value": {
                         "features": ["clean_transcript", "summary"],
-                        "template_id": "meeting_notes_v1",
+                        "template_id": "meeting_notes_v2",
                         "asr_backend": "whisper",
                     },
                 },
@@ -181,7 +181,7 @@ class ProcessRequestSchema(BaseModel):
                             "summary",
                             "enhancement_metrics",
                         ],
-                        "template_id": "meeting_notes_v1",
+                        "template_id": "meeting_notes_v2",
                         "asr_backend": "chunkformer",
                     },
                 },
@@ -437,3 +437,47 @@ class HealthResponse(BaseModel):
     redis_connected: bool
     queue_depth: int
     worker_active: bool
+
+
+class TemplateCreateSchema(BaseModel):
+    """Schema for creating a new template."""
+
+    id: str = Field(
+        ...,
+        description="Unique identifier for the template (alphanumeric, underscore, dash)",
+        pattern=r"^[a-zA-Z0-9_-]+$",
+    )
+    schema_data: Dict[str, Any] = Field(
+        ..., description="JSON Schema defining the structured output. MUST be passed as 'schema_data'."
+    )
+    prompt_template: str = Field(..., description="Jinja2 prompt template content")
+    example: Optional[Dict[str, Any]] = Field(
+        None, description="Optional example JSON output"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class TemplateUpdateSchema(BaseModel):
+    """Schema for updating an existing template."""
+
+    schema_data: Optional[Dict[str, Any]] = Field(
+        None, description="JSON Schema defining the structured output. MUST be passed as 'schema_data'."
+    )
+    prompt_template: Optional[str] = Field(
+        None, description="Jinja2 prompt template content"
+    )
+    example: Optional[Dict[str, Any]] = Field(
+        None, description="Optional example JSON output"
+    )
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class TemplateDetailSchema(TemplateInfoSchema):
+    """Detailed schema for a template including the prompt content."""
+
+    prompt_template: str = Field(..., description="Jinja2 prompt template content")
+    schema_data: Dict[str, Any] = Field(
+        ..., description="JSON Schema defining the structured output"
+    )
