@@ -6,7 +6,7 @@ for easy import and use throughout the application.
 """
 
 # Export main worker functions
-from .main import setup_redis_connection, start_worker, verify_models
+from .main import setup_redis_connection, start_worker
 
 # Export pipeline processing functions
 from .pipeline import (
@@ -18,7 +18,7 @@ __all__ = [
     # Main worker functions
     "start_worker",
     "setup_redis_connection",
-    "verify_models",
+
     # Pipeline processing functions
     "process_audio_task",
     "TaskStatus",

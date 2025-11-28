@@ -71,53 +71,12 @@ def setup_redis_connection() -> Redis:
     return redis_conn
 
 
-def verify_models() -> bool:
-    """Verify that required models are available before starting worker."""
-    # This function will check if the required models are accessible
-    # Implementation will depend on the specific model loading mechanism
-    get_logger().info("Verifying models are available...")
 
-    # Check if required model directories exist using configured paths from settings
-    required_paths = [
-        Path(settings.asr.whisper_model_path),
-        Path(settings.chunkformer.chunkformer_model_path),
-        Path(settings.llm_enhance.model),
-    ]
-
-    missing = [str(p) for p in required_paths if not p.exists()]
-    if missing:
-        get_logger().error(
-            "Missing models: {}. Run scripts/download_models.sh", missing
-        )
-        return False
-
-    # Verify processor modules are available without importing
-    try:
-        import importlib.util
-
-        has_asr_factory = (
-            importlib.util.find_spec("src.processors.asr.factory") is not None
-        )
-        has_llm = importlib.util.find_spec("src.processors.llm") is not None
-
-        if has_asr_factory and has_llm:
-            get_logger().info("All required models and modules are available")
-            return True
-        get_logger().error(
-            f"Missing required modules: ASRFactory={has_asr_factory}, LLM={has_llm}"
-        )
-        return False
-    except Exception:
-        get_logger().exception("Model verification failed")
-        return False
 
 
 def start_worker() -> None:
     """Start the RQ worker with proper configuration."""
-    # Verify models are available before connecting to Redis
-    if not verify_models():
-        get_logger().error("Model verification failed. Exiting.")
-        sys.exit(1)
+
 
     # Set up Redis connection
     redis_conn = setup_redis_connection()
