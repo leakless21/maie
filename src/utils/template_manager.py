@@ -10,6 +10,7 @@ from typing import Any, Dict, Optional, Tuple
 import aiofiles
 from src.config import settings
 from src.config.logging import get_module_logger
+from src.utils.json_utils import safe_parse_json
 
 logger = get_module_logger(__name__)
 
@@ -141,7 +142,10 @@ class TemplateManager:
 
         # Load Schema
         async with aiofiles.open(schema_path, "r", encoding="utf-8") as f:
-            content["schema"] = json.loads(await f.read())
+            parsed_schema, error = safe_parse_json(await f.read())
+            if error:
+                raise ValueError(f"Invalid schema JSON for {template_id}: {error}")
+            content["schema"] = parsed_schema
 
         # Load Prompt
         if prompt_path.exists():
@@ -153,7 +157,12 @@ class TemplateManager:
         # Load Example
         if example_path.exists():
             async with aiofiles.open(example_path, "r", encoding="utf-8") as f:
-                content["example"] = json.loads(await f.read())
+                parsed_example, error = safe_parse_json(await f.read())
+                if error:
+                    logger.warning(f"Invalid example JSON for {template_id}: {error}")
+                    content["example"] = None
+                else:
+                    content["example"] = parsed_example
         else:
             content["example"] = None
 

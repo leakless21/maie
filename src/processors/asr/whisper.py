@@ -468,12 +468,33 @@ class WhisperBackend(ASRBackend):
             segments_dict = []
             text_parts = []
 
+            # Calculate average confidence from segments
+            import math
+            total_confidence = 0.0
+            segment_count = 0
+
             for segment in segments_generator:
                 segment_dict = {
                     "start": segment.start,
                     "end": segment.end,
                     "text": segment.text,
                 }
+
+                # Calculate segment confidence
+                # faster-whisper provides avg_logprob for the segment
+                # We convert it to probability: e^avg_logprob
+                segment_confidence = 0.0
+                if hasattr(segment, "avg_logprob"):
+                    try:
+                        segment_confidence = math.exp(segment.avg_logprob)
+                    except (ValueError, OverflowError, TypeError):
+                        segment_confidence = 0.0
+                
+                # Clamp to 0.0 - 1.0 range
+                segment_confidence = max(0.0, min(1.0, segment_confidence))
+                
+                total_confidence += segment_confidence
+                segment_count += 1
 
                 # Capture word-level timestamps if available
                 if hasattr(segment, "words") and segment.words:
@@ -498,8 +519,8 @@ class WhisperBackend(ASRBackend):
             language = info.language if hasattr(info, "language") else None
             duration = info.duration if hasattr(info, "duration") else None
 
-            # Note: faster-whisper doesn't provide a single confidence score
-            # Individual segments may have their own scores
+            # Calculate global average confidence
+            avg_confidence = total_confidence / segment_count if segment_count > 0 else 0.0
 
             # DEBUG: Log ASR output preview
             text_preview = text[:200] + "..." if len(text) > 200 else text
@@ -511,13 +532,14 @@ class WhisperBackend(ASRBackend):
                 duration=duration,
                 char_count=len(text),
                 word_count=len(text.split()) if text else 0,
+                confidence=avg_confidence,
             )
 
             return ASRResult(
                 text=text,
                 segments=segments_dict,
                 language=language,
-                confidence=None,
+                confidence=avg_confidence,
                 duration=duration,
             )
 

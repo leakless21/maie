@@ -33,7 +33,7 @@ from src.tooling.vllm_utils import (
     get_model_info,
 )
 from src.utils.device import ensure_cuda_available, has_cuda
-from src.utils.json_utils import safe_json_loads
+from src.utils.json_utils import safe_parse_json
 
 from .schema_validator import (
     load_template_schema,
@@ -1022,7 +1022,7 @@ class LLMProcessor(LLMBackend):
                 template_id = kwargs.get("template_id")
                 try:
                     # Parse JSON output using safe utility
-                    structured_output = safe_json_loads(generated_text, default=None)
+                    structured_output, parse_error = safe_parse_json(generated_text)
 
                     if structured_output is not None:
                         # Validate against schema
@@ -1051,9 +1051,9 @@ class LLMProcessor(LLMBackend):
                             result_metadata["structured_summary"] = structured_output
                             result_metadata["validation"] = "skipped"
                     else:
-                        logger.error("Failed to parse JSON output")
+                        logger.error(f"Failed to parse JSON output: {parse_error}")
                         result_metadata["validation"] = "json_parse_error"
-                        result_metadata["parse_error"] = "Invalid JSON format"
+                        result_metadata["parse_error"] = parse_error
 
                 except Exception as e:
                     logger.error(f"Summary validation error: {e}")

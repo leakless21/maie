@@ -1,0 +1,42 @@
+{
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "A concise, appropriate title that captures the essence of the content",
+      "maxLength": 200
+    },
+    "summary": {
+      "type": "string",
+      "description": "Comprehensive summary of the content",
+      "maxLength": 2000
+    },
+    "key_topics": {
+      "type": "array",
+      "description": "Key themes or topics identified in the content",
+      "items": {
+        "type": "string",
+        "maxLength": 200
+      },
+      "minItems": 1,
+      "maxItems": 10
+    },
+    "tags": {
+      "type": "array",
+      "description": "Category tags for content classification (FR-6)",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": [
+    "title",
+    "summary",
+    "key_topics",
+    "tags"
+  ],
+  "additionalProperties": false
+}

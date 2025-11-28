@@ -2,60 +2,130 @@
 
 This guide is designed for frontend and mobile developers building applications that interact with the Modular Audio Intelligence Engine (MAIE) API.
 
-## 1. Introduction
+## 1. System Architecture & Internals
 
-MAIE is an audio processing platform that provides:
-- **Transcription**: Converting speech to text (ASR).
-- **Summarization**: Generating structured summaries from transcripts using LLMs.
-- **Diarization**: Identifying different speakers in the audio.
-- **Enhancement**: Improving audio quality (metrics only).
+### 1.1 Project Overview
+MAIE (Modular Audio Intelligence Engine) is a sophisticated, enterprise-grade audio processing system designed to transform raw audio data into structured intelligence. Unlike simple transcription services, MAIE focuses on deep understanding of content through a pipeline of Automatic Speech Recognition (ASR), Speaker Diarization, and Large Language Model (LLM) analysis.
 
-## 2. Authentication
+### 1.2 Technology Stack
+The system is built on a modern, high-performance stack:
+-   **API Framework**: [Litestar](https://litestar.dev/) (Python) - An asynchronous ASGI framework chosen for its performance and strict data validation.
+-   **Task Queue**: [Redis](https://redis.io/) + [RQ (Redis Queue)](https://python-rq.org/) - Handles asynchronous background processing and job management.
+-   **AI/ML Core**: [PyTorch](https://pytorch.org/) - The underlying deep learning framework.
+-   **ASR Engines**:
+    -   **Faster-Whisper**: An optimized implementation of OpenAI's Whisper model using CTranslate2 for faster inference.
+    -   **ChunkFormer**: A specialized model architecture for processing long-form audio efficiently.
+-   **LLM Engine**: [vLLM](https://github.com/vllm-project/vllm) - A high-throughput and memory-efficient serving engine for LLMs.
+-   **Diarization**: [pyannote.audio](https://github.com/pyannote/pyannote-audio) - State-of-the-art speaker diarization.
+-   **Validation**: [Pydantic](https://docs.pydantic.dev/) - Ensures strict schema validation for all inputs and outputs.
 
-All API requests must include the `X-API-Key` header.
+### 1.3 Detailed Architecture
+The system operates on a distributed, asynchronous model:
 
-```http
-X-API-Key: <your-api-key>
-```
+#### A. API Layer
+-   **Role**: Entry point for all client requests.
+-   **Streaming Uploads**: Audio files are streamed directly to disk (`save_audio_file_streaming`) to handle large files (up to 500MB) without loading them into RAM.
+-   **Validation**: Validates file types (magic numbers/MIME), extensions, and JSON schemas before accepting a task.
+-   **State Management**: Creates an initial task record in Redis with status `PENDING` and returns a `task_id` immediately (HTTP 202 Accepted).
 
-## 3. Core Workflow
+#### B. Worker Layer
+-   **Role**: Consumes tasks from the Redis queue and executes the processing pipeline.
+-   **Pipeline Stages**:
+    1.  **Preprocessing**:
+        -   Validates audio integrity.
+        -   Normalizes audio to 16kHz mono WAV using `ffmpeg`.
+    2.  **Voice Activity Detection (VAD)**:
+        -   (Optional) Uses Silero VAD to detect speech segments.
+        -   Optimizes processing by identifying silence.
+    3.  **ASR Processing**:
+        -   Loads the selected backend (Whisper or ChunkFormer).
+        -   Transcribes audio to text with word-level timestamps.
+        -   **Diarization**: If enabled, identifies speakers ("Speaker 0", "Speaker 1").
+        -   **Hallucination Filter**: Post-processes the transcript to remove common neural network artifacts (e.g., repeated phrases, silence hallucinations).
+    4.  **LLM Processing**:
+        -   **Template Loading**: Loads the selected template (Schema + Prompt).
+        -   **Prompt Rendering**: Uses Jinja2 to combine the transcript with the prompt template.
+        -   **Generation**: Sends the prompt to the vLLM engine.
+        -   **Structured Output**: Enforces the JSON schema to ensure the output matches the client's expectations exactly.
+    5.  **Finalization**:
+        -   Calculates metrics (RTF, Confidence).
+        -   Saves results to Redis.
+        -   Updates status to `COMPLETED`.
 
-The typical workflow for processing audio is asynchronous:
+#### C. Data Storage
+-   **Redis**:
+    -   **Queue**: Stores pending job information.
+    -   **Results**: Stores the final JSON output, status, and metrics. Keys expire automatically (TTL).
+-   **Filesystem**:
+    -   **Audio**: Temporary storage for uploaded and normalized audio files.
+    -   **Models**: Local cache for large model weights (Whisper, LLM, etc.).
 
-1.  **Upload Audio**: Submit an audio file to `/v1/process`. You will receive a `task_id`.
-2.  **Poll Status**: Periodically check the status of the task using `/v1/status/{task_id}`.
-3.  **Get Results**: When the status is `COMPLETE`, the response will contain the results (transcript, summary, etc.).
+### 1.4 Key Internal Features
 
-### Step 1: Upload Audio
+#### Template System
+The template system is the core of MAIE's flexibility. It decouples the *processing logic* from the *output format*.
+-   **Structure**:
+    -   `schema.json`: A standard JSON Schema defining the output fields.
+    -   `prompt.jinja`: Instructions for the LLM.
+-   **Workflow**: The API exposes endpoints to Create/Read/Update/Delete templates, allowing dynamic adjustment of the system's capabilities without code changes.
 
-**Endpoint**: `POST /v1/process`
-**Content-Type**: `multipart/form-data`
+#### Hallucination Filtering
+Neural ASR models often generate text during silence or noise. MAIE implements a robust filtering mechanism:
+-   **Exact Match**: Removes known hallucination phrases (e.g., "Subtitles by...").
+-   **Repetition Detection**: Identifies and removes looping phrases.
+-   **Confidence Thresholds**: Filters out low-confidence segments.
 
-**Parameters:**
+#### Performance Metrics
+Every task generates detailed metrics for monitoring:
+-   `rtf` (Real-Time Factor): Ratio of processing time to audio duration.
+-   `asr_confidence_avg`: Average confidence score of the transcription.
+-   `processing_time_seconds`: Total wall-clock time for the task.
 
-| Parameter | Type | Required | Description |
+---
+
+## 2. API Endpoint Specifications
+
+### Overview
+Base URL: `http://<host>:<port>` (e.g., `http://localhost:8000`)
+
+| Method | Endpoint | Description | Auth |
 | :--- | :--- | :--- | :--- |
-| `file` | File | Yes | Audio file (WAV, MP3, M4A, FLAC). Max 500MB. |
-| `features` | Array/String | No | List of features: `clean_transcript`, `raw_transcript`, `summary`, `enhancement_metrics`. Default: `['clean_transcript']`. |
-| `template_id` | String | Conditional | Required if `summary` feature is requested. ID of the template to use (e.g., `meeting_notes_v2`). |
-| `asr_backend` | String | No | `whisper` (default) or `chunkformer`. |
-| `enable_diarization` | Boolean | No | `true` or `false` (default). Enables speaker identification. |
-| `enable_vad` | Boolean | No | `true` or `false`. Explicitly enable/disable Voice Activity Detection. |
-| `vad_threshold` | Float | No | `0.0` to `1.0`. VAD confidence threshold. Default: `0.5`. |
+| `POST` | `/v1/process` | Upload audio for transcription & summarization | API Key |
+| `POST` | `/v1/process_text` | Submit text for summarization/enhancement | API Key |
+| `GET` | `/v1/status/{task_id}` | Check processing status & get results | API Key |
+| `GET` | `/v1/models` | List available ASR/LLM models | None |
+| `GET` | `/v1/templates` | List available summary templates | None |
+| `GET` | `/v1/templates/{id}` | Get template details | None |
+| `POST` | `/v1/templates` | Create a new template | API Key |
+| `PUT` | `/v1/templates/{id}` | Update an existing template | API Key |
+| `DELETE` | `/v1/templates/{id}` | Delete a template | API Key |
+| `GET` | `/health` | System health check | None |
 
-**Example Request (cURL):**
+### Authentication
+All state-changing or resource-intensive endpoints require an API Key.
+**Header**: `X-API-Key: <your-api-key>`
 
-```bash
-curl -X POST "https://api.example.com/v1/process" \
-  -H "X-API-Key: your-key" \
-  -F "file=@meeting.mp3" \
-  -F "features=clean_transcript" \
-  -F "features=summary" \
-  -F "template_id=meeting_notes_v2"
-```
+---
 
-**Example Response:**
+## 3. Processing & Output
 
+### Audio Processing (`POST /v1/process`)
+Submits an audio file for asynchronous processing.
+
+**Request:**
+- **Content-Type**: `multipart/form-data`
+- **Body Parameters**:
+  - `file` (File, Required): Audio file (WAV, MP3, M4A, FLAC). Max 100MB.
+  - `features` (String[], Optional): List of desired outputs.
+    - Options: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics`.
+    - Default: `["clean_transcript", "summary"]`.
+  - `template_id` (String, Conditional): Required if `summary` is in features.
+  - `asr_backend` (String, Optional): `whisper` (default) or `chunkformer`.
+  - `enable_diarization` (Boolean, Optional): Enable speaker identification (default `false`).
+  - `enable_vad` (Boolean, Optional): Enable Voice Activity Detection (default system setting).
+  - `vad_threshold` (Float, Optional): VAD confidence threshold (0.0-1.0, default 0.5).
+
+**Response (Success):**
 ```json
 {
   "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
@@ -63,207 +133,129 @@ curl -X POST "https://api.example.com/v1/process" \
 }
 ```
 
-### Step 2: Poll Status
+### Text Processing (`POST /v1/process_text`)
+Submits text for summarization or enhancement without audio processing.
 
-**Endpoint**: `GET /v1/status/{task_id}`
+**Request:**
+- **Content-Type**: `application/json`
+- **Body Parameters**:
+  - `text` (String, Required): Input text to process.
+  - `features` (String[], Optional): `["summary"]` (default), `["clean_transcript"]` (for enhancement).
+  - `template_id` (String, Conditional): Required if `summary` is in features.
 
-**Polling Strategy**:
-- Poll every 2-5 seconds.
-- Stop polling when `status` is `COMPLETE` or `FAILED`.
-
-**Example Request:**
-
-```bash
-curl "https://api.example.com/v1/status/c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b" \
-  -H "X-API-Key: your-key"
-```
-
-**Response (Processing):**
-
+**Response (Success):**
 ```json
 {
-  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-  "status": "PROCESSING_ASR",
-  "stage": "asr"
+  "task_id": "a1b2c3d4-5e6f-7g8h-9i0j-1k2l3m4n5o6p",
+  "status": "PENDING"
 }
 ```
 
-**Response (Complete):**
- 
- ```json
- {
-   "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
-   "status": "COMPLETE",
-   "submitted_at": "2023-10-27T10:00:00Z",
-   "completed_at": "2023-10-27T10:02:45Z",
-   "versions": {
-     "pipeline_version": "1.0.0",
-     "asr_backend": {
-       "name": "whisper",
-       "model_variant": "erax-wow-turbo",
-       "version": "1.0"
-     },
-     "llm": {
-       "name": "qwen3",
-       "quantization": "awq-4bit"
-     }
-   },
-   "metrics": {
-     "input_duration_seconds": 180.5,
-     "processing_time_seconds": 45.2,
-     "rtf": 0.25,
-     "vad_coverage": 0.95,
-     "asr_confidence_avg": 0.98,
-     "vad_segments": 12,
-     "edit_rate_cleaning": 0.02
-   },
-   "results": {
-     "raw_transcript": "hello everyone welcome to the meeting...",
-     "clean_transcript": "Hello everyone, welcome to the meeting...",
-     "summary": {
-       "title": "Project Kickoff",
-       "main_points": [
-         "Timeline agreed for Q4",
-         "Budget approved with 10% contingency"
-       ],
-       "action_items": [
-         "John to send email to stakeholders",
-         "Sarah to set up Jira board"
-       ],
-       "tags": ["Project Management", "Kickoff", "Budget"]
-     }
-   }
- }
- ```
- 
- **Response Fields:**
- 
- -   `versions`: Metadata about the models used, ensuring reproducibility.
- -   `metrics`: Performance data.
-     -   `rtf` (Real-Time Factor): Processing time / Audio duration. Lower is faster.
-     -   `asr_confidence_avg`: Average confidence of the transcription (0.0 - 1.0).
- -   `results`: The core output.
-     -   `clean_transcript`: The text with punctuation and capitalization fixed.
-     -   `summary`: The structured summary. The exact fields (`title`, `main_points`, etc.) depend on the `template_id` used.
-     -   `tags`: Automatically generated category tags (embedded within the summary object).
+### Tag/Metadata Extraction
+Tag extraction is handled as part of the **Summary** feature.
+- It is defined in the **Template Schema** (e.g., a `tags` field in the JSON schema).
+- The LLM extracts tags based on the content and the schema definition.
+- Output is found in `results.summary.tags` (or similar, depending on template).
 
-## 4. Helper Endpoints
+---
 
-### Get Available Templates
+## 4. Template System
 
-**Endpoint**: `GET /v1/templates`
+Templates define the structure and instructions for the LLM summarization.
 
-Use this to populate a dropdown or selection screen for the user to choose a summary format.
+### Template Structure
+A template consists of:
+1.  **ID**: Unique identifier (e.g., `meeting_notes_v2`).
+2.  **Schema Data**: A JSON Schema defining the output structure (fields, types, descriptions).
+3.  **Prompt Template**: A Jinja2 template string (e.g., `Summarize this: {{ transcript }}`).
+4.  **Example**: A sample JSON output.
 
-**Response:**
+### Template Usage
+- **Selection**: Users select a template (e.g., "Meeting Notes", "Interview").
+- **Output Control**: The template's `schema_data` strictly controls the JSON structure of the `summary` output.
+    - If the schema has `attendees`, `decisions`, `action_items`, the output will have those fields.
+- **Custom Templates**: Admins/Developers can create custom templates via the API.
 
-```json
-{
-  "templates": [
-    {
-      "id": "meeting_notes_v2",
-      "name": "Meeting Notes",
-      "description": "Standard meeting summary with action items.",
-      "schema_url": "...",
-      "example": { ... }
-    },
-    ...
-  ]
-}
-```
+### Template Management Endpoints
+- **Create**: `POST /v1/templates`
+- **Update**: `PUT /v1/templates/{template_id}`
+- **Delete**: `DELETE /v1/templates/{template_id}`
+- **Get Details**: `GET /v1/templates/{template_id}` (includes prompt & schema)
+- **Get Schema**: `GET /v1/templates/{template_id}/schema` (raw JSON schema)
 
-### Get Available Models
+---
 
-**Endpoint**: `GET /v1/models`
+## 5. Processing Performance
 
-Use this if you want to allow advanced users to select the ASR backend.
+### Processing Times
+- **Real-Time Factor (RTF)**: Typically 0.1 - 0.3 (e.g., 10 minutes of audio takes 1-3 minutes).
+- **Latency**: Depends on queue depth and audio length. Longer audio takes proportionally longer.
+- **Metrics**: Returned in the `metrics` field of the status response (`processing_time_seconds`, `rtf`).
 
-## 5. Error Handling
+### Concurrency & Limits
+- **Queue**: Requests are queued in Redis.
+- **Limits**:
+    - **Max File Size**: 100MB (configurable).
+    - **Rate Limits**: Configured per API key/IP (default 60 req/min for lightweight, stricter for processing).
+    - **Queue Depth**: Rejects requests with `429 Too Many Requests` if the queue is full.
 
-Check the `status` field in the response. If `status` is `FAILED`, check the `error` and `error_code` fields.
+### Output Quality
+- **Confidence**: `asr_confidence_avg` (0.0 - 1.0) indicates transcription certainty.
+    - > 0.9: High quality.
+    - < 0.7: Low quality (check audio clarity, background noise).
+- **Limitations**: Heavy background noise or overlapping speech can degrade diarization and transcription accuracy.
 
-| Error Code | Description | Action |
-| :--- | :--- | :--- |
-| `ASR_PROCESSING_ERROR` | Failed to transcribe audio. | Retry, check audio quality/format. |
-| `MODEL_LOAD_ERROR` | Server-side model issue. | Retry later, contact support. |
-| `VALIDATION_ERROR` | Invalid input parameters. | Check request parameters. |
+---
 
-## 6. Best Practices
+## 6. Error Handling & Status
 
-- **File Size**: Keep uploads under 500MB.
-- **Audio Quality**: 16kHz WAV is optimal, but MP3/M4A are supported.
-- **Timeouts**: Processing can take time (approx 10-20% of audio duration). Ensure your client has appropriate timeouts or background processing capabilities.
-- **Rate Limiting**: The API is rate-limited. Handle `429 Too Many Requests` responses gracefully.
+### Processing States (`status` field)
+- `PENDING`: Task accepted, waiting in queue.
+- `PREPROCESSING`: Audio validation/conversion in progress.
+- `PROCESSING_ASR`: Transcribing audio.
+- `PROCESSING_LLM`: Generating summary/enhancement.
+- `COMPLETE`: Finished successfully. Results available.
+- `FAILED`: Error occurred.
 
-## 7. Template Management
+### Error Responses
+**HTTP Errors (Immediate):**
+- `413 Payload Too Large`: File exceeds 100MB.
+- `415 Unsupported Media Type`: Invalid file format.
+- `422 Unprocessable Entity`: Missing parameters, invalid template ID.
+- `429 Too Many Requests`: Rate limit exceeded or Queue full.
 
-The API provides full CRUD capabilities for managing summary templates.
+**Task Errors (in `GET /v1/status/{id}`):**
+If `status` is `FAILED`, check `error` and `error_code`:
+- `ASR_PROCESSING_ERROR`: Transcription failed.
+- `LLM_PROCESSING_ERROR`: Summarization failed.
+- `AUDIO_VALIDATION_ERROR`: Corrupt or empty audio file.
 
-### Get Template Details
+### Async Workflow
+1.  **Submit**: `POST /v1/process` → Returns `task_id` immediately (HTTP 202).
+2.  **Poll**: `GET /v1/status/{task_id}` every 2-5 seconds.
+3.  **Finish**: Stop when status is `COMPLETE` or `FAILED`.
 
-**Endpoint**: `GET /v1/templates/{template_id}`
+---
 
-**Response:**
+## 7. Data Retention & Privacy
 
-```json
-{
-  "id": "meeting_notes_v2",
-  "name": "Meeting Notes",
-  "description": "Standard meeting summary with action items.",
-  "schema_url": "/v1/templates/meeting_notes_v2/schema",
-  "parameters": {},
-  "example": { ... },
-  "prompt_template": "Summarize this: {{ transcript }}",
-  "schema_data": {
-    "title": "Meeting Notes",
-    "type": "object",
-    "properties": { ... }
-  }
-}
-```
+### Storage
+- **Audio Files**: Stored temporarily in the configured `audio_dir` (under a `task_id` folder) for processing.
+- **Results**: Stored in Redis.
 
-### Create Template
+### Retention Policy
+- **Results (Redis)**: Auto-expire after a configured TTL (default: 24 hours).
+- **Audio Files**: Currently persisted in the task directory. Cleanup policy depends on server configuration (manual or cron job recommended).
+- **Logging**: Access logs and processing steps are logged. No audio content is logged, but metadata (filename, duration) is.
 
-**Endpoint**: `POST /v1/templates`
-**Content-Type**: `application/json`
+---
 
-**Body:**
+## 8. Cost & Quotas
 
-```json
-{
-  "id": "new_template_v1",
-  "schema_data": {
-    "title": "New Template",
-    "type": "object",
-    "properties": {
-      "summary": { "type": "string" },
-      "tags": { "type": "array", "items": { "type": "string" } }
-    },
-    "required": ["summary", "tags"]
-  },
-  "prompt_template": "Summarize this: {{ transcript }}",
-  "example": {
-    "summary": "Example summary",
-    "tags": ["tag1"]
-  }
-}
-```
+### Usage Tracking
+- **Metrics**: Every completed task returns `input_duration_seconds` and `transcription_length`. These can be used for billing (e.g., cost per minute).
+- **Reporting**: Usage data is not stored in a permanent SQL database by MAIE itself; it relies on Redis for transient results. External logging/monitoring is required for long-term usage tracking.
 
-### Update Template
-
-**Endpoint**: `PUT /v1/templates/{template_id}`
-**Content-Type**: `application/json`
-
-**Body:** (Partial updates allowed)
-
-```json
-{
-  "prompt_template": "Updated prompt: {{ transcript }}"
-}
-```
-
-### Delete Template
-
-**Endpoint**: `DELETE /v1/templates/{template_id}`
-
-**Response**: `204 No Content`
+### Rate Limiting
+- **Global/Key Limit**: Enforced via Redis.
+- **Headers**: Standard `X-RateLimit-*` headers are returned to indicate remaining quota.

@@ -42,13 +42,14 @@ from src.api.schemas import (
     TemplateCreateSchema,
     TemplateUpdateSchema,
     TemplateDetailSchema,
+    TextProcessRequestSchema,
 )
 from src.api.dependencies import api_key_guard, get_template_manager
 from src.config import settings
 from src.config.logging import get_module_logger, correlation_id as _cid_var
 from src.utils.sanitization import sanitize_filename
 from src.utils.sanitization import sanitize_filename
-from src.utils.json_utils import safe_json_loads
+from src.utils.json_utils import safe_parse_json
 from src.utils.template_manager import TemplateManager
 
 # Create module-bound logger for better debugging
@@ -246,6 +247,83 @@ class ProcessController(Controller):
     """Controller for processing endpoints."""
 
     @post(
+        "/v1/process_text",
+        guards=[api_key_guard],
+        summary="Process text input",
+        description="Submit text for summarization or enhancement.",
+        tags=["Processing"],
+        status_code=HTTP_202_ACCEPTED,
+    )
+    async def process_text(
+        self,
+        data: TextProcessRequestSchema,
+    ) -> ProcessResponse:
+        """
+        Process text input for summary or enhancement.
+
+        Args:
+            data: JSON payload containing text and parameters
+
+        Returns:
+            Response with task ID
+        """
+        # Check queue capacity
+        if not check_queue_depth():
+            raise HTTPException(
+                status_code=HTTP_429_TOO_MANY_REQUESTS,
+                detail="Queue is full. Please try again later.",
+            )
+
+        # Generate task ID
+        task_id = uuid.uuid4()
+
+        # Create task record in Redis
+        from src.api.dependencies import get_results_redis
+        redis_client = await get_results_redis()
+        try:
+            task_key = f"task:{task_id}"
+            task_data = {
+                "task_id": str(task_id),
+                "status": TaskStatus.PENDING.value,
+                "submitted_at": datetime.now(timezone.utc).isoformat(),
+                "features": json.dumps([f.value for f in data.features]),
+                "template_id": data.template_id or "",
+                "correlation_id": _cid_var.get() or "",
+                "input_type": "text",
+            }
+            await redis_client.hset(task_key, mapping=task_data)
+            await redis_client.expire(task_key, settings.worker.result_ttl)
+        finally:
+            await redis_client.aclose()
+
+        # Enqueue job
+        from src.api.dependencies import get_rq_queue
+        queue = get_rq_queue()
+        
+        job_func = "src.worker.pipeline.process_text_task"
+        
+        task_params = {
+            "task_id": str(task_id),
+            "text": data.text,
+            "features": [f.value for f in data.features],
+            "template_id": data.template_id,
+            "redis_host": "localhost",
+            "redis_port": 6379,
+            "redis_db": settings.redis.results_db,
+            "correlation_id": _cid_var.get() or None,
+        }
+
+        queue.enqueue(
+            job_func,
+            task_params,
+            job_id=str(task_id),
+            job_timeout=settings.worker.job_timeout,
+            result_ttl=settings.worker.result_ttl,
+        )
+
+        return ProcessResponse(task_id=task_id, status="PENDING")
+
+    @post(
         "/v1/process",
         guards=[api_key_guard],
         summary="Process audio file",
@@ -346,13 +424,10 @@ class ProcessController(Controller):
         features_value = prepared_data.get("features")
         # Use consolidated JSON utility for safe JSON parsing with fallback handling
         if isinstance(features_value, str):
-            # Handle JSON string format
-            if features_value.startswith("[") and features_value.endswith("]"):
-                parsed = safe_json_loads(features_value, default=[features_value])
-                if isinstance(parsed, list):
-                    prepared_data["features"] = parsed
-                else:
-                    prepared_data["features"] = [features_value]
+            # Handle JSON string format (including markdown fences)
+            parsed, _ = safe_parse_json(features_value)
+            if isinstance(parsed, list):
+                prepared_data["features"] = parsed
             else:
                 prepared_data["features"] = [features_value]
         elif (
@@ -362,7 +437,7 @@ class ProcessController(Controller):
             and features_value[0].startswith("[")
         ):
             # Handle case where multipart parser wraps JSON string in a list
-            parsed = safe_json_loads(features_value[0], default=None)
+            parsed, _ = safe_parse_json(features_value[0])
             if parsed is not None and isinstance(parsed, list):
                 prepared_data["features"] = parsed
         try:
@@ -399,13 +474,13 @@ class ProcessController(Controller):
             )
 
         # Normalize features to list - support both JSON array and repeated fields
-        if (
-            isinstance(features_raw, str)
-            and features_raw.startswith("[")
-            and features_raw.endswith("]")
-        ):
+        if isinstance(features_raw, str):
             # Use consolidated JSON utility for safe parsing with a sensible fallback
-            features_raw = safe_json_loads(features_raw, default=[features_raw])
+            parsed, _ = safe_parse_json(features_raw)
+            if isinstance(parsed, list):
+                features_raw = parsed
+            else:
+                features_raw = [features_raw]
         elif not isinstance(features_raw, list):
             features_raw = [features_raw] if features_raw else []
 
@@ -563,7 +638,7 @@ async def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
         # Deserialize JSON fields using consolidated utils
         for field in ["features", "results", "metrics", "versions"]:
             if field in task_data and task_data[field]:
-                task_data[field] = safe_json_loads(task_data[field], default=None)
+                task_data[field], _ = safe_parse_json(task_data[field])
 
         return task_data
     finally:

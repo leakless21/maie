@@ -11,6 +11,8 @@ from uuid import UUID
 from litestar.datastructures import UploadFile
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from src.utils.json_utils import safe_parse_json
+
 # =============================================================================
 # Enums
 # =============================================================================
@@ -108,14 +110,10 @@ class ProcessRequestSchema(BaseModel):
     def _coerce_features(cls, value: Any) -> List[Feature]:
         """Convert features from various input formats to List[Feature]."""
         if isinstance(value, str):
-            # Handle JSON string format
-            if value.startswith("[") and value.endswith("]"):
-                try:
-                    parsed = json.loads(value)
-                    if isinstance(parsed, list):
-                        return [Feature(f) if isinstance(f, str) else f for f in parsed]
-                except (json.JSONDecodeError, ValueError):
-                    pass
+            # Handle JSON string format (including markdown fences)
+            parsed, _ = safe_parse_json(value)
+            if isinstance(parsed, list):
+                return [Feature(f) if isinstance(f, str) else f for f in parsed]
             # Handle single feature as string
             return [Feature(value)]
         elif isinstance(value, list):
@@ -207,6 +205,59 @@ class ProcessRequestSchema(BaseModel):
         return self
 
 
+class TextProcessRequestSchema(BaseModel):
+    """
+    Request schema for the /v1/process_text endpoint.
+
+    This schema defines the JSON payload for text-only processing requests.
+    """
+
+    text: str = Field(
+        ...,
+        description="The input text to process.",
+        min_length=1,
+        json_schema_extra={"example": "This is a transcript of a meeting..."},
+    )
+    features: List[Feature] = Field(
+        default=[Feature.SUMMARY],
+        description="Desired outputs. Available options: 'summary', 'clean_transcript' (enhancement), 'enhancement_metrics'. 'raw_transcript' is ignored.",
+        json_schema_extra={"example": ["summary"]},
+    )
+    template_id: Optional[str] = Field(
+        None,
+        description="The summary format template ID. Required if 'summary' is in features.",
+        json_schema_extra={"example": "meeting_notes_v2"},
+    )
+
+    @field_validator("features", mode="before")
+    @classmethod
+    def _coerce_features(cls, value: Any) -> List[Feature]:
+        """Convert features from various input formats to List[Feature]."""
+        if isinstance(value, str):
+            # Handle JSON string format or single value
+            parsed, _ = safe_parse_json(value)
+            if isinstance(parsed, list):
+                return [Feature(f) if isinstance(f, str) else f for f in parsed]
+            return [Feature(value)]
+        elif isinstance(value, list):
+            return [Feature(f) if isinstance(f, str) else f for f in value]
+        else:
+            return [Feature.SUMMARY]
+
+    @model_validator(mode="after")
+    def check_template_required(self):
+        """Ensure template_id is present when summary is requested."""
+        features = getattr(self, "features", None)
+        template_id = getattr(self, "template_id", None)
+        if not features:
+            return self
+
+        normalized = [getattr(f, "value", f) for f in features]
+        if Feature.SUMMARY.value in normalized and not template_id:
+            raise ValueError("template_id is required when summary is in features")
+        return self
+
+
 # =============================================================================
 # Response Models
 # =============================================================================
@@ -274,7 +325,9 @@ class MetricsSchema(BaseModel):
     )
     rtf: float = Field(..., description="Real-Time Factor")
     vad_coverage: float = Field(..., description="VAD coverage ratio")
-    asr_confidence_avg: float = Field(..., description="Average ASR confidence")
+    asr_confidence_avg: float | None = Field(
+        default=None, description="Average ASR confidence"
+    )
     vad_segments: int | None = Field(
         default=None, description="Number of speech segments detected by VAD"
     )
