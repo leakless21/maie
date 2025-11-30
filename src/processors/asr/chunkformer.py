@@ -10,7 +10,7 @@ from typing import Optional, Any
 
 from src import config as cfg
 from src.processors.base import ASRBackend, ASRResult, VersionInfo
-from src.utils.device import ensure_cuda_available
+from src.utils.device import ensure_cuda_available, select_device
 from src.config.logging import get_module_logger
 
 logger = get_module_logger(__name__)
@@ -169,26 +169,29 @@ class ChunkFormerBackend(ASRBackend):
                 ) from exc
             return
 
-        # Device resolution: env > config > auto
+        # Device resolution: backend-specific env > config > universal device utility
+        # Check backend-specific env var first (CHUNKFORMER_DEVICE)
         device_env = os.getenv("CHUNKFORMER_DEVICE")
         cfg_device = (
             getattr(cfg.settings.chunkformer, "chunkformer_device", None)
             if hasattr(cfg, "settings")
             else None
         )
-        device = device_env or cfg_device or "auto"
-
-        if device == "auto":
-            try:
-                import torch as _torch  # type: ignore  # noqa: F401
-            except ImportError:
-                raise RuntimeError(
-                    "PyTorch is not installed. GPU is required for offline deployment."
-                )
+        
+        # Use select_device() utility for consistent device selection
+        # It handles "auto", CUDA detection, and fallbacks
+        prefer_device = device_env or cfg_device or "auto"
+        requires_cuda = prefer_device in ("auto", "cuda") or prefer_device.startswith("cuda")
+        device = select_device(prefer=prefer_device, allow_mps=False)
+        
+        # If CUDA is required but not available, raise error
+        if requires_cuda:
             ensure_cuda_available(
                 "CUDA is not available. GPU is required for offline deployment."
             )
-            device = "cuda"
+            # Ensure device is set to cuda if we required it
+            if device != "cuda" and not device.startswith("cuda"):
+                device = "cuda"
 
         try:
             # Prefer Class.from_pretrained if present
@@ -198,15 +201,51 @@ class ChunkFormerBackend(ASRBackend):
                 and hasattr(ModelCls, "from_pretrained")
                 and callable(getattr(ModelCls, "from_pretrained"))
             ):
+                # from_pretrained doesn't accept device parameter, load first then move to device
                 self.model = ModelCls.from_pretrained(
-                    self.model_path, device=device, **kwargs
+                    self.model_path, **kwargs
                 )
             elif hasattr(cf, "load_model") and callable(getattr(cf, "load_model")):
-                self.model = cf.load_model(self.model_path, device=device, **kwargs)
+                # Try load_model with device, but may not be supported
+                try:
+                    self.model = cf.load_model(self.model_path, device=device, **kwargs)
+                except TypeError:
+                    # If load_model doesn't accept device, load then move
+                    self.model = cf.load_model(self.model_path, **kwargs)
             elif ModelCls is not None:
-                self.model = ModelCls(self.model_path, device=device, **kwargs)
+                # Try constructor with device, but may not be supported
+                try:
+                    self.model = ModelCls(self.model_path, device=device, **kwargs)
+                except TypeError:
+                    # If constructor doesn't accept device, create then move
+                    self.model = ModelCls(self.model_path, **kwargs)
             else:
                 raise RuntimeError("chunkformer module has no known model entrypoints")
+
+            # Explicitly move model to the target device
+            # ChunkFormer models are PyTorch models and support .to() method
+            if device and device != "cpu":
+                try:
+                    import torch
+                    if hasattr(self.model, "to") and callable(getattr(self.model, "to")):
+                        self.model = self.model.to(device)
+                        logger.debug("Moved ChunkFormer model to device: {}", device)
+                        # Verify device placement
+                        try:
+                            if hasattr(self.model, "parameters") and callable(self.model.parameters):
+                                first_param = next(self.model.parameters(), None)
+                                if first_param is not None:
+                                    actual_device = str(first_param.device)
+                                    logger.debug(
+                                        "ChunkFormer model device verification: requested={}, actual={}",
+                                        device, actual_device
+                                    )
+                        except Exception:
+                            pass  # Verification failed, but model was moved
+                except Exception as move_exc:
+                    logger.warning(
+                        "Failed to move ChunkFormer model to device {}: {}", device, move_exc
+                    )
 
             try:
                 setattr(self.model, "device", device)
