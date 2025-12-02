@@ -14,6 +14,17 @@ NC='\033[0m' # No Color
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
+# Check if pixi is available
+if ! command -v pixi &> /dev/null; then
+    echo -e "${RED}Error: pixi is not installed. Please install pixi to manage the environment.${NC}"
+    echo "Install: curl -fsSL https://pixi.sh/install.sh | bash"
+    exit 1
+fi
+
+# Sync dependencies
+echo "Installing dependencies with pixi..."
+pixi install
+
 # Set CUDA_HOME for TVM compilation (if using pixi environment)
 if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cuda_runtime" ]; then
     export CUDA_HOME="$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cuda_runtime"
@@ -37,9 +48,9 @@ echo -e "${GREEN}MAIE vLLM Server Launcher${NC}"
 echo ""
 
 # Check if vLLM is installed
-if ! python -c "import vllm" 2>/dev/null; then
+if ! pixi run python -c "import vllm" 2>/dev/null; then
     echo -e "${RED}Error: vLLM is not installed${NC}"
-    echo "Install with: pip install vllm"
+    echo "Install with: pixi install"
     exit 1
 fi
 
@@ -54,9 +65,9 @@ fi
 echo -e "${YELLOW}Reading configuration from src/config/model.py...${NC}"
 
 if [[ "$SHOW_CONFIG" == "true" ]]; then
-    VLLM_ARGS=$(python scripts/vllm_server_config.py --model-type "$MODEL_TYPE" --show-config)
+    VLLM_ARGS=$(pixi run python scripts/vllm_server_config.py --model-type "$MODEL_TYPE" --show-config)
 else
-    VLLM_ARGS=$(python scripts/vllm_server_config.py --model-type "$MODEL_TYPE")
+    VLLM_ARGS=$(pixi run python scripts/vllm_server_config.py --model-type "$MODEL_TYPE")
 fi
 
 if [ $? -ne 0 ]; then
@@ -79,4 +90,4 @@ echo -e "${GREEN}Starting vLLM server...${NC}"
 echo ""
 
 # Launch vLLM server with OpenAI-compatible API
-exec python -m vllm.entrypoints.openai.api_server $VLLM_ARGS
+exec pixi run python -m vllm.entrypoints.openai.api_server $VLLM_ARGS

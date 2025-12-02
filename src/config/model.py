@@ -102,6 +102,10 @@ class ApiSettings(BaseModel):
         default=("test-key-123456789012345678901234567890",)
     )
     max_file_size_mb: float = Field(default=500.0)
+    default_asr_backend: str = Field(
+        default="whisper",
+        description="Default ASR backend to use when not specified in API requests. Options: 'whisper', 'chunkformer'",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 
@@ -285,13 +289,13 @@ class ChunkformerSettings(BaseModel):
     )
     chunkformer_chunk_size: int = Field(default=64, description="Chunk size in frames")
     chunkformer_left_context_size: int = Field(
-        default=128, description="Left context size in frames"
+        default=64, description="Left context size in frames"
     )
     chunkformer_right_context_size: int = Field(
-        default=128, description="Right context size in frames"
+        default=64, description="Right context size in frames"
     )
     chunkformer_total_batch_duration: int = Field(
-        default=14400, description="Total batch duration in seconds"
+        default=7200, description="Total batch duration in seconds"
     )
     chunkformer_return_timestamps: bool = Field(default=True)
     chunkformer_device: str = Field(default="cuda")
@@ -678,7 +682,6 @@ class AppSettings(BaseSettings):
 
     def get_model_path(self, model_type: str) -> Path:
         return self.paths.models_dir / model_type
-
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
         Apply a profile to the settings instance, respecting fields set via environment variables.
@@ -710,3 +713,4 @@ class AppSettings(BaseSettings):
 
         updated = _apply(self, profile)
         return cast(AppSettings, updated)
+

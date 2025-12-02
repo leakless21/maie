@@ -78,8 +78,8 @@ class ProcessRequestSchema(BaseModel):
         json_schema_extra={"examples": ["meeting_notes_v2", "interview_transcript_v2"]},
     )
     asr_backend: Optional[str] = Field(
-        default="whisper",
-        description="ASR backend selection. Available options: 'whisper'(default), 'chunkformer'. Use /v1/models to get available backends.",
+        default=None,
+        description="ASR backend selection. If not specified, uses the system default. Available options: 'whisper', 'chunkformer'. Use /v1/models to get available backends.",
         json_schema_extra={
             "examples": ["whisper", "chunkformer"],
             "enum": ["whisper", "chunkformer"],

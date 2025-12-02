@@ -44,14 +44,14 @@ def _normalize_timestamp(value: Any) -> Optional[float]:
             hh, mm, ss, frac = m.groups()
             base = int(hh) * 3600 + int(mm) * 60 + int(ss)
             return base + int(frac) / 1000.0
-        
+
         # Try HH:MM:SS:mmm format (colon separator - ChunkFormer format)
         m = re.match(r"(\d{1,2}):(\d{2}):(\d{2}):(\d{3})", s)
         if m:
             hh, mm, ss, frac = m.groups()
             base = int(hh) * 3600 + int(mm) * 60 + int(ss)
             return base + int(frac) / 1000.0
-        
+
         try:
             return float(s)
         except Exception:
@@ -177,13 +177,15 @@ class ChunkFormerBackend(ASRBackend):
             if hasattr(cfg, "settings")
             else None
         )
-        
+
         # Use select_device() utility for consistent device selection
         # It handles "auto", CUDA detection, and fallbacks
         prefer_device = device_env or cfg_device or "auto"
-        requires_cuda = prefer_device in ("auto", "cuda") or prefer_device.startswith("cuda")
+        requires_cuda = prefer_device in ("auto", "cuda") or prefer_device.startswith(
+            "cuda"
+        )
         device = select_device(prefer=prefer_device, allow_mps=False)
-        
+
         # If CUDA is required but not available, raise error
         if requires_cuda:
             ensure_cuda_available(
@@ -202,9 +204,7 @@ class ChunkFormerBackend(ASRBackend):
                 and callable(getattr(ModelCls, "from_pretrained"))
             ):
                 # from_pretrained doesn't accept device parameter, load first then move to device
-                self.model = ModelCls.from_pretrained(
-                    self.model_path, **kwargs
-                )
+                self.model = ModelCls.from_pretrained(self.model_path, **kwargs)
             elif hasattr(cf, "load_model") and callable(getattr(cf, "load_model")):
                 # Try load_model with device, but may not be supported
                 try:
@@ -227,24 +227,32 @@ class ChunkFormerBackend(ASRBackend):
             if device and device != "cpu":
                 try:
                     import torch
-                    if hasattr(self.model, "to") and callable(getattr(self.model, "to")):
+
+                    if hasattr(self.model, "to") and callable(
+                        getattr(self.model, "to")
+                    ):
                         self.model = self.model.to(device)
                         logger.debug("Moved ChunkFormer model to device: {}", device)
                         # Verify device placement
                         try:
-                            if hasattr(self.model, "parameters") and callable(self.model.parameters):
+                            if hasattr(self.model, "parameters") and callable(
+                                self.model.parameters
+                            ):
                                 first_param = next(self.model.parameters(), None)
                                 if first_param is not None:
                                     actual_device = str(first_param.device)
                                     logger.debug(
                                         "ChunkFormer model device verification: requested={}, actual={}",
-                                        device, actual_device
+                                        device,
+                                        actual_device,
                                     )
                         except Exception:
                             pass  # Verification failed, but model was moved
                 except Exception as move_exc:
                     logger.warning(
-                        "Failed to move ChunkFormer model to device {}: {}", device, move_exc
+                        "Failed to move ChunkFormer model to device {}: {}",
+                        device,
+                        move_exc,
                     )
 
             try:
@@ -292,6 +300,7 @@ class ChunkFormerBackend(ASRBackend):
         try:
             # DEBUG: Log ASR input metadata
             import os
+
             if os.path.exists(audio_path):
                 file_size = os.path.getsize(audio_path)
                 logger.debug(
@@ -484,7 +493,7 @@ class ChunkFormerBackend(ASRBackend):
                 seg.get("text", "") for seg in segments if seg.get("text", "").strip()
             ]
             text = " ".join(text_parts).strip()
-            
+
             # DEBUG: Log ASR output preview
             text_preview = text[:200] + "..." if len(text) > 200 else text
             logger.debug(
@@ -496,7 +505,7 @@ class ChunkFormerBackend(ASRBackend):
                 char_count=len(text),
                 word_count=len(text.split()) if text else 0,
             )
-            
+
             return ASRResult(
                 text=text, segments=segments, language=language, confidence=confidence
             )
@@ -557,9 +566,17 @@ class ChunkFormerBackend(ASRBackend):
 
         # Add ChunkFormer-specific architecture parameters for reproducibility
         info["chunk_size"] = cfg.settings.chunkformer.chunkformer_chunk_size
-        info["left_context_size"] = cfg.settings.chunkformer.chunkformer_left_context_size
-        info["right_context_size"] = cfg.settings.chunkformer.chunkformer_right_context_size
-        info["total_batch_duration"] = cfg.settings.chunkformer.chunkformer_total_batch_duration
-        info["return_timestamps"] = cfg.settings.chunkformer.chunkformer_return_timestamps
+        info["left_context_size"] = (
+            cfg.settings.chunkformer.chunkformer_left_context_size
+        )
+        info["right_context_size"] = (
+            cfg.settings.chunkformer.chunkformer_right_context_size
+        )
+        info["total_batch_duration"] = (
+            cfg.settings.chunkformer.chunkformer_total_batch_duration
+        )
+        info["return_timestamps"] = (
+            cfg.settings.chunkformer.chunkformer_return_timestamps
+        )
 
         return info

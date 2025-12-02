@@ -183,7 +183,7 @@ async def create_task_in_redis(
         file_path_value = request_params.get("file_path") or ""
         if isinstance(file_path_value, Path):
             file_path_value = str(file_path_value)
-        asr_backend_value = request_params.get("asr_backend") or "whisper"
+        asr_backend_value = request_params.get("asr_backend") or settings.api.default_asr_backend
         features_value = request_params.get("features", ["summary"])
         features_json = json.dumps(features_value)
         task_data = {
@@ -223,7 +223,7 @@ def enqueue_job(
         "audio_path": str(file_path),
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
-        "asr_backend": request_params.get("asr_backend", "whisper"),
+        "asr_backend": request_params.get("asr_backend", settings.api.default_asr_backend),
         "enable_diarization": request_params.get("enable_diarization", False),
         "enable_vad": request_params.get("enable_vad"),
         "vad_threshold": request_params.get("vad_threshold"),
@@ -452,7 +452,7 @@ class ProcessController(Controller):
         file = payload.file
         features_raw = payload.features
         template_id = payload.template_id
-        asr_backend = payload.asr_backend or "whisper"
+        asr_backend = payload.asr_backend or settings.api.default_asr_backend
 
         # Normalize and validate asr_backend
         from src.processors.asr.factory import ASRFactory
