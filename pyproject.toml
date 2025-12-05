@@ -107,7 +107,7 @@ test-debug = "pytest -vv --tb=long --showlocals -ra -s tests/unit"
 lint = "ruff check --fix"
 format = "ruff format"
 # Jetson uses edge_main.py (simplified synchronous API)
-serve = "uvicorn src.api.edge_main:app --host 0.0.0.0 --port 8000 --workers 1"
+serve = "uvicorn src.api.edge_main:app --host 0.0.0.0 --port 8000"
 api = "uvicorn src.api.edge_main:app --host 0.0.0.0 --port 8000"
 style = "ruff check --fix && ruff format -v && dead"
 download-models = "bash scripts/download-models.sh"
