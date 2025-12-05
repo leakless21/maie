@@ -1,10 +1,41 @@
+# =============================================================================
+# MAIE Jetson Branch - ASR-Only Edition
+# =============================================================================
+# This is the simplified Jetson Nano/Orin branch configuration.
+# Features: ASR only (no LLM summarization, no diarization)
+# Platform: ARM64 (linux-aarch64)
+# See docs/JETSON_NANO_BRANCH_PLAN.md for branch strategy and sync workflows.
+#
+# Key differences from main branch:
+# - No vLLM, flashinfer (no ARM64 support)
+# - No pyannote-audio, torchcodec (no ARM64 wheels)
+# - No Redis/RQ (synchronous edge API)
+# - Custom ARM64 wheels for ctranslate2
+# =============================================================================
+
 [project]
 name = "maie"
 version = "0.1.0"
-description = "Modular Audio Intelligence Engine"
+description = "MAIE - Jetson ASR Edition (Modular Audio Intelligence Engine)"
 readme = "README.md"
-requires-python = ">=3.12"
-dependencies = ["soxr", "transformers", "flashinfer-cubin>=0.5.2,<0.6", "rq-dashboard", "pyannote-audio>=4.0.0,<5", "torch>=2.8.0,<3", "torchaudio>=2.8.0,<3", "silero-vad>=6.2.0,<7", "onnxruntime>=1.23.2,<2", "torchcodec==0.7.0"]
+requires-python = ">=3.10"
+
+# Minimal dependencies for ASR-only operation
+# Removed: rq-dashboard, redis-related, llm-related
+dependencies = [
+    "pydantic>=2.12.5,<3",
+    "pydantic-settings>=2.12.0,<3",
+    "jsonschema>=4.25.1,<5",
+    "python-levenshtein>=0.27.3,<0.28",
+    "soxr>=1.0.0,<2",
+    "transformers>=4.57.3,<5",
+    "onnxruntime>=1.23.2,<2",
+    "silero-vad>=6.2.0,<7",
+    "numpy<2",
+    "faster-whisper>=1.2.1,<2",
+    "ctranslate2>=4.6.0",
+    "sniffio>=1.3.0,<2",
+]
 
 
 [dependency-groups]
@@ -36,31 +67,34 @@ timeout_method = "thread"
 
 [tool.pixi.workspace]
 channels = ["conda-forge", "pytorch", "nvidia"]
-platforms = ["linux-64"]
+# Jetson-only build: linux-aarch64 for Jetson Orin Nano Super
+platforms = ["linux-aarch64"]
+
+# Jetson PyPI configuration for accessing Jetson-optimized packages
+# Use index-strategy to allow best-match across all indexes for ARM64 compatibility
+[tool.pixi.pypi-options]
+extra-index-urls = ["https://pypi.jetson-ai-lab.io/jp6/cu126/+simple/"]
+index-strategy = "unsafe-best-match"
 
 [tool.pixi.dependencies]
-python = "3.12.*"
+# Python 3.10 required for Jetson AI Lab wheels (ctranslate2, vllm are cp310)
+python = "3.10.*"
 ffmpeg = "*"
 
 [tool.pixi.pypi-dependencies]
 maie = { path = ".", editable = true }
 chunkformer = "*"
 litestar = { version = "*", extras = ["standard"] }
-vllm = ">= 0.11.0"
-pydantic-settings = "*"
-redis = { version = "*", extras = ["hiredis"] }
-rq = "*"
-rq-scheduler = ">=0.14.0, <0.15"
+# No vLLM on Jetson - ASR only
+torch = "== 2.8.0"
+torchaudio = "== 2.8.0"
+# No Redis/RQ on Jetson - using synchronous edge API
 huggingface-hub = "*"
 loguru = "*"
-pydantic = "*"
-faster-whisper = "*"
-ctranslate2 = "*"
-jsonschema = "*"
-python-Levenshtein = "*"
-flashinfer-python = ">=0.5.2,<0.6"
+ctranslate2 = { path = "/home/vietinnotech/jetsonpack/wheels/ctranslate2-4.6.1-cp310-cp310-linux_aarch64.whl" }
+sniffio = "*"
 aiofiles = "*"
-flashinfer-jit-cache = { url = "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.5.2/flashinfer_jit_cache-0.5.2%2Bcu128-cp39-abi3-manylinux_2_28_x86_64.whl" }
+uvicorn = "*"
 
 [tool.pixi.feature.dev.pypi-dependencies]
 pytest-asyncio = ">=1.2.0, <2"
@@ -68,26 +102,26 @@ pytest-cov = ">=7.0.0, <8"
 ruff = ">=0.14.0, <0.15"
 
 [tool.pixi.feature.dev.tasks]
-test = "pytest"
-test-debug = "pytest -vv --tb=long --showlocals -ra -s"
+test = "pytest tests/unit"
+test-debug = "pytest -vv --tb=long --showlocals -ra -s tests/unit"
 lint = "ruff check --fix"
 format = "ruff format"
-api = "uvicorn src.api.main:app"
-worker = "bash -c 'cd \"$PWD\" && python -m src.worker.main'"
-scheduler = "bash -c 'cd \"$PWD\" && python -m src.scheduler.main'"
-style = "ruff check --fix && ruff format -v && dead"  # Combined formatting and linting
-download-models = "bash scripts/download-models.sh"  # Keep existing bash script
+# Jetson uses edge_main.py (simplified synchronous API)
+serve = "uvicorn src.api.edge_main:app --host 0.0.0.0 --port 8000 --workers 1"
+api = "uvicorn src.api.edge_main:app --host 0.0.0.0 --port 8000"
+style = "ruff check --fix && ruff format -v && dead"
+download-models = "bash scripts/download-models.sh"
 
 [tool.pixi.environments]
 default = { solve-group = "default" }
 dev = { features = ["dev"], solve-group = "default" }
 
 [tool.pixi.activation.env]
-LD_LIBRARY_PATH = "$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cudnn/lib:$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cuda_runtime/lib:$LD_LIBRARY_PATH"
+LD_LIBRARY_PATH = "$CONDA_PREFIX/lib/python3.10/site-packages/nvidia/cudnn/lib:$CONDA_PREFIX/lib/python3.10/site-packages/nvidia/cuda_runtime/lib:$LD_LIBRARY_PATH"
 
 [tool.ruff]
 line-length = 88
-target-version = "py312"
+target-version = "py310"
 
 [tool.ruff.format]
 quote-style = "double"
