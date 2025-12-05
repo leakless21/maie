@@ -5,7 +5,13 @@ This module provides hierarchical configuration management for LLM generation pa
 supporting vLLM SamplingParams with priority chain: Runtime > Environment > Model > Library.
 """
 
-from src.tooling.vllm_utils import calculate_checkpoint_hash, get_model_info
+
+# Lazy imports to avoid loading vLLM on module import (Jetson memory optimization)
+def _get_vllm_utils():
+    from src.tooling.vllm_utils import calculate_checkpoint_hash, get_model_info
+
+    return calculate_checkpoint_hash, get_model_info
+
 
 from .config import (
     GenerationConfig,
@@ -43,12 +49,18 @@ __all__ = [
     "validate_schema_completeness",
 ]
 
-# Re-export vLLM classes for test patching (with safe import)
-try:
-    from vllm import LLM, SamplingParams
-    from vllm.sampling_params import GuidedDecodingParams
-except ImportError:
-    # Allow imports to fail for testing without vLLM
-    LLM = None
-    SamplingParams = None
-    GuidedDecodingParams = None
+
+# Lazy attribute getter for vLLM imports and utils
+def __getattr__(name):
+    if name in ["calculate_checkpoint_hash", "get_model_info"]:
+        calculate_checkpoint_hash, get_model_info = _get_vllm_utils()
+        return locals()[name]
+    elif name in ["LLM", "SamplingParams", "GuidedDecodingParams"]:
+        try:
+            from vllm import LLM, SamplingParams
+            from vllm.sampling_params import GuidedDecodingParams
+
+            return locals()[name]
+        except ImportError:
+            return None
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

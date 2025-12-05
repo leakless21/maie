@@ -15,6 +15,8 @@ _ENV_ALIASES = {
     "development": "development",
     "prod": "production",
     "production": "production",
+    "jetson": "jetson",
+    "edge": "edge",
 }
 
 _SETTINGS_CACHE: Dict[str, AppSettings] = {}
@@ -25,7 +27,7 @@ def _normalize_environment(value: Optional[str]) -> str:
     if not candidate:
         return DEFAULT_ENVIRONMENT
     normalized = candidate.lower()
-    return _ENV_ALIASES.get(normalized, DEFAULT_ENVIRONMENT)
+    return _ENV_ALIASES.get(normalized, normalized)  # Pass through unknown envs
 
 
 def _load_environment_file(environment: str) -> None:
@@ -85,6 +87,12 @@ def _build_settings(environment: str) -> AppSettings:
     # Ensure environment field matches the requested environment
     if settings.environment != environment:
         settings = settings.model_copy(update={"environment": environment})
+    
+    # Apply environment-specific profile if available
+    from .profiles import get_profile, apply_profile
+    profile = get_profile(environment)
+    if profile:
+        settings = apply_profile(settings, profile)
     
     return settings
 

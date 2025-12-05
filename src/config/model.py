@@ -620,14 +620,35 @@ class VADSettings(BaseModel):
 
 
 class FeatureFlags(BaseModel):
-    enable_enhancement: bool = Field(default=True)
+    """Feature flags for platform-specific capabilities.
+    
+    These flags control which features are available at runtime.
+    On Jetson/edge deployments, heavy features like LLM and diarization
+    are disabled to conserve resources.
+    """
+    enable_enhancement: bool = Field(
+        default=True,
+        description="Enable LLM text enhancement (requires vLLM)",
+    )
+    enable_llm: bool = Field(
+        default=True,
+        description="Enable LLM processing for summarization (requires vLLM)",
+    )
+    enable_diarization: bool = Field(
+        default=True,
+        description="Enable speaker diarization (requires pyannote-audio)",
+    )
+    enable_redis_queue: bool = Field(
+        default=True,
+        description="Enable Redis/RQ job queue (False for synchronous edge API)",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 
 
 class AppSettings(BaseSettings):
     pipeline_version: str = Field(default="1.0.0")
-    environment: Literal["development", "production"] = Field(default="development")
+    environment: Literal["development", "production", "jetson", "edge"] = Field(default="development")
     debug: bool = Field(default=False)
     verbose_components: bool = Field(default=False)
 

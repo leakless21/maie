@@ -29,6 +29,18 @@ from .logging import (
     get_logger,
     get_module_logger,
 )  # noqa: E402
+from .profiles import (
+    PROFILES,
+    JETSON_PROFILE,
+    EDGE_PROFILE,
+    get_profile,
+    apply_profile,
+    is_jetson_environment,
+    is_edge_environment,
+    has_llm_support,
+    has_diarization_support,
+    has_redis_support,
+)
 
 __all__ = [
     "AppSettings",
@@ -42,4 +54,15 @@ __all__ = [
     "correlation_id",
     "generate_correlation_id",
     "get_module_logger",
+    # Profile exports
+    "PROFILES",
+    "JETSON_PROFILE",
+    "EDGE_PROFILE",
+    "get_profile",
+    "apply_profile",
+    "is_jetson_environment",
+    "is_edge_environment",
+    "has_llm_support",
+    "has_diarization_support",
+    "has_redis_support",
 ]
