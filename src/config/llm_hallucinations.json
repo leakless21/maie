@@ -1,6 +1,7 @@
 {
   "exact": [
     "Hãy subscribe cho kênh Ghiền Mì Gõ để không bỏ lỡ những video hấp dẫn",
+    "Hãy subscribe cho kênh Ghiền Mì Gõi",
     "Hãy subscribe cho kênh lalaschool Để không bỏ lỡ những video hấp dẫn",
     "Để không bỏ lỡ những video hấp dẫn Hãy subscribe cho kênh lalaschool Để không bỏ lỡ những video hấp dẫn",
     "Cảm ơn các bạn đã theo dõi và hẹn gặp lại",
@@ -12,7 +13,7 @@
     "(?i)để không bỏ lỡ.*subscribe.*kênh",
     "(?i)subscribe.*kênh.*để không bỏ lỡ",
     "(?i)cảm ơn.*đã theo dõi.*hẹn gặp lại",
-    "(?i)hãy subscribe cho kênh.*để không bỏ lỡ"
+    "(?i)hãy subscribe cho kênh.*để không bỏ lỡ",
     "(?iu)\\b(?:hay|hãy)\\b.*\\b(?:sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b.*\\b(?:lalaschool|ghiền\\s*mì\\s*g[oõọỏôốồổỗộ](?:i|ì|í|ị|ỉ|ĩ)?|ghien\\s*mi\\s*go(?:i)?)\\b",
     "(?iu)\\b(?:để\\s*không\\s*bỏ\\s*lỡ|de\\s*khong\\s*bo\\s*lo)\\b.*\\b(?:sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b",
     "(?iu)\\b(?:nhớ|nho)\\b.*\\b(?:like|share|sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b.*\\b(?:lalaschool|ghiền\\s*mì\\s*g[oõọỏôốồổỗộ](?:i|ì|í|ị|ỉ|ĩ)?|ghien\\s*mi\\s*go(?:i)?)\\b",

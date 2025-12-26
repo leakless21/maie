@@ -100,3 +100,21 @@ class TestRenderSpeakerAttributedTranscript:
         assert lines[1] == "S2: Second speaker"
         assert lines[2] == "S1: Back to first"
         assert lines[3] == "S3: Third speaker"
+
+    def test_consolidate_unknown_speaker_blocks(self):
+        """Consolidate consecutive unknown speaker segments into one line."""
+        segments = [
+            {"text": "First unknown", "speaker": None},
+            {"text": "Second unknown", "speaker": None},
+            {"text": "Known speaker", "speaker": "S1"},
+            {"text": "Third unknown", "speaker": None},
+            {"text": "Fourth unknown", "speaker": None},
+        ]
+
+        output = render_speaker_attributed_transcript(segments)
+        lines = output.split("\n")
+
+        assert len(lines) == 3
+        assert lines[0] == "S?: First unknown Second unknown"
+        assert lines[1] == "S1: Known speaker"
+        assert lines[2] == "S?: Third unknown Fourth unknown"

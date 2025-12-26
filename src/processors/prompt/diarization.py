@@ -52,6 +52,11 @@ def render_speaker_attributed_transcript(
             speaker = getattr(seg, "speaker", None) or "S?"
             text = getattr(seg, "text", "").strip()
         
-        if text:
-            lines.append(f"{speaker}: {text}")
-    return "\n".join(lines)
+        if not text:
+            continue
+
+        if speaker == "S?" and lines and lines[-1][0] == "S?":
+            lines[-1] = ("S?", f"{lines[-1][1]} {text}".strip())
+        else:
+            lines.append((speaker, text))
+    return "\n".join(f"{speaker}: {text}" for speaker, text in lines)
