@@ -328,41 +328,47 @@ class LLMSchema(BaseModel):
 class VersionsSchema(BaseModel):
     """Schema for version information."""
 
-    pipeline_version: str = Field(..., description="Version of the pipeline")
-    asr_backend: ASRBackendSchema = Field(..., description="ASR backend information")
-    llm: LLMSchema = Field(..., description="Summarization LLM information")
+    phiên_bản_pipeline: str = Field(..., description="Phiên bản của pipeline", alias="pipeline_version")
+    backend_asr: ASRBackendSchema = Field(..., description="Thông tin backend ASR", alias="asr_backend")
+    mô_hình_ngôn_ngữ: LLMSchema = Field(..., description="Thông tin mô hình ngôn ngữ tóm tắt", alias="llm")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class MetricsSchema(BaseModel):
     """Schema for processing metrics."""
 
-    input_duration_seconds: float = Field(
-        ..., description="Duration of the input audio in seconds"
+    thời_lượng_đầu_vào_giây: float = Field(
+        ..., description="Thời lượng của âm thanh đầu vào tính bằng giây", alias="input_duration_seconds"
     )
-    processing_time_seconds: float = Field(
-        ..., description="Time taken for processing in seconds"
+    thời_gian_xử_lý_giây: float = Field(
+        ..., description="Thời gian xử lý tính bằng giây", alias="processing_time_seconds"
     )
-    rtf: float = Field(..., description="Real-Time Factor")
-    vad_coverage: float = Field(..., description="VAD coverage ratio")
-    asr_confidence_avg: float | None = Field(
-        default=None, description="Average ASR confidence"
+    hệ_số_thời_gian_thực: float = Field(..., description="Hệ số thời gian thực (Real-Time Factor)", alias="rtf")
+    độ_phủ_vad: float = Field(..., description="Tỷ lệ độ phủ VAD", alias="vad_coverage")
+    độ_tin_cậy_asr_trung_bình: float | None = Field(
+        default=None, description="Độ tin cậy ASR trung bình", alias="asr_confidence_avg"
     )
-    vad_segments: int | None = Field(
-        default=None, description="Number of speech segments detected by VAD"
+    số_đoạn_vad: int | None = Field(
+        default=None, description="Số lượng đoạn giọng nói được phát hiện bởi VAD", alias="vad_segments"
     )
-    edit_rate_cleaning: float | None = Field(
-        default=None, description="Edit distance rate for enhancement"
+    tỷ_lệ_chỉnh_sửa_làm_sạch: float | None = Field(
+        default=None, description="Tỷ lệ khoảng cách chỉnh sửa cho việc cải thiện", alias="edit_rate_cleaning"
     )
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class ResultsSchema(BaseModel):
     """Schema for processing results."""
 
-    summary: Optional[Dict[str, Any]] = Field(
-        None, description="Structured summary with embedded tags"
+    tóm_tắt: Optional[Dict[str, Any]] = Field(
+        None, description="Tóm tắt có cấu trúc với các thẻ được nhúng", alias="summary"
     )
-    clean_transcript: Optional[str] = Field(None, description="Cleaned transcript")
-    raw_transcript: Optional[str] = Field(None, description="Raw transcript from ASR")
+    bản_ghi_sạch: Optional[str] = Field(None, description="Bản ghi đã được làm sạch", alias="clean_transcript")
+    bản_ghi_thô: Optional[str] = Field(None, description="Bản ghi thô từ ASR", alias="raw_transcript")
+
+    model_config = ConfigDict(populate_by_name=True)
 
 
 class StatusResponseSchema(BaseModel):
@@ -384,13 +390,14 @@ class StatusResponseSchema(BaseModel):
     )
     submitted_at: datetime | None = None
     completed_at: datetime | None = None
-    versions: Optional[VersionsSchema] = Field(
-        None, description="Version information for reproducibility"
+    phiên_bản: Optional[VersionsSchema] = Field(
+        None, description="Thông tin phiên bản để tái tạo kết quả", alias="versions"
     )
-    metrics: Optional[MetricsSchema] = Field(None, description="Processing metrics")
-    results: Optional[ResultsSchema] = Field(None, description="Processing results")
+    chỉ_số: Optional[MetricsSchema] = Field(None, description="Chỉ số xử lý", alias="metrics")
+    kết_quả: Optional[ResultsSchema] = Field(None, description="Kết quả xử lý", alias="results")
 
     model_config = ConfigDict(
+        populate_by_name=True,
         json_schema_extra={
             "examples": [
                 {
@@ -398,9 +405,9 @@ class StatusResponseSchema(BaseModel):
                     "value": {
                         "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
                         "status": "COMPLETE",
-                        "versions": {
-                            "pipeline_version": "1.0.0",
-                            "asr_backend": {
+                        "phiên_bản": {
+                            "phiên_bản_pipeline": "1.0.0",
+                            "backend_asr": {
                                 "name": "whisper",
                                 "model_variant": "erax-wow-turbo",
                                 "model_path": "erax-ai/EraX-WoW-Turbo-V1.1-CT2",
@@ -408,7 +415,7 @@ class StatusResponseSchema(BaseModel):
                                 "compute_type": "int8_float16",
                                 "decoding_params": {"beam_size": 5, "vad_filter": True},
                             },
-                            "llm": {
+                            "mô_hình_ngôn_ngữ": {
                                 "name": "qwen3",
                                 "checkpoint_hash": "z9y8x7w6...",
                                 "quantization": "awq-4bit",
@@ -422,16 +429,16 @@ class StatusResponseSchema(BaseModel):
                                 "decoding_params": {"temperature": 0.3, "top_p": 0.9},
                             },
                         },
-                        "metrics": {
-                            "input_duration_seconds": 2701.3,
-                            "processing_time_seconds": 162.8,
-                            "rtf": 0.06,
-                            "vad_coverage": 0.88,
-                            "asr_confidence_avg": 0.91,
+                        "chỉ_số": {
+                            "thời_lượng_đầu_vào_giây": 2701.3,
+                            "thời_gian_xử_lý_giây": 162.8,
+                            "hệ_số_thời_gian_thực": 0.06,
+                            "độ_phủ_vad": 0.88,
+                            "độ_tin_cậy_asr_trung_bình": 0.91,
                         },
-                        "results": {
-                            "clean_transcript": "The meeting on October 4th...",
-                            "summary": {
+                        "kết_quả": {
+                            "bản_ghi_sạch": "The meeting on October 4th...",
+                            "tóm_tắt": {
                                 "title": "Q4 Budget Planning",
                                 "main_points": ["Budget approved"],
                                 "tags": ["Finance", "Budget"],

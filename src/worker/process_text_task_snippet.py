@@ -134,28 +134,28 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         except Exception:
             version_metadata = None
 
-        # Calculate metrics
+        # Calculate metrics - Vietnamese keys
         processing_time = time.time() - start_time
         metrics = {
-            "input_duration_seconds": 0.0,  # Text input has no duration
-            "processing_time_seconds": processing_time,
-            "rtf": 0.0,
-            "vad_coverage": 0.0,
-            "asr_confidence_avg": 1.0,
+            "thời_lượng_đầu_vào_giây": 0.0,  # Text input has no duration
+            "thời_gian_xử_lý_giây": processing_time,
+            "hệ_số_thời_gian_thực": 0.0,
+            "độ_phủ_vad": 0.0,
+            "độ_tin_cậy_asr_trung_bình": 1.0,
             "transcription_length": len(text),
         }
 
-        # Prepare results: important first, transcripts later
+        # Prepare results: important first, transcripts later - Vietnamese keys
         results_payload: Dict[str, Any] = {}
         if structured_summary:
-            results_payload["summary"] = structured_summary
-        results_payload["clean_transcript"] = clean_transcript
-        results_payload["raw_transcript"] = text
+            results_payload["tóm_tắt"] = structured_summary
+        results_payload["bản_ghi_sạch"] = clean_transcript
+        results_payload["bản_ghi_thô"] = text
 
         result = {
-            "results": results_payload,
-            "versions": version_metadata,
-            "metrics": metrics,
+            "kết_quả": results_payload,
+            "phiên_bản": version_metadata,
+            "chỉ_số": metrics,
         }
 
         # Update status to COMPLETE
@@ -166,9 +166,9 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "results": result["results"],
-                    "versions": version_metadata,
-                    "metrics": metrics,
+                    "kết_quả": result["kết_quả"],
+                    "phiên_bản": version_metadata,
+                    "chỉ_số": metrics,
                 },
             )
 

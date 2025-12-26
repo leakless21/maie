@@ -641,8 +641,9 @@ async def get_task_from_redis(task_id: uuid.UUID) -> Dict[str, Any] | None:
         if not task_data:
             return None
 
-        # Deserialize JSON fields using consolidated utils
-        for field in ["features", "results", "metrics", "versions"]:
+        # Deserialize JSON fields using consolidated utils - handle both Vietnamese and English keys
+        # Vietnamese keys are now the primary format
+        for field in ["features", "kết_quả", "chỉ_số", "phiên_bản", "results", "metrics", "versions"]:
             if field in task_data and task_data[field]:
                 task_data[field], _ = safe_parse_json(task_data[field])
 

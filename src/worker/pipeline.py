@@ -259,12 +259,12 @@ def get_version_metadata(
         }
 
     version_metadata: Dict[str, Any] = {
-        # API schema key
-        "pipeline_version": settings.pipeline_version,
+        # API schema key - Vietnamese
+        "phiên_bản_pipeline": settings.pipeline_version,
         # Standardized ASR backend information
-        "asr_backend": asr_backend,
+        "backend_asr": asr_backend,
         # LLM block may be None per tests
-        "llm": llm_block,
+        "mô_hình_ngôn_ngữ": llm_block,
     }
 
     return version_metadata
@@ -302,13 +302,13 @@ def calculate_metrics(
     except Exception:
         transcription_length = 0
 
-    # API schema compatible fields
+    # API schema compatible fields - Vietnamese keys
     metrics: Dict[str, Any] = {
-        "input_duration_seconds": audio_duration,
-        "processing_time_seconds": total_processing_time,
-        "rtf": total_rtf,
-        "vad_coverage": 0.0,
-        "asr_confidence_avg": asr_confidence_avg,
+        "thời_lượng_đầu_vào_giây": audio_duration,
+        "thời_gian_xử_lý_giây": total_processing_time,
+        "hệ_số_thời_gian_thực": total_rtf,
+        "độ_phủ_vad": 0.0,
+        "độ_tin_cậy_asr_trung_bình": asr_confidence_avg,
         "asr_rtf": asr_rtf,
         "transcription_length": transcription_length,
         "audio_duration": audio_duration,  # Kept for backward compatibility with tests
@@ -316,13 +316,13 @@ def calculate_metrics(
 
     # Add VAD metrics if available
     if vad_result:
-        metrics["vad_coverage"] = vad_result.get("speech_ratio", 0.0)
-        metrics["vad_segments"] = vad_result.get("num_segments", 0)
+        metrics["độ_phủ_vad"] = vad_result.get("speech_ratio", 0.0)
+        metrics["số_đoạn_vad"] = vad_result.get("num_segments", 0)
 
     # Add enhancement metrics if text enhancement was performed
     if enhanced_text and enhanced_text != original_text:
         edit_rate = _calculate_edit_rate(original_text, enhanced_text)
-        metrics["edit_rate_cleaning"] = edit_rate
+        metrics["tỷ_lệ_chỉnh_sửa_làm_sạch"] = edit_rate
 
     return metrics
 
@@ -1487,17 +1487,17 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         if version_metadata is None:
             version_metadata = get_version_metadata(asr_metadata, None)
 
-        # Prepare result - important fields first, transcripts/metrics later
+        # Prepare result - important fields first, transcripts/metrics later - Vietnamese keys
         results_payload: Dict[str, Any] = {}
 
         if "summary" in features and structured_summary:
-            results_payload["summary"] = structured_summary
+            results_payload["tóm_tắt"] = structured_summary
 
         if "clean_transcript" in features:
-            results_payload["clean_transcript"] = clean_transcript or transcription
+            results_payload["bản_ghi_sạch"] = clean_transcript or transcription
 
         if "raw_transcript" in features:
-            results_payload["raw_transcript"] = transcription
+            results_payload["bản_ghi_thô"] = transcription
 
         # Legacy transcript for compatibility; keep near bottom
         results_payload["transcript"] = transcription
@@ -1510,11 +1510,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 segment_count=len(asr_result.segments),
             )
 
-        # Assemble final result with results first, metrics last
+        # Assemble final result with results first, metrics last - Vietnamese keys
         result = {
-            "results": results_payload,
-            "versions": version_metadata,
-            "metrics": metrics,
+            "kết_quả": results_payload,
+            "phiên_bản": version_metadata,
+            "chỉ_số": metrics,
         }
 
         # Update status to COMPLETE and store final results
@@ -1525,9 +1525,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "results": result["results"],
-                    "versions": version_metadata,
-                    "metrics": metrics,
+                    "kết_quả": result["kết_quả"],
+                    "phiên_bản": version_metadata,
+                    "chỉ_số": metrics,
                 },
             )
 
@@ -1714,9 +1714,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     except Exception:
         pass
     return {
-        "versions": None,
-        "metrics": None,
-        "results": None,
+        "phiên_bản": None,
+        "chỉ_số": None,
+        "kết_quả": None,
         "status": "error",
         "error": {"message": "Unexpected error path taken"},
     }
@@ -1862,23 +1862,24 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         processing_time = time.time() - start_time
         metrics = {
             "input_duration_seconds": 0.0,  # Text input has no duration
-            "processing_time_seconds": processing_time,
-            "rtf": 0.0,
-            "vad_coverage": 0.0,
-            "asr_confidence_avg": 1.0,
+            "thời_lượng_đầu_vào_giây": 0.0,
+            "thời_gian_xử_lý_giây": processing_time,
+            "hệ_số_thời_gian_thực": 0.0,
+            "độ_phủ_vad": 0.0,
+            "độ_tin_cậy_asr_trung_bình": 1.0,
             "transcription_length": len(text),
         }
 
-        # Prepare results
-        results_payload = {"clean_transcript": clean_transcript}
+        # Prepare results - Vietnamese keys
+        results_payload = {"bản_ghi_sạch": clean_transcript}
         if structured_summary:
-            results_payload["summary"] = structured_summary
-        results_payload["raw_transcript"] = text
+            results_payload["tóm_tắt"] = structured_summary
+        results_payload["bản_ghi_thô"] = text
 
         result = {
-            "versions": version_metadata,
-            "metrics": metrics,
-            "results": results_payload,
+            "phiên_bản": version_metadata,
+            "chỉ_số": metrics,
+            "kết_quả": results_payload,
         }
 
         # Update status to COMPLETE
@@ -1889,9 +1890,9 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
-                    "versions": version_metadata,
-                    "metrics": metrics,
-                    "results": result["results"],
+                    "phiên_bản": version_metadata,
+                    "chỉ_số": metrics,
+                    "kết_quả": result["kết_quả"],
                 },
             )
 
