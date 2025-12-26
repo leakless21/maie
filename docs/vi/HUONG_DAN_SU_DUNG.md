@@ -15,6 +15,7 @@ curl -X POST 'http://localhost:8000/v1/process' \
 ```
 
 **Phản hồi:**
+
 ```json
 {
   "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
@@ -122,12 +123,12 @@ Gửi tệp âm thanh để xử lý không đồng bộ với các tính năng 
 
 #### Tham số
 
-| Tham số     | Loại   | Bắt buộc    | Mô tả                                                          |
-| ------------- | ------ | ----------- | -------------------------------------------------------------------- |
-| `file`        | binary | Có         | Tệp âm thanh để xử lý                                                |
-| `features`    | array  | Không          | Danh sách các đầu ra mong muốn (mặc định: `["clean_transcript", "summary"]`)
-| `template_id` | string | Điều kiện | ID mẫu cho định dạng tóm tắt (bắt buộc nếu `summary` trong features)   |
-| `asr_backend` | string | Không          | Lựa chọn backend ASR (mặc định: `"chunkformer"`)                         |
+| Tham số       | Loại   | Bắt buộc  | Mô tả                                                                        |
+| ------------- | ------ | --------- | ---------------------------------------------------------------------------- |
+| `file`        | binary | Có        | Tệp âm thanh để xử lý                                                        |
+| `features`    | array  | Không     | Danh sách các đầu ra mong muốn (mặc định: `["clean_transcript", "summary"]`) |
+| `template_id` | string | Điều kiện | ID mẫu cho định dạng tóm tắt (bắt buộc nếu `summary` trong features)         |
+| `asr_backend` | string | Không     | Lựa chọn backend ASR (mặc định: `"chunkformer"`)                             |
 
 **Tùy chọn tính năng:**
 
@@ -201,7 +202,7 @@ def process_audio(file_path, api_key, features=None, template_id=None, asr_backe
     with open(file_path, "rb") as audio_file:
         files = {"file": audio_file}
         response = requests.post(url, headers=headers, files=files, data=form_data)
-    
+
     return response.json()
 
 # Cách sử dụng
@@ -427,12 +428,12 @@ Hệ thống mẫu của AI C500 cung cấp cách linh hoạt để định dạ
       },
       "main_points": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": { "type": "string" },
         "description": "Các điểm chính được thảo luận"
       },
       "decisions": {
         "type": "array",
-        "items": {"type": "string"},
+        "items": { "type": "string" },
         "description": "Các quyết định được đưa ra"
       }
     },
@@ -441,7 +442,7 @@ Hệ thống mẫu của AI C500 cung cấp cách linh hoạt để định dạ
 }
 ```
 
-##  libraries Thư viện máy khách
+## libraries Thư viện máy khách
 
 ### Máy khách Python (đồng bộ)
 

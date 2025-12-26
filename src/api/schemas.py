@@ -470,8 +470,6 @@ class StatusResponseSchema(BaseModel):
                                 "thẻ": ["Tài chính", "Ngân sách"],
                             },
                         },
-                            },
-                        },
                     },
                 },
                 {

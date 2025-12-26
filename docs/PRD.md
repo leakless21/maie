@@ -158,12 +158,7 @@ Successful Final Response (JSON Body)
         "Marketing budget approved with a 5% increase.",
         "R&D budget for 'Project Phoenix' is pending final review."
       ],
-      "thẻ": [
-        "Finance",
-        "Budget Planning",
-        "Marketing Spend",
-        "R&D Allocation"
-      ]
+      "thẻ": ["Finance", "Budget Planning", "Marketing Spend", "R&D Allocation"]
     }
   }
 }

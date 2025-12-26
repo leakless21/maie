@@ -190,15 +190,15 @@ X-API-Key: your_api_key_here
 
 **Form Parameters:**
 
-| Parameter            | Type    | Required    | Description                                                          |
-| -------------------- | ------- | ----------- | -------------------------------------------------------------------- |
-| `file`               | binary  | Yes         | Audio file to process                                                |
-| `features`           | array   | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
-| `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)   |
-| `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                     |
+| Parameter            | Type    | Required    | Description                                                             |
+| -------------------- | ------- | ----------- | ----------------------------------------------------------------------- |
+| `file`               | binary  | Yes         | Audio file to process                                                   |
+| `features`           | array   | No          | List of desired outputs (default: `["clean_transcript", "summary"]`)    |
+| `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)      |
+| `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                        |
 | `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |
-| `enable_vad`         | boolean | No          | Enable Voice Activity Detection (default: system setting)            |
-| `vad_threshold`      | float   | No          | VAD confidence threshold 0.0-1.0 (default: 0.5)                      |
+| `enable_vad`         | boolean | No          | Enable Voice Activity Detection (default: system setting)               |
+| `vad_threshold`      | float   | No          | VAD confidence threshold 0.0-1.0 (default: 0.5)                         |
 
 **Features Options:**
 
@@ -288,7 +288,7 @@ def process_audio(file_path, api_key, features=None, template_id=None, asr_backe
     with open(file_path, "rb") as audio_file:
         files = {"file": audio_file}
         response = requests.post(url, headers=headers, files=files, data=form_data)
-    
+
     return response.json()
 
 # Usage
@@ -634,12 +634,12 @@ Content-Type: application/json
 
 **Body Parameters:**
 
-| Parameter         | Type   | Required | Description                                      |
-| ----------------- | ------ | -------- | ------------------------------------------------ |
-| `id`              | string | Yes      | Unique identifier (alphanumeric, `_`, `-`)       |
-| `schema_data`     | object | Yes      | JSON Schema defining the structured output       |
-| `prompt_template` | string | Yes      | Jinja2 prompt template content                   |
-| `example`         | object | No       | Optional example JSON output                     |
+| Parameter         | Type   | Required | Description                                |
+| ----------------- | ------ | -------- | ------------------------------------------ |
+| `id`              | string | Yes      | Unique identifier (alphanumeric, `_`, `-`) |
+| `schema_data`     | object | Yes      | JSON Schema defining the structured output |
+| `prompt_template` | string | Yes      | Jinja2 prompt template content             |
+| `example`         | object | No       | Optional example JSON output               |
 
 **Note:** The schema definition **MUST** be passed in the `schema_data` field.
 
@@ -677,11 +677,11 @@ Content-Type: application/json
 
 **Body Parameters:**
 
-| Parameter         | Type   | Required | Description                                      |
-| ----------------- | ------ | -------- | ------------------------------------------------ |
-| `schema_data`     | object | No       | JSON Schema defining the structured output       |
-| `prompt_template` | string | No       | Jinja2 prompt template content                   |
-| `example`         | object | No       | Optional example JSON output                     |
+| Parameter         | Type   | Required | Description                                |
+| ----------------- | ------ | -------- | ------------------------------------------ |
+| `schema_data`     | object | No       | JSON Schema defining the structured output |
+| `prompt_template` | string | No       | Jinja2 prompt template content             |
+| `example`         | object | No       | Optional example JSON output               |
 
 **Note:** To update the schema, use the `schema_data` field.
 
