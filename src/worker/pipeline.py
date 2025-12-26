@@ -60,6 +60,7 @@ def _update_status(
     task_key: str,
     status: TaskStatus,
     details: Optional[Dict[str, Any]] = None,
+    task_id: Optional[str] = None,
 ) -> None:
     """
     Update task status in Redis with proper JSON serialization.
@@ -69,12 +70,21 @@ def _update_status(
         task_key: Redis key for the task (format: "task:{task_id}")
         status: New task status
         details: Optional additional details to store with status
+        task_id: Task ID to store for API retrieval (extracted from task_key if not provided)
     """
     # Build update data
     update_data = {
         "status": status.value,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
+
+    # Extract task_id from task_key if not provided (format: "task:{task_id}")
+    if task_id is None and task_key.startswith("task:"):
+        task_id = task_key[5:]  # Remove "task:" prefix
+    
+    # Always include task_id for API retrieval
+    if task_id:
+        update_data["task_id"] = task_id
 
     # Merge in additional details if provided
     if details:
@@ -430,6 +440,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             if redis_conn:
                 # Update task status to FAILED using direct Redis update
                 error_details = {
+                    "task_id": job_id,
                     "status": TaskStatus.FAILED.value,
                     "error": str(error),
                     "stage": "preprocessing",
@@ -529,6 +540,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             if redis_conn:
                 # Update task status to FAILED using direct Redis update
                 error_details = {
+                    "task_id": job_id,
                     "status": TaskStatus.FAILED.value,
                     "error": str(error),
                     "stage": "preprocessing",
@@ -586,6 +598,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             if redis_conn:
                 # Update task status to FAILED using direct Redis update
                 error_details = {
+                    "task_id": job_id,
                     "status": TaskStatus.FAILED.value,
                     "error": str(error),
                     "stage": "preprocessing",
@@ -633,6 +646,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             if redis_conn:
                 # Update task status to FAILED using direct Redis update
                 error_details = {
+                    "task_id": job_id,
                     "status": TaskStatus.FAILED.value,
                     "error": str(error),
                     "stage": "preprocessing",
@@ -1525,9 +1539,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
+                    # Store with both Vietnamese and English keys for compatibility
                     "kết_quả": result["kết_quả"],
+                    "results": result["kết_quả"],  # English alias for backward compatibility
                     "phiên_bản": version_metadata,
+                    "versions": version_metadata,  # English alias for backward compatibility
                     "chỉ_số": metrics,
+                    "metrics": metrics,  # English alias for backward compatibility
                 },
             )
 
@@ -1563,6 +1581,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Update status to FAILED using direct Redis update
         if redis_conn:
             error_details = {
+                "task_id": job_id,
                 "status": TaskStatus.FAILED.value,
                 "error": str(e),
                 "stage": "pipeline_execution",
@@ -1620,6 +1639,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Update status to FAILED so /v1/status reflects terminal state
         if redis_conn:
             error_details = {
+                "task_id": job_id,
                 "status": TaskStatus.FAILED.value,
                 "error": str(e),
                 "stage": "pipeline_execution",
@@ -1662,6 +1682,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # Update status to FAILED so /v1/status no longer reports PROCESSING_* state
         if redis_conn:
             error_details = {
+                "task_id": job_id,
                 "status": TaskStatus.FAILED.value,
                 "error": str(e),
                 "stage": "pipeline_execution",
@@ -1890,9 +1911,13 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
+                    # Store with both Vietnamese and English keys for compatibility
                     "phiên_bản": version_metadata,
+                    "versions": version_metadata,  # English alias for backward compatibility
                     "chỉ_số": metrics,
+                    "metrics": metrics,  # English alias for backward compatibility
                     "kết_quả": result["kết_quả"],
+                    "results": result["kết_quả"],  # English alias for backward compatibility
                 },
             )
 
@@ -1910,6 +1935,7 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
         if redis_conn:
             error_details = {
+                "task_id": job_id,
                 "status": TaskStatus.FAILED.value,
                 "error": str(e),
                 "stage": "text_processing",
