@@ -259,11 +259,9 @@ def get_version_metadata(
         }
 
     version_metadata: Dict[str, Any] = {
-        # API schema key
+        # English keys for ASCII-safe storage
         "pipeline_version": settings.pipeline_version,
-        # Standardized ASR backend information
         "asr_backend": asr_backend,
-        # LLM block may be None per tests
         "llm": llm_block,
     }
 
@@ -302,7 +300,7 @@ def calculate_metrics(
     except Exception:
         transcription_length = 0
 
-    # API schema compatible fields
+    # English keys for ASCII-safe storage
     metrics: Dict[str, Any] = {
         "input_duration_seconds": audio_duration,
         "processing_time_seconds": total_processing_time,
