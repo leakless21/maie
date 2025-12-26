@@ -2,15 +2,18 @@
 
 ## Overview
 
-The **Text Enhancement Template** is designed to correct and improve transcribed Vietnamese text while maintaining semantic accuracy and providing detailed change tracking. This template is particularly useful for processing ASR (Automatic Speech Recognition) outputs that may contain transcription errors, missing punctuation, incorrect capitalization, and phonetically transcribed foreign words.
+The **Text Enhancement Template** is designed to fix clear mistakes in transcribed Vietnamese text while **preserving the original as much as possible**. This template prioritizes minimal changes - only correcting objective errors such as spelling mistakes, missing punctuation, and incorrect capitalization. It does NOT rephrase or "improve" text for style or clarity.
+
+**Philosophy: Fix mistakes, don't change content.**
 
 ## Purpose
 
-- **Primary Use Case**: Enhance and correct Vietnamese transcribed text from audio/speech
+- **Primary Use Case**: Fix objective errors in Vietnamese transcribed text from audio/speech
+- **Key Principle**: Make ONLY minimal corrections for clear mistakes
 - **Secondary Use Cases**:
   - Quality control for transcription services
   - Text normalization for downstream processing
-  - Educational tool for Vietnamese language learning
+  - Error detection in ASR outputs
 
 ## Template Structure
 
@@ -34,8 +37,9 @@ text_enhancement_v1/
 
 2. **enhanced_text** (string, max 50000 chars)
 
-   - Fully corrected and enhanced version
-   - All corrections applied (grammar, spelling, punctuation, capitalization, etc.)
+   - Text with ONLY necessary corrections applied
+   - Minimal changes - preserves original structure and word choice
+   - Fixes only: spelling, clear grammar errors, missing punctuation, capitalization, phonetic foreign words
 
 3. **corrections** (array, max 200 items)
 
@@ -61,23 +65,35 @@ text_enhancement_v1/
 
 ## Correction Types
 
-The template handles seven types of corrections:
+The template fixes ONLY these types of clear errors:
 
 1. **spelling**: Typos and misspellings (e.g., "thế gới" → "thế giới")
-2. **grammar**: Subject-verb agreement, tense issues
-3. **punctuation**: Missing or incorrect commas, periods, question marks
-4. **capitalization**: Sentence beginnings, proper nouns
+2. **grammar**: Clear errors like subject-verb disagreement (NOT stylistic improvements)
+3. **punctuation**: Missing periods at sentence ends, question marks (NOT stylistic commas)
+4. **capitalization**: Sentence beginnings, proper nouns only
 5. **foreign_word**: Phonetic transcriptions → original spelling (e.g., "phây búc" → "Facebook")
-6. **structure**: Sentence restructuring for clarity
-7. **filler_removal**: Remove excessive verbal tics (e.g., "ừ", "à", "uhm")
+6. **structure**: ONLY when grammatically incorrect (NOT for "clarity" or "flow")
+7. **filler_removal**: ONLY excessive repetition that impedes understanding
+
+**What is NOT corrected:**
+- Word choice (even if another word could be "better")
+- Sentence structure (unless grammatically wrong)
+- Style or tone
+- Informal language
+- Natural speech patterns
 
 ## Key Features
 
-### 1. Meaning Preservation
+### 1. Maximum Preservation
 
-- Maintains original intent and semantic content
-- Does not add information not present in source
-- Preserves speaker's tone and style
+**PRIMARY PRINCIPLE: Change as little as possible**
+
+- Maintains original intent, meaning, word choice, and structure
+- Makes ONLY minimal corrections for objective errors
+- Does NOT rephrase, reword, or "improve" text
+- Does NOT add or remove content for style/clarity
+- Preserves speaker's tone, style, and natural speech patterns
+- **When in doubt, keep the original**
 
 ### 2. Foreign Word Restoration
 
