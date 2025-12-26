@@ -328,14 +328,14 @@ class LLMSchema(BaseModel):
 class VersionsSchema(BaseModel):
     """Schema for version information."""
 
-    phiên_bản_pipeline: str = Field(
-        ..., description="Phiên bản của pipeline", alias="pipeline_version"
+    phiên_bản_pipeline: Optional[str] = Field(
+        None, description="Phiên bản của pipeline", alias="pipeline_version"
     )
-    backend_asr: ASRBackendSchema = Field(
-        ..., description="Thông tin backend ASR", alias="asr_backend"
+    backend_asr: Optional[ASRBackendSchema] = Field(
+        None, description="Thông tin backend ASR", alias="asr_backend"
     )
-    mô_hình_ngôn_ngữ: LLMSchema = Field(
-        ..., description="Thông tin mô hình ngôn ngữ tóm tắt", alias="llm"
+    mô_hình_ngôn_ngữ: Optional[LLMSchema] = Field(
+        None, description="Thông tin mô hình ngôn ngữ tóm tắt", alias="llm"
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -344,32 +344,34 @@ class VersionsSchema(BaseModel):
 class MetricsSchema(BaseModel):
     """Schema for processing metrics."""
 
-    thời_lượng_đầu_vào_giây: float = Field(
-        ...,
+    thời_lượng_đầu_vào_giây: Optional[float] = Field(
+        None,
         description="Thời lượng của âm thanh đầu vào tính bằng giây",
         alias="input_duration_seconds",
     )
-    thời_gian_xử_lý_giây: float = Field(
-        ...,
+    thời_gian_xử_lý_giây: Optional[float] = Field(
+        None,
         description="Thời gian xử lý tính bằng giây",
         alias="processing_time_seconds",
     )
-    hệ_số_thời_gian_thực: float = Field(
-        ..., description="Hệ số thời gian thực (Real-Time Factor)", alias="rtf"
+    hệ_số_thời_gian_thực: Optional[float] = Field(
+        None, description="Hệ số thời gian thực (Real-Time Factor)", alias="rtf"
     )
-    độ_phủ_vad: float = Field(..., description="Tỷ lệ độ phủ VAD", alias="vad_coverage")
-    độ_tin_cậy_asr_trung_bình: float | None = Field(
-        default=None,
+    độ_phủ_vad: Optional[float] = Field(
+        None, description="Tỷ lệ độ phủ VAD", alias="vad_coverage"
+    )
+    độ_tin_cậy_asr_trung_bình: Optional[float] = Field(
+        None,
         description="Độ tin cậy ASR trung bình",
         alias="asr_confidence_avg",
     )
-    số_đoạn_vad: int | None = Field(
-        default=None,
+    số_đoạn_vad: Optional[int] = Field(
+        None,
         description="Số lượng đoạn giọng nói được phát hiện bởi VAD",
         alias="vad_segments",
     )
-    tỷ_lệ_chỉnh_sửa_làm_sạch: float | None = Field(
-        default=None,
+    tỷ_lệ_chỉnh_sửa_làm_sạch: Optional[float] = Field(
+        None,
         description="Tỷ lệ khoảng cách chỉnh sửa cho việc cải thiện",
         alias="edit_rate_cleaning",
     )
