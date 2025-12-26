@@ -358,10 +358,10 @@ class MetricsSchema(BaseModel):
 class ResultsSchema(BaseModel):
     """Schema for processing results."""
 
-    clean_transcript: Optional[str] = Field(None, description="Cleaned transcript")
     summary: Optional[Dict[str, Any]] = Field(
         None, description="Structured summary with embedded tags"
     )
+    clean_transcript: Optional[str] = Field(None, description="Cleaned transcript")
     raw_transcript: Optional[str] = Field(None, description="Raw transcript from ASR")
 
 

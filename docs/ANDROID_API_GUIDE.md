@@ -11,6 +11,7 @@
 ## Common SSL Error
 
 If you see this error:
+
 ```
 write EPROTO 61108795834368:error:100000f7:SSL routines:OPENSSL_internal:WRONG_VERSION_NUMBER
 ```
@@ -52,6 +53,7 @@ Upload an audio file for transcription and analysis.
 #### Request
 
 **Headers:**
+
 ```
 X-API-Key: your_api_key_here
 Content-Type: multipart/form-data
@@ -59,15 +61,15 @@ Content-Type: multipart/form-data
 
 **Form Data Parameters:**
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `file` | File | Yes | Audio file (WAV, MP3, M4A, FLAC). Max 100MB |
-| `features` | String[] | No | Requested outputs: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics` |
-| `template_id` | String | No | Template for summary format (e.g., `meeting_notes_v2`) |
-| `asr_backend` | String | No | ASR engine: `whisper` or `chunkformer` |
-| `enable_diarization` | Boolean | No | Enable speaker identification (default: true) |
-| `enable_vad` | Boolean | No | Enable voice activity detection |
-| `vad_threshold` | Float | No | VAD threshold 0.0-1.0 (default: 0.5) |
+| Parameter            | Type     | Required | Description                                                                               |
+| -------------------- | -------- | -------- | ----------------------------------------------------------------------------------------- |
+| `file`               | File     | Yes      | Audio file (WAV, MP3, M4A, FLAC). Max 100MB                                               |
+| `features`           | String[] | No       | Requested outputs: `raw_transcript`, `clean_transcript`, `summary`, `enhancement_metrics` |
+| `template_id`        | String   | No       | Template for summary format (e.g., `meeting_notes_v2`)                                    |
+| `asr_backend`        | String   | No       | ASR engine: `whisper` or `chunkformer`                                                    |
+| `enable_diarization` | Boolean  | No       | Enable speaker identification (default: true)                                             |
+| `enable_vad`         | Boolean  | No       | Enable voice activity detection                                                           |
+| `vad_threshold`      | Float    | No       | VAD threshold 0.0-1.0 (default: 0.5)                                                      |
 
 #### Response (202 Accepted)
 
@@ -140,11 +142,13 @@ Retrieve the current status and results of a processing task.
 #### Request
 
 **Headers:**
+
 ```
 X-API-Key: your_api_key_here
 ```
 
 **Path Parameters:**
+
 - `task_id` (String) - UUID from the `/v1/process` response
 
 #### Response States
@@ -162,6 +166,7 @@ The response **changes** as the task progresses:
 ```
 
 **Possible Status Values:**
+
 - `PENDING` - Queued, waiting to start
 - `PREPROCESSING` - Audio preprocessing
 - `PROCESSING_ASR` - Transcription in progress
@@ -216,17 +221,17 @@ The response **changes** as the task progresses:
 
 **Key Fields in Complete Response:**
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `status` | String | Will be `"COMPLETE"` |
-| `completed_at` | ISO 8601 | Timestamp when processing finished |
-| `versions` | Object | Model versions used (for reproducibility) |
-| `metrics` | Object | Performance metrics |
-| `metrics.rtf` | Float | Real-Time Factor (lower is faster) |
-| `metrics.asr_confidence_avg` | Float | Average transcription confidence (0-1) |
-| `results` | Object | **YOUR ACTUAL DATA** |
-| `results.clean_transcript` | String | Cleaned transcript text |
-| `results.summary` | Object | Structured summary (schema varies by template) |
+| Field                        | Type     | Description                                    |
+| ---------------------------- | -------- | ---------------------------------------------- |
+| `status`                     | String   | Will be `"COMPLETE"`                           |
+| `completed_at`               | ISO 8601 | Timestamp when processing finished             |
+| `versions`                   | Object   | Model versions used (for reproducibility)      |
+| `metrics`                    | Object   | Performance metrics                            |
+| `metrics.rtf`                | Float    | Real-Time Factor (lower is faster)             |
+| `metrics.asr_confidence_avg` | Float    | Average transcription confidence (0-1)         |
+| `results`                    | Object   | **YOUR ACTUAL DATA**                           |
+| `results.clean_transcript`   | String   | Cleaned transcript text                        |
+| `results.summary`            | Object   | Structured summary (schema varies by template) |
 
 ### State 3: Failed (200 OK)
 
@@ -327,7 +332,7 @@ suspend fun pollForResults(taskId: String): StatusResponse {
             apiKey = "your_api_key_here",
             taskId = taskId
         )
-        
+
         when (response.status) {
             "COMPLETE" -> return response
             "FAILED" -> throw Exception("Task failed: ${response.error}")
@@ -347,18 +352,90 @@ curl -H 'X-API-Key: your_api_key_here' \
 
 ---
 
+## Endpoint 2: Get Results
+
+### `GET /v1/results/{task_id}`
+
+Retrieve the results of the audio processing task.
+
+#### Request
+
+**Headers:**
+
+```
+X-API-Key: your_api_key_here
+```
+
+#### Response (200 OK)
+
+Depending on the requested features and template, the response will vary. Here are examples for different templates:
+
+**1. Structured Analysis Template**
+
+```json
+{
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "COMPLETE",
+  "data": {
+    "structured_analysis": {
+      "summary": "This is a summary of the audio content.",
+      "key_points": [
+        "Key point 1",
+        "Key point 2"
+      ],
+      "detailed_analysis": {
+        "speaker_1": {
+          "transcript": "Speaker 1's transcript here.",
+          "duration": 120
+        },
+        "speaker_2": {
+          "transcript": "Speaker 2's transcript here.",
+          "duration": 90
+        }
+      }
+    }
+  }
+}
+```
+
+**2. Clean Transcript Template**
+
+```json
+{
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "COMPLETE",
+  "data": {
+    "clean_transcript": "This is the cleaned transcript of the audio content."
+  }
+}
+```
+
+**3. Raw Transcript Template**
+
+```json
+{
+  "task_id": "c4b3a216-3e7f-4d2a-8f9a-1b9c8d7e6a5b",
+  "status": "COMPLETE",
+  "data": {
+    "raw_transcript": "This is the raw transcript of the audio content with all filler words and pauses."
+  }
+}
+```
+
+---
+
 ## Key Differences: Submission vs Status Check
 
-| Field | POST /v1/process | GET /v1/status (Processing) | GET /v1/status (Complete) |
-|-------|------------------|----------------------------|---------------------------|
-| HTTP Status | `202 Accepted` | `200 OK` | `200 OK` |
-| `task_id` | ✅ | ✅ | ✅ |
-| `status` | `"PENDING"` | `"PROCESSING_*"` | `"COMPLETE"` |
-| `submitted_at` | ❌ | ✅ | ✅ |
-| `completed_at` | ❌ | ❌ | ✅ |
-| `versions` | ❌ | ❌ | ✅ |
-| `metrics` | ❌ | ❌ | ✅ |
-| **`results`** | ❌ | ❌ | **✅ (YOUR DATA!)** |
+| Field          | POST /v1/process | GET /v1/status (Processing) | GET /v1/status (Complete) |
+| -------------- | ---------------- | --------------------------- | ------------------------- |
+| HTTP Status    | `202 Accepted`   | `200 OK`                    | `200 OK`                  |
+| `task_id`      | ✅               | ✅                          | ✅                        |
+| `status`       | `"PENDING"`      | `"PROCESSING_*"`            | `"COMPLETE"`              |
+| `submitted_at` | ❌               | ✅                          | ✅                        |
+| `completed_at` | ❌               | ❌                          | ✅                        |
+| `versions`     | ❌               | ❌                          | ✅                        |
+| `metrics`      | ❌               | ❌                          | ✅                        |
+| **`results`**  | ❌               | ❌                          | **✅ (YOUR DATA!)**       |
 
 ---
 
@@ -373,6 +450,7 @@ curl http://localhost:8000/v1/models
 ```
 
 **Response:**
+
 ```json
 {
   "models": [
@@ -405,6 +483,7 @@ curl http://localhost:8000/v1/templates
 ```
 
 **Response:**
+
 ```json
 {
   "templates": [
@@ -433,6 +512,7 @@ curl http://localhost:8000/health
 ```
 
 **Response:**
+
 ```json
 {
   "status": "healthy"
@@ -456,10 +536,10 @@ class MaieRepository(
     ): Flow<ProcessingState> = flow {
         // Step 1: Submit audio
         emit(ProcessingState.Uploading)
-        
+
         val requestBody = file.asRequestBody("audio/*".toMediaType())
         val filePart = MultipartBody.Part.createFormData("file", file.name, requestBody)
-        
+
         val submitResponse = api.processAudio(
             apiKey = apiKey,
             file = filePart,
@@ -467,20 +547,20 @@ class MaieRepository(
             templateId = templateId,
             enableDiarization = enableDiarization
         )
-        
+
         val taskId = submitResponse.taskId
         emit(ProcessingState.Submitted(taskId))
-        
+
         // Step 2: Poll for completion
         var attempts = 0
         val maxAttempts = 120 // 2 minutes with 1-second intervals
-        
+
         while (attempts < maxAttempts) {
             delay(1000) // Wait 1 second
             attempts++
-            
+
             val statusResponse = api.getTaskStatus(apiKey, taskId)
-            
+
             when (statusResponse.status) {
                 "PENDING" -> emit(ProcessingState.Queued)
                 "PREPROCESSING" -> emit(ProcessingState.Preprocessing)
@@ -499,7 +579,7 @@ class MaieRepository(
                 }
             }
         }
-        
+
         emit(ProcessingState.Failed("Timeout waiting for results", "TIMEOUT"))
     }
 }
@@ -519,7 +599,7 @@ sealed class ProcessingState {
 class AudioProcessingViewModel(
     private val repository: MaieRepository
 ) : ViewModel() {
-    
+
     fun processAudio(file: File) {
         viewModelScope.launch {
             repository.processAudioFile(file)
@@ -553,18 +633,18 @@ class AudioProcessingViewModel(
 
 ### Common HTTP Status Codes
 
-| Code | Description | Action |
-|------|-------------|--------|
-| `202` | Accepted | Task submitted successfully, poll for results |
-| `200` | OK | Status check successful |
-| `400` | Bad Request | Check request parameters |
-| `401` | Unauthorized | Invalid API key |
-| `404` | Not Found | Task expired or doesn't exist |
-| `413` | Payload Too Large | Audio file exceeds size limit |
-| `415` | Unsupported Media Type | Invalid audio format |
-| `422` | Validation Error | Missing required fields |
-| `429` | Too Many Requests | Rate limit exceeded, retry later |
-| `500` | Internal Server Error | Server error, contact backend team |
+| Code  | Description            | Action                                        |
+| ----- | ---------------------- | --------------------------------------------- |
+| `202` | Accepted               | Task submitted successfully, poll for results |
+| `200` | OK                     | Status check successful                       |
+| `400` | Bad Request            | Check request parameters                      |
+| `401` | Unauthorized           | Invalid API key                               |
+| `404` | Not Found              | Task expired or doesn't exist                 |
+| `413` | Payload Too Large      | Audio file exceeds size limit                 |
+| `415` | Unsupported Media Type | Invalid audio format                          |
+| `422` | Validation Error       | Missing required fields                       |
+| `429` | Too Many Requests      | Rate limit exceeded, retry later              |
+| `500` | Internal Server Error  | Server error, contact backend team            |
 
 ### Error Response Format
 

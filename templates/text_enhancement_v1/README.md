@@ -76,6 +76,7 @@ The template fixes ONLY these types of clear errors:
 7. **filler_removal**: ONLY excessive repetition that impedes understanding
 
 **What is NOT corrected:**
+
 - Word choice (even if another word could be "better")
 - Sentence structure (unless grammatically wrong)
 - Style or tone
