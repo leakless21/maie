@@ -140,7 +140,7 @@ class TestLoadTemplateSchema:
         template_file.write_text(json.dumps(schema))
 
         with pytest.raises(
-            ValueError, match="Template schema missing required 'tags' field"
+            ValueError, match="Template schema missing required 'tags' or 'thẻ' field"
         ):
             load_template_schema("invalid", templates_dir)
 
