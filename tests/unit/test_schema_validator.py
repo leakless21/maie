@@ -475,6 +475,6 @@ class TestRepositoryTemplates:
     @pytest.mark.parametrize("template_id", TEMPLATE_SCHEMA_IDS)
     def test_schema_tags_field_is_valid(self, template_id: str):
         schema = load_template_schema(template_id, TEMPLATES_DIR)
-        assert (
-            validate_tags_field(schema) is True
-        ), f"{template_id} should define tags as 1-10 short strings"
+        assert validate_tags_field(schema) is True, (
+            f"{template_id} should define tags as 1-10 short strings"
+        )
