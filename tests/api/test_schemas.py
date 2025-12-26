@@ -64,6 +64,31 @@ def test_process_request_defaults_and_template_validation():
     assert req2.template_id == "nonexistent_template"
 
 
+def test_process_request_accepts_comma_delimited_features():
+    """RED: ProcessRequestSchema splits comma-delimited feature strings into enums."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features="summary,raw_transcript",
+        template_id="meeting_notes_v1",
+    )
+
+    assert req.features == [schemas.Feature.SUMMARY, schemas.Feature.RAW_TRANSCRIPT]
+
+
+def test_text_process_request_accepts_comma_delimited_features():
+    """RED: TextProcessRequestSchema splits comma-delimited feature strings into enums."""
+    req = schemas.TextProcessRequestSchema(
+        text="hello",
+        features="summary,clean_transcript",
+        template_id="meeting_notes_v1",
+    )
+
+    assert req.features == [
+        schemas.Feature.SUMMARY,
+        schemas.Feature.CLEAN_TRANSCRIPT,
+    ]
+
+
 def test_process_response_and_status_response_roundtrip():
     """RED: ProcessResponse retains task_id; StatusResponseSchema.status serializes to 'PENDING'."""
     tid = uuid4()

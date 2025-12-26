@@ -38,6 +38,44 @@ class Feature(str, Enum):
     ENHANCEMENT_METRICS = "enhancement_metrics"
 
 
+def _normalize_features_value(value: Any, default: List[Feature]) -> List[Feature]:
+    """Normalize incoming feature values to a list of Feature enums.
+
+    Supports comma-delimited strings (e.g., "summary,raw_transcript"), JSON-encoded
+    lists, and already-materialized lists. Falls back to the provided default if
+    nothing could be parsed.
+    """
+
+    normalized: List[Feature] = []
+
+    def _append(item: Any) -> None:
+        if isinstance(item, Feature):
+            normalized.append(item)
+            return
+
+        if isinstance(item, str):
+            parsed, _ = safe_parse_json(item)
+            if isinstance(parsed, list):
+                for sub in parsed:
+                    _append(sub)
+                return
+
+            parts = [part.strip() for part in item.split(",") if part.strip()]
+            if not parts:
+                return
+
+            normalized.extend([Feature(part) for part in parts])
+            return
+
+        if isinstance(item, list):
+            for sub in item:
+                _append(sub)
+
+    _append(value)
+
+    return normalized or list(default)
+
+
 # =============================================================================
 # Request Models
 # =============================================================================
@@ -86,7 +124,7 @@ class ProcessRequestSchema(BaseModel):
         },
     )
     enable_diarization: bool = Field(
-        default=False,
+        default=True,
         description="Enable speaker diarization to identify and label different speakers in the audio. When enabled, requires word-level timestamps from ASR.",
         json_schema_extra={
             "examples": [True, False],
@@ -108,18 +146,9 @@ class ProcessRequestSchema(BaseModel):
     @field_validator("features", mode="before")
     @classmethod
     def _coerce_features(cls, value: Any) -> List[Feature]:
-        """Convert features from various input formats to List[Feature]."""
-        if isinstance(value, str):
-            # Handle JSON string format (including markdown fences)
-            parsed, _ = safe_parse_json(value)
-            if isinstance(parsed, list):
-                return [Feature(f) if isinstance(f, str) else f for f in parsed]
-            # Handle single feature as string
-            return [Feature(value)]
-        elif isinstance(value, list):
-            return [Feature(f) if isinstance(f, str) else f for f in value]
-        else:
-            return [Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY]
+        return _normalize_features_value(
+            value, default=[Feature.CLEAN_TRANSCRIPT, Feature.SUMMARY]
+        )
 
     @field_validator("file", mode="before")
     @classmethod
@@ -232,17 +261,7 @@ class TextProcessRequestSchema(BaseModel):
     @field_validator("features", mode="before")
     @classmethod
     def _coerce_features(cls, value: Any) -> List[Feature]:
-        """Convert features from various input formats to List[Feature]."""
-        if isinstance(value, str):
-            # Handle JSON string format or single value
-            parsed, _ = safe_parse_json(value)
-            if isinstance(parsed, list):
-                return [Feature(f) if isinstance(f, str) else f for f in parsed]
-            return [Feature(value)]
-        elif isinstance(value, list):
-            return [Feature(f) if isinstance(f, str) else f for f in value]
-        else:
-            return [Feature.SUMMARY]
+        return _normalize_features_value(value, default=[Feature.SUMMARY])
 
     @model_validator(mode="after")
     def check_template_required(self):
@@ -339,11 +358,11 @@ class MetricsSchema(BaseModel):
 class ResultsSchema(BaseModel):
     """Schema for processing results."""
 
-    raw_transcript: Optional[str] = Field(None, description="Raw transcript from ASR")
     clean_transcript: Optional[str] = Field(None, description="Cleaned transcript")
     summary: Optional[Dict[str, Any]] = Field(
         None, description="Structured summary with embedded tags"
     )
+    raw_transcript: Optional[str] = Field(None, description="Raw transcript from ASR")
 
 
 class StatusResponseSchema(BaseModel):
@@ -501,7 +520,8 @@ class TemplateCreateSchema(BaseModel):
         pattern=r"^[a-zA-Z0-9_-]+$",
     )
     schema_data: Dict[str, Any] = Field(
-        ..., description="JSON Schema defining the structured output. MUST be passed as 'schema_data'."
+        ...,
+        description="JSON Schema defining the structured output. MUST be passed as 'schema_data'.",
     )
     prompt_template: str = Field(..., description="Jinja2 prompt template content")
     example: Optional[Dict[str, Any]] = Field(
@@ -515,7 +535,8 @@ class TemplateUpdateSchema(BaseModel):
     """Schema for updating an existing template."""
 
     schema_data: Optional[Dict[str, Any]] = Field(
-        None, description="JSON Schema defining the structured output. MUST be passed as 'schema_data'."
+        None,
+        description="JSON Schema defining the structured output. MUST be passed as 'schema_data'.",
     )
     prompt_template: Optional[str] = Field(
         None, description="Jinja2 prompt template content"

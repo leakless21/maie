@@ -382,7 +382,7 @@ class LlmSumSettings(BaseModel):
     structured_outputs_backend: Literal[
         "xgrammar", "guidance", "outlines", "lm-format-enforcer", "auto"
     ] = Field(
-        default="xgrammar",
+        default="guidance",
         description=(
             "Structured outputs backend to use for summary tasks. "
             "See vLLM structured outputs docs for supported backends."
@@ -431,7 +431,7 @@ class WorkerSettings(BaseModel):
 
 
 class DiarizationSettings(BaseModel):
-    enabled: bool = Field(default=False, description="Enable speaker diarization")
+    enabled: bool = Field(default=True, description="Enable speaker diarization")
     model_path: str = Field(
         default="data/models/pyannote-speaker-diarization-community-1",
         description="LOCAL PATH to pyannote speaker diarization model for FULLY OFFLINE operation (no HuggingFace/network calls)",

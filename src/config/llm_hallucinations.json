@@ -8,9 +8,14 @@
     "Để không bỏ lỡ những gì hãy subscribe cho kênh Ghiền Mì Gõ Để không bỏ lỡ những video hấp dẫn"
   ],
   "regex": [
+    "(?i)subscribe.*",
     "(?i)để không bỏ lỡ.*subscribe.*kênh",
     "(?i)subscribe.*kênh.*để không bỏ lỡ",
     "(?i)cảm ơn.*đã theo dõi.*hẹn gặp lại",
     "(?i)hãy subscribe cho kênh.*để không bỏ lỡ"
+    "(?iu)\\b(?:hay|hãy)\\b.*\\b(?:sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b.*\\b(?:lalaschool|ghiền\\s*mì\\s*g[oõọỏôốồổỗộ](?:i|ì|í|ị|ỉ|ĩ)?|ghien\\s*mi\\s*go(?:i)?)\\b",
+    "(?iu)\\b(?:để\\s*không\\s*bỏ\\s*lỡ|de\\s*khong\\s*bo\\s*lo)\\b.*\\b(?:sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b",
+    "(?iu)\\b(?:nhớ|nho)\\b.*\\b(?:like|share|sub(?:scribe)?|subcribe|đăng\\s*ký|dang\\s*ky)\\b.*\\b(?:kênh|kenh|channel)\\b.*\\b(?:lalaschool|ghiền\\s*mì\\s*g[oõọỏôốồổỗộ](?:i|ì|í|ị|ỉ|ĩ)?|ghien\\s*mi\\s*go(?:i)?)\\b",
+    "(?iu)\\b(?:cảm\\s*ơn|cam\\s*on)\\b.*\\b(?:theo\\s*dõi|theo\\s*doi)\\b(?:.*\\b(?:hẹn\\s*gặp\\s*lại|hen\\s*gap\\s*lai)\\b)?"
   ]
 }

@@ -143,17 +143,16 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         }
         
         # Prepare results
+        results_payload = {"clean_transcript": clean_transcript}
+        if structured_summary:
+            results_payload["summary"] = structured_summary
+        results_payload["raw_transcript"] = text
+
         result = {
             "versions": version_metadata,
             "metrics": metrics,
-            "results": {
-                "raw_transcript": text,
-                "clean_transcript": clean_transcript
-            }
+            "results": results_payload,
         }
-        
-        if structured_summary:
-            result["results"]["summary"] = structured_summary
             
         # Update status to COMPLETE
         if redis_conn:

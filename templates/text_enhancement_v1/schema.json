@@ -1,0 +1,42 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cải thiện văn bản",
+  "description": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
+  "type": "object",
+  "properties": {
+    "original_text": {
+      "type": "string",
+      "description": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
+      "maxLength": 50000
+    },
+    "enhanced_text": {
+      "type": "string",
+      "description": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
+      "maxLength": 50000
+    },
+    "quality_score": {
+      "type": "number",
+      "description": "Điểm chất lượng của văn bản gốc trên thang điểm từ 0.0 (rất kém) đến 1.0 (hoàn hảo)",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "language": {
+      "type": "string",
+      "description": "Mã ngôn ngữ chính của văn bản (ISO 639-1, ví dụ: 'vi' cho tiếng Việt, 'en' cho tiếng Anh)",
+      "pattern": "^[a-z]{2}$",
+      "maxLength": 2
+    },
+    "tags": {
+      "type": "array",
+      "description": "Các thẻ phân loại cho văn bản (ví dụ: loại nội dung, lĩnh vực, mức độ chất lượng)",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": ["original_text", "enhanced_text", "quality_score", "language", "tags"],
+  "additionalProperties": false
+}

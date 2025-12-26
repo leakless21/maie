@@ -1,0 +1,196 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Phân tích nội dung có cấu trúc",
+  "description": "Định dạng phân tích nội dung theo các phần: mở đầu, báo cáo, thảo luận, kết luận, giao việc",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Tiêu đề ngắn gọn, súc tích của nội dung",
+      "maxLength": 200
+    },
+    "mo_dau": {
+      "type": "object",
+      "description": "Phần mở đầu của nội dung",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Tóm tắt nội dung phần mở đầu",
+          "maxLength": 1000
+        },
+        "participants": {
+          "type": "array",
+          "description": "Danh sách người tham gia được giới thiệu",
+          "items": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "maxItems": 50
+        },
+        "context": {
+          "type": "string",
+          "description": "Bối cảnh hoặc mục đích được đề cập",
+          "maxLength": 500
+        }
+      },
+      "required": ["summary"]
+    },
+    "bao_cao": {
+      "type": "object",
+      "description": "Phần báo cáo các thông tin, dữ liệu, cập nhật",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Tóm tắt nội dung báo cáo",
+          "maxLength": 2000
+        },
+        "key_points": {
+          "type": "array",
+          "description": "Các điểm chính trong báo cáo",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20
+        },
+        "data_mentioned": {
+          "type": "array",
+          "description": "Các số liệu, dữ liệu được đề cập",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "maxItems": 30
+        }
+      },
+      "required": ["summary", "key_points"]
+    },
+    "thao_luan": {
+      "type": "object",
+      "description": "Phần thảo luận, trao đổi ý kiến",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Tóm tắt nội dung thảo luận",
+          "maxLength": 2000
+        },
+        "topics": {
+          "type": "array",
+          "description": "Các chủ đề được thảo luận",
+          "items": {
+            "type": "string",
+            "maxLength": 200
+          },
+          "maxItems": 15
+        },
+        "opinions": {
+          "type": "array",
+          "description": "Các ý kiến, quan điểm chính được đưa ra",
+          "items": {
+            "type": "object",
+            "properties": {
+              "speaker": {
+                "type": "string",
+                "description": "Người đưa ra ý kiến",
+                "maxLength": 100
+              },
+              "point": {
+                "type": "string",
+                "description": "Nội dung ý kiến",
+                "maxLength": 500
+              }
+            },
+            "required": ["point"]
+          },
+          "maxItems": 30
+        }
+      },
+      "required": ["summary", "topics"]
+    },
+    "ket_luan": {
+      "type": "object",
+      "description": "Phần kết luận, quyết định",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Tóm tắt kết luận",
+          "maxLength": 1500
+        },
+        "decisions": {
+          "type": "array",
+          "description": "Các quyết định đã đưa ra",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20
+        },
+        "agreements": {
+          "type": "array",
+          "description": "Các thỏa thuận, đồng thuận đạt được",
+          "items": {
+            "type": "string",
+            "maxLength": 300
+          },
+          "maxItems": 20
+        }
+      },
+      "required": ["summary"]
+    },
+    "giao_viec": {
+      "type": "object",
+      "description": "Phần giao việc, phân công nhiệm vụ",
+      "properties": {
+        "summary": {
+          "type": "string",
+          "description": "Tóm tắt phần giao việc",
+          "maxLength": 1000
+        },
+        "tasks": {
+          "type": "array",
+          "description": "Danh sách công việc được giao",
+          "items": {
+            "type": "object",
+            "properties": {
+              "description": {
+                "type": "string",
+                "description": "Mô tả công việc",
+                "maxLength": 500
+              },
+              "assignee": {
+                "type": "string",
+                "description": "Người được giao việc",
+                "maxLength": 100
+              },
+              "deadline": {
+                "type": ["string", "null"],
+                "description": "Hạn hoàn thành (định dạng YYYY-MM-DD hoặc mô tả)",
+                "maxLength": 100
+              },
+              "priority": {
+                "type": "string",
+                "description": "Mức độ ưu tiên",
+                "enum": ["cao", "trung bình", "thấp", "không xác định"]
+              }
+            },
+            "required": ["description"]
+          },
+          "maxItems": 50
+        }
+      },
+      "required": ["tasks"]
+    },
+    "tags": {
+      "type": "array",
+      "description": "Các thẻ phân loại nội dung",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": ["title", "mo_dau", "bao_cao", "thao_luan", "ket_luan", "giao_viec", "tags"],
+  "additionalProperties": false
+}

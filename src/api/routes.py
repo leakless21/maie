@@ -224,7 +224,7 @@ def enqueue_job(
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
         "asr_backend": request_params.get("asr_backend", settings.api.default_asr_backend),
-        "enable_diarization": request_params.get("enable_diarization", False),
+        "enable_diarization": request_params.get("enable_diarization", True),
         "enable_vad": request_params.get("enable_vad"),
         "vad_threshold": request_params.get("vad_threshold"),
         "redis_host": "localhost",

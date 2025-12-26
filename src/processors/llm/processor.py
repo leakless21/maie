@@ -633,9 +633,10 @@ class LLMProcessor(LLMBackend):
                     from vllm.sampling_params import StructuredOutputsParams
 
                     kwargs["structured_outputs"] = StructuredOutputsParams(
-                        json=json.dumps(schema)
+                        json=json.dumps(schema),
+                        backend=settings.llm_sum.structured_outputs_backend
                     )
-                    logger.debug("Set up structured output (JSON)")
+                    logger.debug(f"Set up structured output (JSON) with backend={settings.llm_sum.structured_outputs_backend}")
                 except Exception as e:
                     logger.warning(f"Failed to set up structured outputs: {e}")
             else:
@@ -899,6 +900,7 @@ class LLMProcessor(LLMBackend):
                 )
 
                 generated_text = outputs[0].outputs[0].text if outputs else ""
+                logger.debug(f"Extracted generated_text from chat API (length={len(generated_text) if generated_text else 0}): {repr(generated_text[:200] if generated_text else '<empty>')}")
                 tokens_used = (
                     len(outputs[0].prompt_token_ids)
                     if outputs
@@ -1244,7 +1246,10 @@ class LLMProcessor(LLMBackend):
             try:
                 from vllm.sampling_params import StructuredOutputsParams
 
-                sampling_override = StructuredOutputsParams(json=json.dumps(schema))
+                sampling_override = StructuredOutputsParams(
+                    json=json.dumps(schema),
+                    backend=settings.llm_sum.structured_outputs_backend
+                )
             except Exception as e:
                 logger.warning(f"Failed to initialize structured outputs: {e}")
 
