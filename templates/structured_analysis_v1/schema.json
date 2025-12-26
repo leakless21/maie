@@ -191,6 +191,14 @@
       "maxItems": 10
     }
   },
-  "required": ["title", "mo_dau", "bao_cao", "thao_luan", "ket_luan", "giao_viec", "tags"],
+  "required": [
+    "title",
+    "mo_dau",
+    "bao_cao",
+    "thao_luan",
+    "ket_luan",
+    "giao_viec",
+    "tags"
+  ],
   "additionalProperties": false
 }

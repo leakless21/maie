@@ -7,7 +7,7 @@ The **Text Enhancement Template** is designed to correct and improve transcribed
 ## Purpose
 
 - **Primary Use Case**: Enhance and correct Vietnamese transcribed text from audio/speech
-- **Secondary Use Cases**: 
+- **Secondary Use Cases**:
   - Quality control for transcription services
   - Text normalization for downstream processing
   - Educational tool for Vietnamese language learning
@@ -28,14 +28,17 @@ text_enhancement_v1/
 ### Fields
 
 1. **original_text** (string, max 50000 chars)
+
    - The exact input text as provided
    - Used for reference and comparison
 
 2. **enhanced_text** (string, max 50000 chars)
+
    - Fully corrected and enhanced version
    - All corrections applied (grammar, spelling, punctuation, capitalization, etc.)
 
 3. **corrections** (array, max 200 items)
+
    - Detailed tracking of each correction made
    - Each correction includes:
      - **type**: Category (spelling, grammar, punctuation, capitalization, foreign_word, structure, filler_removal)
@@ -45,6 +48,7 @@ text_enhancement_v1/
      - **reason**: Brief explanation
 
 4. **quality_score** (float, 0.0-1.0)
+
    - Quality rating of original text
    - 0.9-1.0: Nearly perfect
    - 0.7-0.9: Good quality
@@ -70,30 +74,39 @@ The template handles seven types of corrections:
 ## Key Features
 
 ### 1. Meaning Preservation
+
 - Maintains original intent and semantic content
 - Does not add information not present in source
 - Preserves speaker's tone and style
 
 ### 2. Foreign Word Restoration
+
 Automatically converts Vietnamese phonetic transcriptions back to original spelling:
+
 - "lai trim" → "livestream"
 - "phây búc" → "Facebook"
 - "ây ai" → "AI"
 - "ghít háp" → "GitHub"
 
 ### 3. Proper Noun Handling
+
 Correctly capitalizes Vietnamese proper nouns:
+
 - "hà nội" → "Hà Nội"
 - "việt nam" → "Việt Nam"
 - "hồ chí minh" → "Hồ Chí Minh"
 
 ### 4. Quality Assessment
+
 Provides objective quality score to help prioritize review:
+
 - High scores (>0.8): Minimal review needed
 - Low scores (<0.4): Requires careful verification
 
 ### 5. Detailed Change Tracking
+
 Every correction is documented with:
+
 - What was changed
 - Where it occurred
 - Why it was changed
@@ -104,11 +117,13 @@ Every correction is documented with:
 ### Example 1: Moderate Quality Transcription
 
 **Input:**
+
 ```
 xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam
 ```
 
 **Output:**
+
 ```json
 {
   "original_text": "xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam",
@@ -144,11 +159,13 @@ xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai 
 ### Example 2: Heavy Foreign Word Content
 
 **Input:**
+
 ```
 tôi đang xem một buổi lai trim trên phây búc về cách sử dụng ghít háp và đốc kờ để phát triển phần mềm
 ```
 
 **Output:**
+
 ```json
 {
   "enhanced_text": "Tôi đang xem một buổi livestream trên Facebook về cách sử dụng GitHub và Docker để phát triển phần mềm.",
@@ -225,12 +242,14 @@ available_templates = [
 ### When to Use This Template
 
 ✅ **Good for:**
+
 - ASR/transcription outputs
 - Text with phonetically transcribed foreign words
 - Missing punctuation and capitalization
 - Quality assessment of transcriptions
 
 ❌ **Not suitable for:**
+
 - Creative writing enhancement
 - Style/tone transformation
 - Content summarization (use `generic_summary_v2`)
@@ -239,11 +258,13 @@ available_templates = [
 ### Handling Edge Cases
 
 1. **Very Poor Quality (Quality Score < 0.3)**
+
    - Review enhanced text carefully
    - May require human verification
    - Consider re-transcribing audio
 
 2. **Mixed Languages**
+
    - Template preserves code-switching
    - Corrects capitalization in all languages
    - Maintains technical terms
@@ -273,19 +294,23 @@ pytest tests/integration/test_text_enhancement_template.py
 ### Common Issues
 
 1. **Template Not Found**
+
    ```
    Error: Template text_enhancement_v1 not found
    ```
+
    **Solution**: Ensure all three files exist in `/templates/text_enhancement_v1/`
 
 2. **Schema Validation Failure**
+
    ```
    Error: Output does not match schema
    ```
+
    **Solution**: Check LLM output format, ensure `required` fields are present
 
 3. **Poor Correction Quality**
-   **Solution**: 
+   **Solution**:
    - Add more examples to `prompt.jinja`
    - Tune LLM temperature (recommend 0.3-0.5)
    - Consider using larger model

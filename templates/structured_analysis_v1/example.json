@@ -2,7 +2,12 @@
   "title": "Họp triển khai dự án website thương mại điện tử",
   "mo_dau": {
     "summary": "Cuộc họp bắt đầu với lời chào và giới thiệu các thành viên tham dự từ các bộ phận khác nhau. Mục đích là thống nhất kế hoạch triển khai dự án website thương mại điện tử trong Q1 2026.",
-    "participants": ["Anh Tuấn (Project Manager)", "Chị Hoa (UX Designer)", "Anh Khoa (Tech Lead)", "Em Linh (Marketing)"],
+    "participants": [
+      "Anh Tuấn (Project Manager)",
+      "Chị Hoa (UX Designer)",
+      "Anh Khoa (Tech Lead)",
+      "Em Linh (Marketing)"
+    ],
     "context": "Triển khai dự án website thương mại điện tử trong Q1 2026"
   },
   "bao_cao": {

@@ -13,7 +13,7 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
 ## Mục đích sử dụng
 
 - **Chính:** Phân tích cuộc họp/buổi thuyết trình thành các phần có cấu trúc
-- **Phụ:** 
+- **Phụ:**
   - Tạo biên bản họp chi tiết
   - Theo dõi phân công công việc
   - Phân tích nội dung bài thuyết trình
@@ -21,16 +21,19 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
 ## Cấu trúc Output
 
 ### 1. Mở đầu (mo_dau)
+
 - **summary**: Tóm tắt phần mở đầu
 - **participants**: Danh sách người tham gia
 - **context**: Bối cảnh, mục đích
 
 ### 2. Báo cáo (bao_cao)
+
 - **summary**: Tóm tắt nội dung báo cáo
 - **key_points**: Các điểm chính (max 20)
 - **data_mentioned**: Số liệu được đề cập (max 30)
 
 ### 3. Thảo luận (thao_luan)
+
 - **summary**: Tóm tắt thảo luận
 - **topics**: Các chủ đề được thảo luận (max 15)
 - **opinions**: Ý kiến của từng người (max 30)
@@ -38,11 +41,13 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
   - point: Nội dung ý kiến
 
 ### 4. Kết luận (ket_luan)
+
 - **summary**: Tóm tắt kết luận
 - **decisions**: Các quyết định (max 20)
 - **agreements**: Các thỏa thuận (max 20)
 
 ### 5. Giao việc (giao_viec)
+
 - **summary**: Tóm tắt phần giao việc
 - **tasks**: Danh sách công việc (max 50)
   - description: Mô tả công việc
@@ -51,11 +56,13 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
   - priority: cao | trung bình | thấp | không xác định
 
 ### 6. Tags
+
 - 1-10 thẻ phân loại nội dung
 
 ## Điểm khác biệt
 
 So với `meeting_notes_v2`, template này:
+
 - ✅ **Phân tích chi tiết hơn** với 5 phần rõ ràng
 - ✅ **Theo dõi opinions** từng người trong thảo luận
 - ✅ **Phân tích số liệu** được đề cập trong báo cáo
@@ -74,12 +81,14 @@ curl -X POST http://localhost:8000/v1/transcribe \
 ## Khi nào nên dùng
 
 ✅ **Tốt cho:**
+
 - Cuộc họp có cấu trúc rõ ràng
 - Buổi thuyết trình có phần Q&A
 - Họp review/báo cáo có giao việc
 - Cần phân tích chi tiết từng phần
 
 ❌ **Không phù hợp cho:**
+
 - Trao đổi không chính thức
 - Nội dung không có cấu trúc
 - Chỉ cần summary tổng quan (dùng `generic_summary_v2`)
@@ -88,11 +97,13 @@ curl -X POST http://localhost:8000/v1/transcribe \
 ## Xử lý trường hợp đặc biệt
 
 **Nếu thiếu một phần:**
+
 - Vẫn phải có object với summary giải thích
 - Các mảng có thể để rỗng `[]`
 - Không bỏ qua phần nào
 
 **Nội dung không rõ ràng:**
+
 - Summary mô tả ngắn gọn những gì có
 - Đánh dấu thông tin không xác định
 - Không bịa đặt thông tin

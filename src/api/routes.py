@@ -183,7 +183,9 @@ async def create_task_in_redis(
         file_path_value = request_params.get("file_path") or ""
         if isinstance(file_path_value, Path):
             file_path_value = str(file_path_value)
-        asr_backend_value = request_params.get("asr_backend") or settings.api.default_asr_backend
+        asr_backend_value = (
+            request_params.get("asr_backend") or settings.api.default_asr_backend
+        )
         features_value = request_params.get("features", ["summary"])
         features_json = json.dumps(features_value)
         task_data = {
@@ -223,7 +225,9 @@ def enqueue_job(
         "audio_path": str(file_path),
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
-        "asr_backend": request_params.get("asr_backend", settings.api.default_asr_backend),
+        "asr_backend": request_params.get(
+            "asr_backend", settings.api.default_asr_backend
+        ),
         "enable_diarization": request_params.get("enable_diarization", True),
         "enable_vad": request_params.get("enable_vad"),
         "vad_threshold": request_params.get("vad_threshold"),
@@ -279,6 +283,7 @@ class ProcessController(Controller):
 
         # Create task record in Redis
         from src.api.dependencies import get_results_redis
+
         redis_client = await get_results_redis()
         try:
             task_key = f"task:{task_id}"
@@ -298,10 +303,11 @@ class ProcessController(Controller):
 
         # Enqueue job
         from src.api.dependencies import get_rq_queue
+
         queue = get_rq_queue()
-        
+
         job_func = "src.worker.pipeline.process_text_task"
-        
+
         task_params = {
             "task_id": str(task_id),
             "text": data.text,
@@ -691,11 +697,15 @@ def scan_templates_directory() -> TemplatesResponseSchema:
 
     for bundle_dir in template_dirs:
         template_id = bundle_dir.name
-        
+
         # Skip hidden directories or non-template dirs (e.g. schemas/prompts/examples if they still exist)
-        if template_id.startswith(".") or template_id in ["schemas", "prompts", "examples"]:
+        if template_id.startswith(".") or template_id in [
+            "schemas",
+            "prompts",
+            "examples",
+        ]:
             continue
-            
+
         schema_path = bundle_dir / "schema.json"
         if not schema_path.exists():
             continue
@@ -818,7 +828,9 @@ class TemplatesController(Controller):
         description="Retrieve a list of available processing templates",
         tags=["Templates"],
     )
-    async def get_templates(self, manager: TemplateManager) -> TemplatesResponseSchema | Dict[str, Any]:
+    async def get_templates(
+        self, manager: TemplateManager
+    ) -> TemplatesResponseSchema | Dict[str, Any]:
         """
         Get a list of available processing templates.
 
@@ -870,7 +882,9 @@ class TemplatesController(Controller):
                 detail=f"Failed to load schema for template {template_id}: {e}",
             )
 
-    async def _get_template_detail_logic(self, template_id: str, manager: TemplateManager) -> TemplateDetailSchema:
+    async def _get_template_detail_logic(
+        self, template_id: str, manager: TemplateManager
+    ) -> TemplateDetailSchema:
         """Helper to get template details."""
         try:
             content = await manager.get_template_content(template_id)
@@ -899,7 +913,9 @@ class TemplatesController(Controller):
         description="Get full details of a template including prompt and schema",
         tags=["Templates"],
     )
-    async def get_template_detail(self, template_id: str, manager: TemplateManager) -> TemplateDetailSchema:
+    async def get_template_detail(
+        self, template_id: str, manager: TemplateManager
+    ) -> TemplateDetailSchema:
         """
         Get full details of a template.
         """
@@ -912,7 +928,9 @@ class TemplatesController(Controller):
         description="Create a new processing template",
         tags=["Templates"],
     )
-    async def create_template(self, data: TemplateCreateSchema, manager: TemplateManager) -> TemplateDetailSchema:
+    async def create_template(
+        self, data: TemplateCreateSchema, manager: TemplateManager
+    ) -> TemplateDetailSchema:
         """
         Create a new template.
         """
@@ -982,6 +1000,8 @@ class TemplatesController(Controller):
         except Exception as e:
             logger.error(f"Failed to delete template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+
 # Define route handlers for the app
 route_handlers: List = [
     ProcessController,

@@ -149,36 +149,34 @@ class RateLimitSettings(BaseModel):
     def validate_limit_format(cls, value: Tuple[str, int]) -> Tuple[str, int]:
         """Validate rate limit format."""
         valid_units = {"second", "minute", "hour", "day"}
-        
+
         if len(value) != 2:
             raise ValueError(
                 f"Rate limit must be a tuple of (unit, count), got {value}"
             )
-        
+
         unit, count = value
-        
+
         if not isinstance(unit, str):
             raise ValueError(
                 f"Rate limit unit must be a string, got {type(unit).__name__}"
             )
-        
+
         unit_lower = unit.lower()
         if unit_lower not in valid_units:
             raise ValueError(
                 f"Invalid rate limit unit '{unit}'. "
                 f"Must be one of: {', '.join(sorted(valid_units))}"
             )
-        
+
         if not isinstance(count, int):
             raise ValueError(
                 f"Rate limit count must be an integer, got {type(count).__name__}"
             )
-        
+
         if count <= 0:
-            raise ValueError(
-                f"Rate limit count must be positive, got {count}"
-            )
-        
+            raise ValueError(f"Rate limit count must be positive, got {count}")
+
         # Return with normalized unit (lowercase)
         return (unit_lower, count)
 
@@ -682,6 +680,7 @@ class AppSettings(BaseSettings):
 
     def get_model_path(self, model_type: str) -> Path:
         return self.paths.models_dir / model_type
+
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
         Apply a profile to the settings instance, respecting fields set via environment variables.
@@ -713,4 +712,3 @@ class AppSettings(BaseSettings):
 
         updated = _apply(self, profile)
         return cast(AppSettings, updated)
-

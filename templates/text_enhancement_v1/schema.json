@@ -37,6 +37,12 @@
       "maxItems": 10
     }
   },
-  "required": ["original_text", "enhanced_text", "quality_score", "language", "tags"],
+  "required": [
+    "original_text",
+    "enhanced_text",
+    "quality_score",
+    "language",
+    "tags"
+  ],
   "additionalProperties": false
 }
