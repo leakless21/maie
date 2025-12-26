@@ -379,10 +379,7 @@ Depending on the requested features and template, the response will vary. Here a
   "data": {
     "structured_analysis": {
       "summary": "This is a summary of the audio content.",
-      "key_points": [
-        "Key point 1",
-        "Key point 2"
-      ],
+      "key_points": ["Key point 1", "Key point 2"],
       "detailed_analysis": {
         "speaker_1": {
           "transcript": "Speaker 1's transcript here.",
