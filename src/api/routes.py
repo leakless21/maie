@@ -733,11 +733,16 @@ def scan_templates_directory() -> TemplatesResponseSchema:
             )
             continue
 
-        # Derive name/description
-        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
-        description = schema_data.get(
-            "description",
-            "Auto-discovered template based on JSON schema.",
+        # Derive name/description - handle both Vietnamese and English keys
+        raw_name = (
+            schema_data.get("tiêu_đề")
+            or schema_data.get("title")
+            or template_id.replace("_", " ").title()
+        )
+        description = (
+            schema_data.get("mô_tả")
+            or schema_data.get("description")
+            or "Auto-discovered template based on JSON schema."
         )
 
         # Load example if available
@@ -900,10 +905,16 @@ class TemplatesController(Controller):
         except FileNotFoundError:
             raise NotFoundException(f"Template {template_id} not found")
 
-        # Map content to schema
+        # Map content to schema - handle both Vietnamese and English keys
         schema_data = content["schema"]
-        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
-        description = schema_data.get("description", "Template")
+        raw_name = (
+            schema_data.get("tiêu_đề")
+            or schema_data.get("title")
+            or template_id.replace("_", " ").title()
+        )
+        description = (
+            schema_data.get("mô_tả") or schema_data.get("description") or "Template"
+        )
 
         return TemplateDetailSchema(
             id=template_id,

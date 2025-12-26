@@ -311,21 +311,21 @@ print(f"Status: {status['status']}")
       }
     }
   },
-  "metrics": {
-    "input_duration_seconds": 2701.3,
-    "processing_time_seconds": 162.8,
-    "rtf": 0.06,
-    "vad_coverage": 0.88,
-    "asr_confidence_avg": 0.91,
-    "edit_rate_cleaning": 0.15
+  "chỉ_số": {
+    "thời_lượng_đầu_vào_giây": 2701.3,
+    "thời_gian_xử_lý_giây": 162.8,
+    "hệ_số_thời_gian_thực": 0.06,
+    "độ_phủ_vad": 0.88,
+    "độ_tin_cậy_asr_trung_bình": 0.91,
+    "tỷ_lệ_chỉnh_sửa_làm_sạch": 0.15
   },
-  "results": {
-    "raw_transcript": "Cuộc họp ngày 4 tháng 10...",
-    "clean_transcript": "Cuộc họp ngày 4 tháng 10 đã đề cập...",
-    "summary": {
-      "title": "Cuộc họp lập kế hoạch ngân sách Q4",
+  "kết_quả": {
+    "bản_ghi_thô": "Cuộc họp ngày 4 tháng 10...",
+    "bản_ghi_sạch": "Cuộc họp ngày 4 tháng 10 đã đề cập...",
+    "tóm_tắt": {
+      "tiêu_đề": "Cuộc họp lập kế hoạch ngân sách Q4",
       "abstract": "Tổng kết đề xuất ngân sách quý 4, tập trung vào phân bổ cho marketing và R&D.",
-      "main_points": [
+      "chủ_đề_chính": [
         "Đã phê duyệt ngân sách cho các sáng kiến Q4",
         "Đã thảo luận kế hoạch tuyển dụng mới",
         "Đã đặt lịch cho việc ra mắt sản phẩm"

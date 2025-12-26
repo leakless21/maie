@@ -140,25 +140,25 @@ Phản hồi Cuối cùng Thành công (Nội dung JSON)
       }
     }
   },
-  "metrics": {
-    "input_duration_seconds": 2701.3,
-    "processing_time_seconds": 162.8,
-    "rtf": 0.06,
-    "vad_coverage": 0.88,
-    "asr_confidence_avg": 0.91,
-    "edit_rate_cleaning": 0.05
+  "chỉ_số": {
+    "thời_lượng_đầu_vào_giây": 2701.3,
+    "thời_gian_xử_lý_giây": 162.8,
+    "hệ_số_thời_gian_thực": 0.06,
+    "độ_phủ_vad": 0.88,
+    "độ_tin_cậy_asr_trung_bình": 0.91,
+    "tỷ_lệ_chỉnh_sửa_làm_sạch": 0.05
   },
-  "results": {
-    "raw_transcript": "the meeting on oct 4 focused on q4 budgets...",
-    "clean_transcript": "The meeting on October 4th focused on Q4 budgets.",
-    "summary": {
-      "title": "Q4 Budget Planning Meeting",
+  "kết_quả": {
+    "bản_ghi_thô": "the meeting on oct 4 focused on q4 budgets...",
+    "bản_ghi_sạch": "The meeting on October 4th focused on Q4 budgets.",
+    "tóm_tắt": {
+      "tiêu_đề": "Q4 Budget Planning Meeting",
       "abstract": "A review of the fourth-quarter budget proposal, focusing on marketing and R&D allocations.",
-      "main_points": [
+      "chủ_đề_chính": [
         "Marketing budget approved with a 5% increase.",
         "R&D budget for 'Project Phoenix' is pending final review."
       ],
-      "tags": [
+      "thẻ": [
         "Finance",
         "Budget Planning",
         "Marketing Spend",

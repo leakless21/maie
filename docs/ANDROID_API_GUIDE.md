@@ -195,25 +195,25 @@ The response **changes** as the task progresses:
       "quantization": "awq-4bit"
     }
   },
-  "metrics": {
-    "input_duration_seconds": 2701.3,
-    "processing_time_seconds": 162.8,
-    "rtf": 0.06,
-    "vad_coverage": 0.88,
-    "asr_confidence_avg": 0.91,
-    "edit_rate_cleaning": 0.15
+  "chỉ_số": {
+    "thời_lượng_đầu_vào_giây": 2701.3,
+    "thời_gian_xử_lý_giây": 162.8,
+    "hệ_số_thời_gian_thực": 0.06,
+    "độ_phủ_vad": 0.88,
+    "độ_tin_cậy_asr_trung_bình": 0.91,
+    "tỷ_lệ_chỉnh_sửa_làm_sạch": 0.15
   },
-  "results": {
-    "raw_transcript": "The meeting on October 4th covered several important topics...",
-    "clean_transcript": "The meeting on October 4th covered several important topics...",
-    "summary": {
-      "title": "Q4 Budget Planning Meeting",
-      "main_points": [
+  "kết_quả": {
+    "bản_ghi_thô": "The meeting on October 4th covered several important topics...",
+    "bản_ghi_sạch": "The meeting on October 4th covered several important topics...",
+    "tóm_tắt": {
+      "tiêu_đề": "Q4 Budget Planning Meeting",
+      "chủ_đề_chính": [
         "Budget approved for Q4 initiatives",
         "New hiring plan discussed",
         "Timeline set for product launch"
       ],
-      "tags": ["Finance", "Budget", "Planning"]
+      "thẻ": ["Finance", "Budget", "Planning"]
     }
   }
 }
