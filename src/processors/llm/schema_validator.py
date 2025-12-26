@@ -67,10 +67,10 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
             f"Template schema must be type 'object', got '{schema['type']}'"
         )
 
-    # Validate required 'tags' field (FR-6)
+    # Validate required 'tags' or 'thẻ' field (FR-6)
     if not validate_tags_field(schema):
         raise ValueError(
-            f"Template schema missing required 'tags' field: {template_file}"
+            f"Template schema missing required 'tags' or 'thẻ' field: {template_file}"
         )
 
     logger.debug(f"Loaded template schema: {template_id}")
@@ -233,10 +233,10 @@ def validate_llm_output(
 
 def validate_tags_field(schema: Dict[str, Any]) -> bool:
     """
-    Verify schema has required 'tags' field (FR-6).
+    Verify schema has required 'tags' or 'thẻ' field (FR-6).
 
     The tags field must be:
-    - Present in properties
+    - Present in properties (as 'tags' or 'thẻ')
     - Type array
     - MinItems 1, MaxItems 10
     - Items type string
@@ -252,7 +252,8 @@ def validate_tags_field(schema: Dict[str, Any]) -> bool:
         >>> validate_tags_field(schema)  # True
     """
     properties = schema.get("properties", {})
-    tags_field = properties.get("tags")
+    # Support both English 'tags' and Vietnamese 'thẻ'
+    tags_field = properties.get("tags") or properties.get("thẻ")
 
     if not tags_field:
         return False
@@ -428,7 +429,7 @@ def validate_schema_completeness(schema: Dict[str, Any]) -> Tuple[bool, list]:
         else:
             # Check for tags field
             if not validate_tags_field(schema):
-                missing_fields.append("tags field (required for FR-6)")
+                missing_fields.append("tags or thẻ field (required for FR-6)")
 
     # Check required array
     if "required" in schema:
