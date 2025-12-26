@@ -329,7 +329,7 @@ class TestValidateTagsField:
                     "minItems": 1,
                     "maxItems": 10,
                     "items": {"type": "string"},
-                }
+                },
             }
         }
 
