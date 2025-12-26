@@ -81,7 +81,7 @@ def _update_status(
     # Extract task_id from task_key if not provided (format: "task:{task_id}")
     if task_id is None and task_key.startswith("task:"):
         task_id = task_key[5:]  # Remove "task:" prefix
-    
+
     # Always include task_id for API retrieval
     if task_id:
         update_data["task_id"] = task_id
@@ -1541,7 +1541,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                     # Store with both Vietnamese and English keys for compatibility
                     "kết_quả": result["kết_quả"],
-                    "results": result["kết_quả"],  # English alias for backward compatibility
+                    "results": result[
+                        "kết_quả"
+                    ],  # English alias for backward compatibility
                     "phiên_bản": version_metadata,
                     "versions": version_metadata,  # English alias for backward compatibility
                     "chỉ_số": metrics,
@@ -1917,7 +1919,9 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "chỉ_số": metrics,
                     "metrics": metrics,  # English alias for backward compatibility
                     "kết_quả": result["kết_quả"],
-                    "results": result["kết_quả"],  # English alias for backward compatibility
+                    "results": result[
+                        "kết_quả"
+                    ],  # English alias for backward compatibility
                 },
             )
 
