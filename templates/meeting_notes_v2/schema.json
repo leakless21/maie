@@ -1,33 +1,33 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Biên bản cuộc họp",
-  "description": "Biên bản cuộc họp có cấu trúc đơn giản cho các bản ghi tiếng Việt.",
+  "tiêu_đề": "Biên bản cuộc họp",
+  "mô_tả": "Biên bản cuộc họp có cấu trúc đơn giản cho các bản ghi tiếng Việt.",
   "type": "object",
   "properties": {
-    "title": {
+    "tiêu_đề": {
       "type": "string",
       "maxLength": 200,
-      "description": "Tiêu đề ngắn gọn và phù hợp của cuộc họp."
+      "mô_tả": "Tiêu đề ngắn gọn và phù hợp của cuộc họp."
     },
-    "meeting_date": {
+    "ngày_họp": {
       "type": ["string", "null"],
-      "description": "Ngày diễn ra cuộc họp (YYYY-MM-DD) hoặc null nếu không rõ."
+      "mô_tả": "Ngày diễn ra cuộc họp (YYYY-MM-DD) hoặc null nếu không rõ."
     },
-    "participants": {
+    "người_tham_gia": {
       "type": "array",
       "items": {
         "type": "string",
         "maxLength": 100
       },
       "maxItems": 100,
-      "description": "Danh sách người tham gia."
+      "mô_tả": "Danh sách người tham gia."
     },
-    "summary": {
+    "tóm_tắt": {
       "type": "string",
       "maxLength": 2000,
-      "description": "Tóm tắt nội dung cuộc họp."
+      "mô_tả": "Tóm tắt nội dung cuộc họp."
     },
-    "agenda": {
+    "chương_trình_nghị_sự": {
       "type": "array",
       "items": {
         "type": "string",
@@ -35,31 +35,31 @@
       },
       "minItems": 1,
       "maxItems": 20,
-      "description": "Danh sách các mục trong chương trình nghị sự."
+      "mô_tả": "Danh sách các mục trong chương trình nghị sự."
     },
-    "decisions": {
+    "quyết_định": {
       "type": "array",
       "items": {
         "type": "string",
         "maxLength": 300
       },
       "maxItems": 100,
-      "description": "Các quyết định đã được đưa ra."
+      "mô_tả": "Các quyết định đã được đưa ra."
     },
-    "action_items": {
+    "công_việc_cần_làm": {
       "type": "array",
       "items": {
         "type": "object",
         "properties": {
-          "description": {
+          "mô_tả": {
             "type": "string",
             "maxLength": 500
           },
-          "assignee": {
+          "người_được_giao": {
             "type": "string",
             "maxLength": 100
           },
-          "due_date": {
+          "hạn_hoàn_thành": {
             "type": ["string", "null"]
           }
         },
@@ -67,9 +67,9 @@
         "additionalProperties": false
       },
       "maxItems": 200,
-      "description": "Các công việc cần thực hiện."
+      "mô_tả": "Các công việc cần thực hiện."
     },
-    "tags": {
+    "thẻ": {
       "type": "array",
       "items": {
         "type": "string",
@@ -77,7 +77,7 @@
       },
       "minItems": 1,
       "maxItems": 7,
-      "description": "Các thẻ liên quan đến cuộc họp."
+      "mô_tả": "Các thẻ liên quan đến cuộc họp."
     }
   },
   "required": [

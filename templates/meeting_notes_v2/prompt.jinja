@@ -30,47 +30,47 @@ Schema Limits (enforce these strictly):
    - **Expected Output**:
      ```json
      {
-       "title": "Họp review Sprint 3 - Dự án Zalo Mini App",
-       "meeting_date": "2025-10-21",
-       "participants": ["Minh", "Lan", "Hùng"],
-       "summary": "Cuộc họp review tiến độ Sprint 3 của dự án Zalo Mini App. Nhóm đã rà soát các công việc đã hoàn thành (tích hợp ZaloPay, tối ưu giỏ hàng), các vấn đề đang tồn đọng (module recommendation bị block, lỗi UI) và chốt kế hoạch phát hành. Các tính năng đã hoàn tất sẽ được release, module recommendation tạm hoãn. Các công việc tiếp theo đã được phân công cụ thể.",
-       "agenda": [
+       "tiêu_đề": "Họp review Sprint 3 - Dự án Zalo Mini App",
+       "ngày_họp": "2025-10-21",
+       "người_tham_gia": ["Minh", "Lan", "Hùng"],
+       "tóm_tắt": "Cuộc họp review tiến độ Sprint 3 của dự án Zalo Mini App. Nhóm đã rà soát các công việc đã hoàn thành (tích hợp ZaloPay, tối ưu giỏ hàng), các vấn đề đang tồn đọng (module recommendation bị block, lỗi UI) và chốt kế hoạch phát hành. Các tính năng đã hoàn tất sẽ được release, module recommendation tạm hoãn. Các công việc tiếp theo đã được phân công cụ thể.",
+       "chương_trình_nghị_sự": [
          "Cập nhật tiến độ Sprint 3 từ team Dev",
          "Báo cáo chất lượng từ team QA",
          "Thống nhất kế hoạch phát hành",
          "Phân công công việc tiếp theo"
        ],
-       "decisions": [
+       "quyết_định": [
          "Phát hành các tính năng đã hoàn thành (thanh toán, giỏ hàng) vào ngày 2025-10-24.",
          "Tạm hoãn phát hành module recommendation cho đến khi có dữ liệu từ đối tác."
        ],
-       "action_items": [
+       "công_việc_cần_làm": [
          {
-           "description": "Liên hệ đối tác để thúc đẩy việc cung cấp dữ liệu cho module recommendation.",
-           "assignee": "Minh",
-           "due_date": null
+           "mô_tả": "Liên hệ đối tác để thúc đẩy việc cung cấp dữ liệu cho module recommendation.",
+           "người_được_giao": "Minh",
+           "hạn_hoàn_thành": null
          },
          {
-           "description": "Fix lỗi vỡ UI trên các dòng máy cũ.",
-           "assignee": "Lan (phân công cho Dev)",
-           "due_date": "2025-10-22"
+           "mô_tả": "Fix lỗi vỡ UI trên các dòng máy cũ.",
+           "người_được_giao": "Lan (phân công cho Dev)",
+           "hạn_hoàn_thành": "2025-10-22"
          },
          {
-           "description": "Viết bổ sung test case cho module recommendation.",
-           "assignee": "Hùng",
-           "due_date": null
+           "mô_tả": "Viết bổ sung test case cho module recommendation.",
+           "người_được_giao": "Hùng",
+           "hạn_hoàn_thành": null
          }
        ],
-       "tags": ["review sprint", "zalo mini app", "kế hoạch"]
+       "thẻ": ["review sprint", "zalo mini app", "kế hoạch"]
      }
      ```
 
 2. **DIFFICULT CASE: Not a Meeting / Irrelevant Content**:
    - Input: "một hai ba bốn năm. bài kiểm tra micro. (tiếng nhạc)"
-   - Output: {"meeting_date": null, "title": "Bản ghi âm không phải cuộc họp", "participants": [], "summary": "Bản ghi âm chứa nội dung kiểm tra micro và tiếng nhạc, không có nội dung của một cuộc họp.", "agenda": [], "decisions": [], "action_items": [], "tags": ["ghi âm lỗi"]}
+   - Output: {"ngày_họp": null, "tiêu_đề": "Bản ghi âm không phải cuộc họp", "người_tham_gia": [], "tóm_tắt": "Bản ghi âm chứa nội dung kiểm tra micro và tiếng nhạc, không có nội dung của một cuộc họp.", "chương_trình_nghị_sự": [], "quyết_định": [], "công_việc_cần_làm": [], "thẻ": ["ghi âm lỗi"]}
 
 3. **DIFFICULT CASE: No Clear Decisions or Actions**:
    - Input: "chúng ta đã nói về dự án X. mọi người đều có vẻ đồng ý. vậy thôi, cảm ơn."
-   - Output: {"meeting_date": null, "title": "Thảo luận về dự án X", "participants": ["Người 1", "Người 2"], "summary": "Cuộc họp thảo luận chung về dự án X, kết thúc mà không có quyết định hay công việc cụ thể nào được giao.", "agenda": ["Thảo luận dự án X"], "decisions": [], "action_items": [], "tags": ["thảo luận"]}
+   - Output: {"ngày_họp": null, "tiêu_đề": "Thảo luận về dự án X", "người_tham_gia": ["Người 1", "Người 2"], "tóm_tắt": "Cuộc họp thảo luận chung về dự án X, kết thúc mà không có quyết định hay công việc cụ thể nào được giao.", "chương_trình_nghị_sự": ["Thảo luận dự án X"], "quyết_định": [], "công_việc_cần_làm": [], "thẻ": ["thảo luận"]}
 {% endblock %}
 

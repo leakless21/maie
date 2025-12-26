@@ -1,22 +1,22 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Tóm tắt chung",
-  "description": "Định dạng tóm tắt chung có cấu trúc với các thẻ phân loại",
+  "tiêu_đề": "Tóm tắt chung",
+  "mô_tả": "Định dạng tóm tắt chung có cấu trúc với các thẻ phân loại",
   "type": "object",
   "properties": {
-    "title": {
+    "tiêu_đề": {
       "type": "string",
-      "description": "Một tiêu đề ngắn gọn, phù hợp, nắm bắt được bản chất của nội dung",
+      "mô_tả": "Một tiêu đề ngắn gọn, phù hợp, nắm bắt được bản chất của nội dung",
       "maxLength": 200
     },
-    "summary": {
+    "tóm_tắt": {
       "type": "string",
-      "description": "Tóm tắt toàn diện về nội dung",
+      "mô_tả": "Tóm tắt toàn diện về nội dung",
       "maxLength": 2000
     },
-    "key_topics": {
+    "chủ_đề_chính": {
       "type": "array",
-      "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung",
+      "mô_tả": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung",
       "items": {
         "type": "string",
         "maxLength": 300
@@ -24,9 +24,9 @@
       "minItems": 1,
       "maxItems": 15
     },
-    "tags": {
+    "thẻ": {
       "type": "array",
-      "description": "Thẻ danh mục để phân loại nội dung (FR-6)",
+      "mô_tả": "Thẻ danh mục để phân loại nội dung (FR-6)",
       "items": {
         "type": "string",
         "maxLength": 50

@@ -1,93 +1,93 @@
 {
   "title": "Họp triển khai dự án website thương mại điện tử",
-  "mo_dau": {
-    "summary": "Cuộc họp bắt đầu với lời chào và giới thiệu các thành viên tham dự từ các bộ phận khác nhau. Mục đích là thống nhất kế hoạch triển khai dự án website thương mại điện tử trong Q1 2026.",
-    "participants": [
+  "mở_đầu": {
+    "tóm_tắt": "Cuộc họp bắt đầu với lời chào và giới thiệu các thành viên tham dự từ các bộ phận khác nhau. Mục đích là thống nhất kế hoạch triển khai dự án website thương mại điện tử trong Q1 2026.",
+    "người_tham_gia": [
       "Anh Tuấn (Project Manager)",
       "Chị Hoa (UX Designer)",
       "Anh Khoa (Tech Lead)",
       "Em Linh (Marketing)"
     ],
-    "context": "Triển khai dự án website thương mại điện tử trong Q1 2026"
+    "bối_cảnh": "Triển khai dự án website thương mại điện tử trong Q1 2026"
   },
-  "bao_cao": {
-    "summary": "Báo cáo hiện trạng dự án: đã hoàn thành phần nghiên cứu thị trường và phân tích đối thủ. Đã có bản wireframe sơ bộ và đã chọn được tech stack. Tiến độ đạt 30% so với kế hoạch ban đầu.",
-    "key_points": [
+  "báo_cáo": {
+    "tóm_tắt": "Báo cáo hiện trạng dự án: đã hoàn thành phần nghiên cứu thị trường và phân tích đối thủ. Đã có bản wireframe sơ bộ và đã chọn được tech stack. Tiến độ đạt 30% so với kế hoạch ban đầu.",
+    "điểm_chính": [
       "Hoàn thành nghiên cứu thị trường",
       "Hoàn thành phân tích đối thủ",
       "Có bản wireframe sơ bộ",
       "Đã chọn tech stack: React, Node.js, MongoDB"
     ],
-    "data_mentioned": [
+    "dữ_liệu_đề_cập": [
       "Tiến độ đạt 30%",
       "4 thành viên tham gia",
       "Dự kiến triển khai Q1 2026"
     ]
   },
-  "thao_luan": {
-    "summary": "Thảo luận tập trung vào lựa chọn payment gateway, thiết kế giao diện mobile-first, và chiến lược marketing ban đầu. Có một số quan điểm khác nhau về việc ưu tiên tính năng nào trước.",
-    "topics": [
+  "thảo_luận": {
+    "tóm_tắt": "Thảo luận tập trung vào lựa chọn payment gateway, thiết kế giao diện mobile-first, và chiến lược marketing ban đầu. Có một số quan điểm khác nhau về việc ưu tiên tính năng nào trước.",
+    "chủ_đề": [
       "Lựa chọn payment gateway",
       "Thiết kế mobile-first",
       "Chiến lược marketing ban đầu",
       "Ưu tiên tính năng"
     ],
-    "opinions": [
+    "ý_kiến": [
       {
-        "speaker": "Anh Khoa",
-        "point": "Nên dùng VNPay cho payment vì phổ biến và dễ tích hợp"
+        "người_nói": "Anh Khoa",
+        "nội_dung": "Nên dùng VNPay cho payment vì phổ biến và dễ tích hợp"
       },
       {
-        "speaker": "Chị Hoa",
-        "point": "Đề xuất thiết kế mobile-first vì 70% traffic từ mobile"
+        "người_nói": "Chị Hoa",
+        "nội_dung": "Đề xuất thiết kế mobile-first vì 70% traffic từ mobile"
       },
       {
-        "speaker": "Em Linh",
-        "point": "Cần có chiến dịch teaser trước khi launch 2 tuần"
+        "người_nói": "Em Linh",
+        "nội_dung": "Cần có chiến dịch teaser trước khi launch 2 tuần"
       }
     ]
   },
-  "ket_luan": {
-    "summary": "Team đồng thuận sử dụng VNPay làm payment gateway chính, áp dụng thiết kế mobile-first, và triển khai chiến dịch marketing trước launch 2 tuần. Mục tiêu launch vào cuối tháng 3/2026.",
-    "decisions": [
+  "kết_luận": {
+    "tóm_tắt": "Team đồng thuận sử dụng VNPay làm payment gateway chính, áp dụng thiết kế mobile-first, và triển khai chiến dịch marketing trước launch 2 tuần. Mục tiêu launch vào cuối tháng 3/2026.",
+    "quyết_định": [
       "Sử dụng VNPay làm payment gateway",
       "Áp dụng thiết kế mobile-first",
       "Launch cuối tháng 3/2026"
     ],
-    "agreements": [
+    "thỏa_thuận": [
       "Đồng thuận về payment gateway",
       "Đồng thuận về approach mobile-first",
       "Đồng thuận về timeline và chiến lược marketing"
     ]
   },
-  "giao_viec": {
-    "summary": "Phân công các công việc cụ thể cho từng thành viên với deadline rõ ràng để đảm bảo tiến độ dự án.",
-    "tasks": [
+  "giao_việc": {
+    "tóm_tắt": "Phân công các công việc cụ thể cho từng thành viên với deadline rõ ràng để đảm bảo tiến độ dự án.",
+    "công_việc": [
       {
-        "description": "Hoàn thiện wireframe đầy đủ cho tất cả màn hình",
-        "assignee": "Chị Hoa",
-        "deadline": "2026-01-15",
-        "priority": "cao"
+        "mô_tả": "Hoàn thiện wireframe đầy đủ cho tất cả màn hình",
+        "người_được_giao": "Chị Hoa",
+        "hạn_hoàn_thành": "2026-01-15",
+        "mức_độ_ưu_tiên": "cao"
       },
       {
-        "description": "Tích hợp VNPay và test thanh toán",
-        "assignee": "Anh Khoa",
-        "deadline": "2026-02-01",
-        "priority": "cao"
+        "mô_tả": "Tích hợp VNPay và test thanh toán",
+        "người_được_giao": "Anh Khoa",
+        "hạn_hoàn_thành": "2026-02-01",
+        "mức_độ_ưu_tiên": "cao"
       },
       {
-        "description": "Chuẩn bị content và chiến dịch teaser",
-        "assignee": "Em Linh",
-        "deadline": "2026-03-15",
-        "priority": "trung bình"
+        "mô_tả": "Chuẩn bị content và chiến dịch teaser",
+        "người_được_giao": "Em Linh",
+        "hạn_hoàn_thành": "2026-03-15",
+        "mức_độ_ưu_tiên": "trung bình"
       },
       {
-        "description": "Tổ chức họp review tiến độ hàng tuần",
-        "assignee": "Anh Tuấn",
-        "deadline": null,
-        "priority": "cao"
+        "mô_tả": "Tổ chức họp review tiến độ hàng tuần",
+        "người_được_giao": "Anh Tuấn",
+        "hạn_hoàn_thành": null,
+        "mức_độ_ưu_tiên": "cao"
       }
     ]
   },
-  "tags": ["dự án", "thương mại điện tử", "website", "Q1 2026", "triển khai"]
+  "thẻ": ["dự án", "thương mại điện tử", "website", "Q1 2026", "triển khai"]
 }

@@ -67,20 +67,20 @@ Schema Limits (enforce these strictly):
      ```json
      {
        "title": "Họp review Sprint 5 - Dự án App Mobile",
-       "mo_dau": {
-         "summary": "Cuộc họp bắt đầu với lời chào và giới thiệu các thành viên tham dự. Mục đích họp là đánh giá tiến độ Sprint 5 và lên kế hoạch cho Sprint 6.",
-         "participants": ["Minh (PM)", "Lan (Dev Lead)", "Hùng (QA)"],
-         "context": "Đánh giá tiến độ Sprint 5 và lên kế hoạch Sprint 6 cho dự án App Mobile"
+       "mở_đầu": {
+         "tóm_tắt": "Cuộc họp bắt đầu với lời chào và giới thiệu các thành viên tham dự. Mục đích họp là đánh giá tiến độ Sprint 5 và lên kế hoạch cho Sprint 6.",
+         "người_tham_gia": ["Minh (PM)", "Lan (Dev Lead)", "Hùng (QA)"],
+         "bối_cảnh": "Đánh giá tiến độ Sprint 5 và lên kế hoạch Sprint 6 cho dự án App Mobile"
        },
-       "bao_cao": {
-         "summary": "Team đã hoàn thành 8/10 tasks, đạt 80% mục tiêu Sprint 5. Còn 2 tasks chưa hoàn thành là tích hợp payment và fix bug UI. Số lượng bug giảm đáng kể và performance được cải thiện.",
-         "key_points": [
+       "báo_cáo": {
+         "tóm_tắt": "Team đã hoàn thành 8/10 tasks, đạt 80% mục tiêu Sprint 5. Còn 2 tasks chưa hoàn thành là tích hợp payment và fix bug UI. Số lượng bug giảm đáng kể và performance được cải thiện.",
+         "điểm_chính": [
            "Hoàn thành 8/10 tasks (80% mục tiêu)",
            "Còn 2 tasks: tích hợp payment và fix bug UI",
            "Số lượng bug giảm mạnh",
            "Performance tăng đáng kể"
          ],
-         "data_mentioned": [
+         "dữ_liệu_đề_cập": [
            "8/10 tasks hoàn thành",
            "80% mục tiêu đạt được",
            "Bug giảm từ 45 xuống 12",
@@ -88,65 +88,65 @@ Schema Limits (enforce these strictly):
            "Ngày họp: 15/12/2025"
          ]
        },
-       "thao_luan": {
-         "summary": "Thảo luận xoay quanh việc ưu tiên công việc nào: tích hợp payment hay fix UI. Sau khi cân nhắc các ý kiến, team đồng thuận ưu tiên UI trước vì ảnh hưởng trực tiếp đến trải nghiệm người dùng.",
-         "topics": [
+       "thảo_luận": {
+         "tóm_tắt": "Thảo luận xoay quanh việc ưu tiên công việc nào: tích hợp payment hay fix UI. Sau khi cân nhắc các ý kiến, team đồng thuận ưu tiên UI trước vì ảnh hưởng trực tiếp đến trải nghiệm người dùng.",
+         "chủ_đề": [
            "Ưu tiên giữa payment và UI",
            "Thời gian testing cần thiết",
            "Ảnh hưởng của bug UI đến UX"
          ],
-         "opinions": [
+         "ý_kiến": [
            {
-             "speaker": "Minh",
-             "point": "Đề xuất tập trung vào payment trước"
+             "người_nói": "Minh",
+             "nội_dung": "Đề xuất tập trung vào payment trước"
            },
            {
-             "speaker": "Lan",
-             "point": "Nên fix UI trước vì ảnh hưởng trực tiếp đến UX"
+             "người_nói": "Lan",
+             "nội_dung": "Nên fix UI trước vì ảnh hưởng trực tiếp đến UX"
            },
            {
-             "speaker": "Hùng",
-             "point": "Đồng ý với Lan và đề nghị thêm 2 ngày testing"
+             "người_nói": "Hùng",
+             "nội_dung": "Đồng ý với Lan và đề nghị thêm 2 ngày testing"
            }
          ]
        },
-       "ket_luan": {
-         "summary": "Team quyết định hoãn phần tích hợp payment sang Sprint 6, tập trung hoàn thiện UI và testing trong tuần hiện tại để đảm bảo chất lượng trải nghiệm người dùng.",
-         "decisions": [
+       "kết_luận": {
+         "tóm_tắt": "Team quyết định hoãn phần tích hợp payment sang Sprint 6, tập trung hoàn thiện UI và testing trong tuần hiện tại để đảm bảo chất lượng trải nghiệm người dùng.",
+         "quyết_định": [
            "Hoãn payment sang Sprint 6",
            "Tập trung hoàn thiện UI và testing trong tuần này",
            "Ưu tiên chất lượng UX"
          ],
-         "agreements": [
+         "thỏa_thuận": [
            "Đồng thuận ưu tiên UI trước payment",
            "Dành thêm thời gian cho testing",
            "Payment sẽ xử lý ở Sprint 6"
          ]
        },
-       "giao_viec": {
-         "summary": "Các công việc được phân công cụ thể với deadline rõ ràng cho từng thành viên để hoàn thành mục tiêu tuần này và chuẩn bị cho Sprint 6.",
-         "tasks": [
+       "giao_việc": {
+         "tóm_tắt": "Các công việc được phân công cụ thể với deadline rõ ràng cho từng thành viên để hoàn thành mục tiêu tuần này và chuẩn bị cho Sprint 6.",
+         "công_việc": [
            {
-             "description": "Fix bug UI trên các dòng máy cũ",
-             "assignee": "Tuấn",
-             "deadline": "2025-12-18",
-             "priority": "cao"
+             "mô_tả": "Fix bug UI trên các dòng máy cũ",
+             "người_được_giao": "Tuấn",
+             "hạn_hoàn_thành": "2025-12-18",
+             "mức_độ_ưu_tiên": "cao"
            },
            {
-             "description": "Viết test case cho các tính năng mới",
-             "assignee": "Hùng",
-             "deadline": "2025-12-17",
-             "priority": "cao"
+             "mô_tả": "Viết test case cho các tính năng mới",
+             "người_được_giao": "Hùng",
+             "hạn_hoàn_thành": "2025-12-17",
+             "mức_độ_ưu_tiên": "cao"
            },
            {
-             "description": "Liên hệ đối tác về payment spec",
-             "assignee": "Minh",
-             "deadline": "Tuần sau",
-             "priority": "trung bình"
+             "mô_tả": "Liên hệ đối tác về payment spec",
+             "người_được_giao": "Minh",
+             "hạn_hoàn_thành": "Tuần sau",
+             "mức_độ_ưu_tiên": "trung bình"
            }
          ]
        },
-       "tags": ["sprint review", "app mobile", "project management", "development"]
+       "thẻ": ["sprint review", "app mobile", "project management", "development"]
      }
      ```
 
@@ -156,54 +156,54 @@ Schema Limits (enforce these strictly):
      ```json
      {
        "title": "Trình bày chiến lược marketing Q1 2026",
-       "mo_dau": {
-         "summary": "Nga giới thiệu buổi trình bày về chiến lược marketing cho quý 1 năm 2026.",
-         "participants": ["Nga"],
-         "context": "Trình bày chiến lược marketing Q1 2026"
+       "mở_đầu": {
+         "tóm_tắt": "Nga giới thiệu buổi trình bày về chiến lược marketing cho quý 1 năm 2026.",
+         "người_tham_gia": ["Nga"],
+         "bối_cảnh": "Trình bày chiến lược marketing Q1 2026"
        },
-       "bao_cao": {
-         "summary": "Báo cáo kết quả quý vừa qua với doanh số tăng trưởng tốt và số lượng khách hàng mới tăng mạnh. Kế hoạch Q1 tập trung vào 3 kênh chính với ngân sách dự kiến 500 triệu đồng.",
-         "key_points": [
+       "báo_cáo": {
+         "tóm_tắt": "Báo cáo kết quả quý vừa qua với doanh số tăng trưởng tốt và số lượng khách hàng mới tăng mạnh. Kế hoạch Q1 tập trung vào 3 kênh chính với ngân sách dự kiến 500 triệu đồng.",
+         "điểm_chính": [
            "Kết quả quý vừa qua tích cực",
            "Kế hoạch Q1 tập trung 3 kênh: social media, email, event offline",
            "Ngân sách dự kiến 500 triệu đồng"
          ],
-         "data_mentioned": [
+         "dữ_liệu_đề_cập": [
            "Doanh số tăng 25%",
            "Khách hàng mới tăng 40%",
            "Ngân sách Q1: 500 triệu đồng",
            "3 kênh marketing"
          ]
        },
-       "thao_luan": {
-         "summary": "Có một số câu hỏi ngắn về tỷ lệ chuyển đổi và phân bổ chi phí cho từng kênh marketing.",
-         "topics": [
+       "thảo_luận": {
+         "tóm_tắt": "Có một số câu hỏi ngắn về tỷ lệ chuyển đổi và phân bổ chi phí cho từng kênh marketing.",
+         "chủ_đề": [
            "Tỷ lệ chuyển đổi",
            "Chi phí từng kênh marketing"
          ],
-         "opinions": [
+         "ý_kiến": [
            {
-             "speaker": "A",
-             "point": "Hỏi về tỷ lệ chuyển đổi"
+             "người_nói": "A",
+             "nội_dung": "Hỏi về tỷ lệ chuyển đổi"
            },
            {
-             "speaker": "B",
-             "point": "Hỏi về chi phí mỗi kênh"
+             "người_nói": "B",
+             "nội_dung": "Hỏi về chi phí mỗi kênh"
            }
          ]
        },
-       "ket_luan": {
-         "summary": "Xác nhận triển khai chiến lược marketing Q1 theo kế hoạch đã trình bày.",
-         "decisions": [
+       "kết_luận": {
+         "tóm_tắt": "Xác nhận triển khai chiến lược marketing Q1 theo kế hoạch đã trình bày.",
+         "quyết_định": [
            "Triển khai chiến lược marketing Q1 theo kế hoạch"
          ],
-         "agreements": []
+         "thỏa_thuận": []
        },
-       "giao_viec": {
-         "summary": "Không có phân công công việc cụ thể trong buổi trình bày này.",
-         "tasks": []
+       "giao_việc": {
+         "tóm_tắt": "Không có phân công công việc cụ thể trong buổi trình bày này.",
+         "công_việc": []
        },
-       "tags": ["marketing", "chiến lược", "Q1 2026", "trình bày"]
+       "thẻ": ["marketing", "chiến lược", "Q1 2026", "trình bày"]
      }
      ```
 
@@ -213,47 +213,47 @@ Schema Limits (enforce these strictly):
      ```json
      {
        "title": "Trao đổi về vấn đề cần xem xét",
-       "mo_dau": {
-         "summary": "Cuộc trao đổi không chính thức bắt đầu về một vấn đề cần xem xét kỹ hơn.",
-         "participants": [],
-         "context": "Thảo luận một vấn đề chưa xác định rõ"
+       "mở_đầu": {
+         "tóm_tắt": "Cuộc trao đổi không chính thức bắt đầu về một vấn đề cần xem xét kỹ hơn.",
+         "người_tham_gia": [],
+         "bối_cảnh": "Thảo luận một vấn đề chưa xác định rõ"
        },
-       "bao_cao": {
-         "summary": "Không có phần báo cáo chính thức trong cuộc trao đổi này.",
-         "key_points": [],
-         "data_mentioned": []
+       "báo_cáo": {
+         "tóm_tắt": "Không có phần báo cáo chính thức trong cuộc trao đổi này.",
+         "điểm_chính": [],
+         "dữ_liệu_đề_cập": []
        },
-       "thao_luan": {
-         "summary": "Trao đổi ngắn về việc cần xem xét một vấn đề, nhưng không có thảo luận sâu hay đưa ra giải pháp cụ thể.",
-         "topics": [
+       "thảo_luận": {
+         "tóm_tắt": "Trao đổi ngắn về việc cần xem xét một vấn đề, nhưng không có thảo luận sâu hay đưa ra giải pháp cụ thể.",
+         "chủ_đề": [
            "Vấn đề cần xem xét kỹ hơn"
          ],
-         "opinions": [
+         "ý_kiến": [
            {
-             "point": "Cần xem xét kỹ hơn về vấn đề này"
+             "nội_dung": "Cần xem xét kỹ hơn về vấn đề này"
            },
            {
-             "point": "Đồng ý với đề xuất"
+             "nội_dung": "Đồng ý với đề xuất"
            }
          ]
        },
-       "ket_luan": {
-         "summary": "Chưa có kết luận rõ ràng, cần kiểm tra lại và báo cáo sau.",
-         "decisions": [],
-         "agreements": []
+       "kết_luận": {
+         "tóm_tắt": "Chưa có kết luận rõ ràng, cần kiểm tra lại và báo cáo sau.",
+         "quyết_định": [],
+         "thỏa_thuận": []
        },
-       "giao_viec": {
-         "summary": "Có một người sẽ kiểm tra lại và báo cáo sau, nhưng không có thông tin cụ thể.",
-         "tasks": [
+       "giao_việc": {
+         "tóm_tắt": "Có một người sẽ kiểm tra lại và báo cáo sau, nhưng không có thông tin cụ thể.",
+         "công_việc": [
            {
-             "description": "Kiểm tra lại vấn đề và báo cáo",
-             "assignee": "Không xác định",
-             "deadline": null,
-             "priority": "không xác định"
+             "mô_tả": "Kiểm tra lại vấn đề và báo cáo",
+             "người_được_giao": "Không xác định",
+             "hạn_hoàn_thành": null,
+             "mức_độ_ưu_tiên": "không xác định"
            }
          ]
        },
-       "tags": ["trao đổi", "không chính thức"]
+       "thẻ": ["trao đổi", "không chính thức"]
      }
      ```
 {% endblock %}

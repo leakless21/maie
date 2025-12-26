@@ -1,22 +1,22 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Bản ghi phỏng vấn V2",
-  "description": "Định dạng có cấu trúc cho bản ghi phỏng vấn với các thẻ phân loại. Tùy chọn bao gồm interview_date nếu bản ghi chứa nó một cách rõ ràng.",
+  "tiêu_đề": "Bản ghi phỏng vấn V2",
+  "mô_tả": "Định dạng có cấu trúc cho bản ghi phỏng vấn với các thẻ phân loại. Tùy chọn bao gồm interview_date nếu bản ghi chứa nó một cách rõ ràng.",
   "type": "object",
   "properties": {
-    "interview_date": {
+    "ngày_phỏng_vấn": {
       "type": ["string", "null"],
-      "description": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
+      "mô_tả": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
       "pattern": "^d{4}-d{2}-d{2}$"
     },
-    "interview_summary": {
+    "tóm_tắt_phỏng_vấn": {
       "type": "string",
-      "description": "Tóm tắt toàn diện về nội dung cuộc phỏng vấn",
+      "mô_tả": "Tóm tắt toàn diện về nội dung cuộc phỏng vấn",
       "maxLength": 2000
     },
-    "key_insights": {
+    "nhận_định_chính": {
       "type": "array",
-      "description": "Những hiểu biết hoặc phát hiện chính từ cuộc phỏng vấn",
+      "mô_tả": "Những hiểu biết hoặc phát hiện chính từ cuộc phỏng vấn",
       "items": {
         "type": "string",
         "maxLength": 500
@@ -24,14 +24,14 @@
       "minItems": 1,
       "maxItems": 10
     },
-    "participant_sentiment": {
+    "cảm_xúc_người_tham_gia": {
       "type": "string",
-      "description": "Cảm tính chung của (những) người tham gia phỏng vấn",
+      "mô_tả": "Cảm tính chung của (những) người tham gia phỏng vấn",
       "enum": ["positive", "neutral", "negative", "mixed"]
     },
-    "tags": {
+    "thẻ": {
       "type": "array",
-      "description": "Thẻ danh mục để phân loại nội dung (FR-6)",
+      "mô_tả": "Thẻ danh mục để phân loại nội dung (FR-6)",
       "items": {
         "type": "string",
         "maxLength": 50

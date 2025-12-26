@@ -93,11 +93,11 @@ If it's #2, DO NOT change it.
    - **Expected Output**:
      ```json
      {
-       "original_text": "xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam ừ đặc biệt là trong lĩnh vực giáo dục và y tế tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này",
-       "enhanced_text": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam, đặc biệt là trong lĩnh vực giáo dục và y tế. Tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này.",
-       "quality_score": 0.55,
-       "language": "vi",
-       "tags": ["transcription", "education", "technology", "moderate_quality"]
+       "văn_bản_gốc": "xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam ừ đặc biệt là trong lĩnh vực giáo dục và y tế tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này",
+       "văn_bản_cải_thiện": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam, đặc biệt là trong lĩnh vực giáo dục và y tế. Tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này.",
+       "điểm_chất_lượng": 0.55,
+       "ngôn_ngữ": "vi",
+       "thẻ": ["transcription", "education", "technology", "moderate_quality"]
      }
      ```
 
@@ -106,11 +106,11 @@ If it's #2, DO NOT change it.
    - **Output**:
      ```json
      {
-       "original_text": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên vẫn còn nhiều thách thức cần giải quyết",
-       "enhanced_text": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên, vẫn còn nhiều thách thức cần giải quyết.",
-       "quality_score": 0.88,
-       "language": "vi",
-       "tags": ["government", "education", "report", "high_quality"]
+       "văn_bản_gốc": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên vẫn còn nhiều thách thức cần giải quyết",
+       "văn_bản_cải_thiện": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên, vẫn còn nhiều thách thức cần giải quyết.",
+       "điểm_chất_lượng": 0.88,
+       "ngôn_ngữ": "vi",
+       "thẻ": ["government", "education", "report", "high_quality"]
      }
      ```
 
@@ -119,11 +119,11 @@ If it's #2, DO NOT change it.
    - **Output**:
      ```json
      {
-       "original_text": "tôi đang xem một buổi lai trim trên phây búc về cách sử dụng ghít háp và đốc kờ để phát triển phần mềm",
-       "enhanced_text": "Tôi đang xem một buổi livestream trên Facebook về cách sử dụng GitHub và Docker để phát triển phần mềm.",
-       "quality_score": 0.42,
-       "language": "vi",
-       "tags": ["transcription", "technology", "foreign_words", "poor_quality"]
+       "văn_bản_gốc": "tôi đang xem một buổi lai trim trên phây búc về cách sử dụng ghít háp và đốc kờ để phát triển phần mềm",
+       "văn_bản_cải_thiện": "Tôi đang xem một buổi livestream trên Facebook về cách sử dụng GitHub và Docker để phát triển phần mềm.",
+       "điểm_chất_lượng": 0.42,
+       "ngôn_ngữ": "vi",
+       "thẻ": ["transcription", "technology", "foreign_words", "poor_quality"]
      }
      ```
 
@@ -132,11 +132,11 @@ If it's #2, DO NOT change it.
    - **Output**:
      ```json
      {
-       "original_text": "ừ à này này ờ tôi muốn nói là ừm có phải là cái đó không",
-       "enhanced_text": "Tôi muốn nói là có phải là cái đó không?",
-       "quality_score": 0.25,
-       "language": "vi",
-       "tags": ["transcription", "very_poor_quality", "excessive_fillers"]
+       "văn_bản_gốc": "ừ à này này ờ tôi muốn nói là ừm có phải là cái đó không",
+       "văn_bản_cải_thiện": "Tôi muốn nói là có phải là cái đó không?",
+       "điểm_chất_lượng": 0.25,
+       "ngôn_ngữ": "vi",
+       "thẻ": ["transcription", "very_poor_quality", "excessive_fillers"]
      }
      ```
 
@@ -145,11 +145,11 @@ If it's #2, DO NOT change it.
    - **Output**:
      ```json
      {
-       "original_text": "the product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes",
-       "enhanced_text": "The product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes.",
-       "quality_score": 0.78,
-       "language": "vi",
-       "tags": ["business", "technology", "mixed_language", "good_quality"]
+       "văn_bản_gốc": "the product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes",
+       "văn_bản_cải_thiện": "The product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes.",
+       "điểm_chất_lượng": 0.78,
+       "ngôn_ngữ": "vi",
+       "thẻ": ["business", "technology", "mixed_language", "good_quality"]
      }
      ```
 {% endblock %}

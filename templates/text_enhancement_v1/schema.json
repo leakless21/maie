@@ -1,34 +1,34 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Cải thiện văn bản",
-  "description": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
+  "tiêu_đề": "Cải thiện văn bản",
+  "mô_tả": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
   "type": "object",
   "properties": {
-    "original_text": {
+    "văn_bản_gốc": {
       "type": "string",
-      "description": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
+      "mô_tả": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
       "maxLength": 50000
     },
-    "enhanced_text": {
+    "văn_bản_cải_thiện": {
       "type": "string",
-      "description": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
+      "mô_tả": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
       "maxLength": 50000
     },
-    "quality_score": {
+    "điểm_chất_lượng": {
       "type": "number",
-      "description": "Điểm chất lượng của văn bản gốc trên thang điểm từ 0.0 (rất kém) đến 1.0 (hoàn hảo)",
+      "mô_tả": "Điểm chất lượng của văn bản gốc trên thang điểm từ 0.0 (rất kém) đến 1.0 (hoàn hảo)",
       "minimum": 0.0,
       "maximum": 1.0
     },
-    "language": {
+    "ngôn_ngữ": {
       "type": "string",
-      "description": "Mã ngôn ngữ chính của văn bản (ISO 639-1, ví dụ: 'vi' cho tiếng Việt, 'en' cho tiếng Anh)",
+      "mô_tả": "Mã ngôn ngữ chính của văn bản (ISO 639-1, ví dụ: 'vi' cho tiếng Việt, 'en' cho tiếng Anh)",
       "pattern": "^[a-z]{2}$",
       "maxLength": 2
     },
-    "tags": {
+    "thẻ": {
       "type": "array",
-      "description": "Các thẻ phân loại cho văn bản (ví dụ: loại nội dung, lĩnh vực, mức độ chất lượng)",
+      "mô_tả": "Các thẻ phân loại cho văn bản (ví dụ: loại nội dung, lĩnh vực, mức độ chất lượng)",
       "items": {
         "type": "string",
         "maxLength": 50

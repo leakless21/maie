@@ -1,19 +1,19 @@
 {
-  "title": "Họp dự án Y – rà soát tiến độ và phân công",
-  "participants": ["Bình", "Chi", "Dũng"],
-  "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
-  "agenda": [
+  "tiêu_đề": "Họp dự án Y – rà soát tiến độ và phân công",
+  "người_tham_gia": ["Bình", "Chi", "Dũng"],
+  "tóm_tắt": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
+  "chương_trình_nghị_sự": [
     "Cập nhật tiến độ sprint",
     "Phạm vi phát hành",
     "Phân công công việc"
   ],
-  "decisions": [
+  "quyết_định": [
     "Ưu tiên xử lý lỗi còn tồn đọng",
     "Giữ nguyên phạm vi tính năng hiện tại"
   ],
-  "action_items": [
-    {"description": "Chi tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "assignee": "Chi", "due_date": "2025-10-24"},
-    {"description": "Dũng cập nhật test cases cho tính năng thanh toán", "assignee": "Dũng"}
+  "công_việc_cần_làm": [
+    {"mô_tả": "Chi tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "người_được_giao": "Chi", "hạn_hoàn_thành": "2025-10-24"},
+    {"mô_tả": "Dũng cập nhật test cases cho tính năng thanh toán", "người_được_giao": "Dũng"}
   ],
-  "tags": ["họp nhóm", "dự án", "kế hoạch"]
+  "thẻ": ["họp nhóm", "dự án", "kế hoạch"]
 }

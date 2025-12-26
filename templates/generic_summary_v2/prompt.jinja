@@ -18,9 +18,9 @@ You are an expert content analyst. Your goal is to extract the core essence of t
    - **Expected Output**:
      ```json
      {
-       "title": "Tổng quan Lịch sử Kinh tế Việt Nam giai đoạn Đổi Mới (từ 1986)",
-       "summary": "Bài giảng tóm lược quá trình phát triển kinh tế Việt Nam từ khi bắt đầu công cuộc Đổi Mới năm 1986. Nội dung bao gồm bối cảnh trước Đổi Mới với nền kinh tế kế hoạch hóa, các giai đoạn phát triển chính, và những cột mốc quan trọng. Giai đoạn đầu (1986-1990) tập trung xóa bỏ bao cấp và thu hút đầu tư nước ngoài. Giai đoạn 1991-2000 ghi nhận tăng trưởng mạnh mẽ, bình thường hóa quan hệ quốc tế và phát triển nông nghiệp. Giai đoạn từ 2001 đến nay nhấn mạnh vào hội nhập kinh tế sâu rộng, với việc gia nhập WTO và sự trỗi dậy của kinh tế tư nhân.",
-       "key_topics": [
+       "tiêu_đề": "Tổng quan Lịch sử Kinh tế Việt Nam giai đoạn Đổi Mới (từ 1986)",
+       "tóm_tắt": "Bài giảng tóm lược quá trình phát triển kinh tế Việt Nam từ khi bắt đầu công cuộc Đổi Mới năm 1986. Nội dung bao gồm bối cảnh trước Đổi Mới với nền kinh tế kế hoạch hóa, các giai đoạn phát triển chính, và những cột mốc quan trọng. Giai đoạn đầu (1986-1990) tập trung xóa bỏ bao cấp và thu hút đầu tư nước ngoài. Giai đoạn 1991-2000 ghi nhận tăng trưởng mạnh mẽ, bình thường hóa quan hệ quốc tế và phát triển nông nghiệp. Giai đoạn từ 2001 đến nay nhấn mạnh vào hội nhập kinh tế sâu rộng, với việc gia nhập WTO và sự trỗi dậy của kinh tế tư nhân.",
+       "chủ_đề_chính": [
          "Bối cảnh trước Đổi Mới 1986",
          "Chuyển đổi sang kinh tế thị trường",
          "Luật Đầu tư nước ngoài 1987",
@@ -29,15 +29,15 @@ You are an expert content analyst. Your goal is to extract the core essence of t
          "Gia nhập WTO năm 2007",
          "Vai trò của kinh tế tư nhân"
        ],
-       "tags": ["kinh tế việt nam", "đổi mới", "lịch sử", "bài giảng"]
+       "thẻ": ["kinh tế việt nam", "đổi mới", "lịch sử", "bài giảng"]
      }
      ```
 
 2. **DIFFICULT CASE: Irrelevant/Empty Transcript**:
    - Input: "(im lặng)... alo... alo... (tiếng ồn)"
-   - Output: {"title": "Bản ghi âm không có nội dung", "summary": "Bản ghi âm chứa chủ yếu là im lặng và tiếng ồn, không có nội dung rõ ràng để tóm tắt.", "key_topics": ["không có nội dung"], "tags": ["ghi âm lỗi"]}
+   - Output: {"tiêu_đề": "Bản ghi âm không có nội dung", "tóm_tắt": "Bản ghi âm chứa chủ yếu là im lặng và tiếng ồn, không có nội dung rõ ràng để tóm tắt.", "chủ_đề_chính": ["không có nội dung"], "thẻ": ["ghi âm lỗi"]}
 
 3. **DIFFICULT CASE: Ambiguous/Conflicting Information**:
    - Input: "Dự án A hoàn thành ngày 10. Không, dự án A xong ngày 12."
-   - Output: {"title": "Thảo luận về ngày hoàn thành dự án A", "summary": "Có sự không nhất quán về ngày hoàn thành Dự án A, với hai ngày được đề cập là ngày 10 và ngày 12.", "key_topics": ["dự án A", "ngày hoàn thành", "thông tin không nhất quán"], "tags": ["dự án", "tranh luận"]}
+   - Output: {"tiêu_đề": "Thảo luận về ngày hoàn thành dự án A", "tóm_tắt": "Có sự không nhất quán về ngày hoàn thành Dự án A, với hai ngày được đề cập là ngày 10 và ngày 12.", "chủ_đề_chính": ["dự án A", "ngày hoàn thành", "thông tin không nhất quán"], "thẻ": ["dự án", "tranh luận"]}
 {% endblock %}
