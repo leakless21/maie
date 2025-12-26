@@ -298,6 +298,59 @@ class TestValidateTagsField:
 
         assert validate_tags_field(schema) is False
 
+    def test_validate_vietnamese_thebao_field(self):
+        """Test validation of Vietnamese 'thẻ' field (alternative to tags)."""
+        schema = {
+            "properties": {
+                "thẻ": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {"type": "string"},
+                }
+            }
+        }
+
+        assert validate_tags_field(schema) is True
+
+    def test_validate_prefers_tags_over_thebao(self):
+        """Test that English 'tags' field is checked first, then Vietnamese 'thẻ'."""
+        # Schema with both fields
+        schema = {
+            "properties": {
+                "tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {"type": "string"},
+                },
+                "thẻ": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {"type": "string"},
+                }
+            }
+        }
+
+        assert validate_tags_field(schema) is True
+
+    def test_validate_fallback_to_thebao_if_tags_missing(self):
+        """Test that Vietnamese 'thẻ' is used if 'tags' is missing or invalid."""
+        # Only Vietnamese field present
+        schema = {
+            "properties": {
+                "thẻ": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 10,
+                    "items": {"type": "string"},
+                }
+            }
+        }
+
+        assert validate_tags_field(schema) is True
+
 
 class TestExtractValidationErrors:
     """Test validation error extraction functionality."""

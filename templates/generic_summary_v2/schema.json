@@ -35,6 +35,6 @@
       "maxItems": 10
     }
   },
-  "required": ["title", "summary", "key_topics", "tags"],
+  "required": ["tiêu_đề", "tóm_tắt", "chủ_đề_chính", "thẻ"],
   "additionalProperties": false
 }

@@ -63,7 +63,7 @@
             "type": ["string", "null"]
           }
         },
-        "required": ["description", "assignee", "due_date"],
+        "required": ["mô_tả", "người_được_giao", "hạn_hoàn_thành"],
         "additionalProperties": false
       },
       "maxItems": 200,
@@ -81,14 +81,14 @@
     }
   },
   "required": [
-    "title",
-    "meeting_date",
-    "participants",
-    "summary",
-    "agenda",
-    "decisions",
-    "action_items",
-    "tags"
+    "tiêu_đề",
+    "ngày_họp",
+    "người_tham_gia",
+    "tóm_tắt",
+    "chương_trình_nghị_sự",
+    "quyết_định",
+    "công_việc_cần_làm",
+    "thẻ"
   ],
   "additionalProperties": false
 }

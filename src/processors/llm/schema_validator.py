@@ -68,6 +68,7 @@ def load_template_schema(template_id: str, templates_dir: Path) -> Dict[str, Any
         )
 
     # Validate required 'tags' or 'thẻ' field (FR-6)
+    # Supports both English 'tags' and Vietnamese 'thẻ' for all template types
     if not validate_tags_field(schema):
         raise ValueError(
             f"Template schema missing required 'tags' or 'thẻ' field: {template_file}"
@@ -343,8 +344,8 @@ def create_validation_summary(
             }
         )
 
-        # Check if tags field is present and valid
-        tags = parsed_data.get("tags", [])
+        # Check if tags field is present and valid (support both 'tags' and 'thẻ')
+        tags = parsed_data.get("tags") or parsed_data.get("thẻ", [])
         if isinstance(tags, list):
             summary.update(
                 {
