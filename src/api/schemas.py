@@ -328,9 +328,15 @@ class LLMSchema(BaseModel):
 class VersionsSchema(BaseModel):
     """Schema for version information."""
 
-    phiên_bản_pipeline: str = Field(..., description="Phiên bản của pipeline", alias="pipeline_version")
-    backend_asr: ASRBackendSchema = Field(..., description="Thông tin backend ASR", alias="asr_backend")
-    mô_hình_ngôn_ngữ: LLMSchema = Field(..., description="Thông tin mô hình ngôn ngữ tóm tắt", alias="llm")
+    phiên_bản_pipeline: str = Field(
+        ..., description="Phiên bản của pipeline", alias="pipeline_version"
+    )
+    backend_asr: ASRBackendSchema = Field(
+        ..., description="Thông tin backend ASR", alias="asr_backend"
+    )
+    mô_hình_ngôn_ngữ: LLMSchema = Field(
+        ..., description="Thông tin mô hình ngôn ngữ tóm tắt", alias="llm"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -339,21 +345,33 @@ class MetricsSchema(BaseModel):
     """Schema for processing metrics."""
 
     thời_lượng_đầu_vào_giây: float = Field(
-        ..., description="Thời lượng của âm thanh đầu vào tính bằng giây", alias="input_duration_seconds"
+        ...,
+        description="Thời lượng của âm thanh đầu vào tính bằng giây",
+        alias="input_duration_seconds",
     )
     thời_gian_xử_lý_giây: float = Field(
-        ..., description="Thời gian xử lý tính bằng giây", alias="processing_time_seconds"
+        ...,
+        description="Thời gian xử lý tính bằng giây",
+        alias="processing_time_seconds",
     )
-    hệ_số_thời_gian_thực: float = Field(..., description="Hệ số thời gian thực (Real-Time Factor)", alias="rtf")
+    hệ_số_thời_gian_thực: float = Field(
+        ..., description="Hệ số thời gian thực (Real-Time Factor)", alias="rtf"
+    )
     độ_phủ_vad: float = Field(..., description="Tỷ lệ độ phủ VAD", alias="vad_coverage")
     độ_tin_cậy_asr_trung_bình: float | None = Field(
-        default=None, description="Độ tin cậy ASR trung bình", alias="asr_confidence_avg"
+        default=None,
+        description="Độ tin cậy ASR trung bình",
+        alias="asr_confidence_avg",
     )
     số_đoạn_vad: int | None = Field(
-        default=None, description="Số lượng đoạn giọng nói được phát hiện bởi VAD", alias="vad_segments"
+        default=None,
+        description="Số lượng đoạn giọng nói được phát hiện bởi VAD",
+        alias="vad_segments",
     )
     tỷ_lệ_chỉnh_sửa_làm_sạch: float | None = Field(
-        default=None, description="Tỷ lệ khoảng cách chỉnh sửa cho việc cải thiện", alias="edit_rate_cleaning"
+        default=None,
+        description="Tỷ lệ khoảng cách chỉnh sửa cho việc cải thiện",
+        alias="edit_rate_cleaning",
     )
 
     model_config = ConfigDict(populate_by_name=True)
@@ -365,8 +383,12 @@ class ResultsSchema(BaseModel):
     tóm_tắt: Optional[Dict[str, Any]] = Field(
         None, description="Tóm tắt có cấu trúc với các thẻ được nhúng", alias="summary"
     )
-    bản_ghi_sạch: Optional[str] = Field(None, description="Bản ghi đã được làm sạch", alias="clean_transcript")
-    bản_ghi_thô: Optional[str] = Field(None, description="Bản ghi thô từ ASR", alias="raw_transcript")
+    bản_ghi_sạch: Optional[str] = Field(
+        None, description="Bản ghi đã được làm sạch", alias="clean_transcript"
+    )
+    bản_ghi_thô: Optional[str] = Field(
+        None, description="Bản ghi thô từ ASR", alias="raw_transcript"
+    )
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -393,8 +415,12 @@ class StatusResponseSchema(BaseModel):
     phiên_bản: Optional[VersionsSchema] = Field(
         None, description="Thông tin phiên bản để tái tạo kết quả", alias="versions"
     )
-    chỉ_số: Optional[MetricsSchema] = Field(None, description="Chỉ số xử lý", alias="metrics")
-    kết_quả: Optional[ResultsSchema] = Field(None, description="Kết quả xử lý", alias="results")
+    chỉ_số: Optional[MetricsSchema] = Field(
+        None, description="Chỉ số xử lý", alias="metrics"
+    )
+    kết_quả: Optional[ResultsSchema] = Field(
+        None, description="Kết quả xử lý", alias="results"
+    )
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -422,9 +448,9 @@ class StatusResponseSchema(BaseModel):
                                 "thinking": False,
                                 "reasoning_parser": None,
                                 "structured_output": {
-                                    "title": "string",
-                                    "main_points": ["string"],
-                                    "tags": ["string"],
+                                    "tiêu_đề": "string",
+                                    "chủ_đề_chính": ["string"],
+                                    "thẻ": ["string"],
                                 },
                                 "decoding_params": {"temperature": 0.3, "top_p": 0.9},
                             },
@@ -439,9 +465,11 @@ class StatusResponseSchema(BaseModel):
                         "kết_quả": {
                             "bản_ghi_sạch": "The meeting on October 4th...",
                             "tóm_tắt": {
-                                "title": "Q4 Budget Planning",
-                                "main_points": ["Budget approved"],
-                                "tags": ["Finance", "Budget"],
+                                "tiêu_đề": "Kế hoạch ngân sách Q4",
+                                "chủ_đề_chính": ["Ngân sách được phê duyệt"],
+                                "thẻ": ["Tài chính", "Ngân sách"],
+                            },
+                        },
                             },
                         },
                     },
@@ -459,7 +487,7 @@ class StatusResponseSchema(BaseModel):
                     },
                 },
             ]
-        }
+        },
     )
 
 
