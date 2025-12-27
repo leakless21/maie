@@ -9,7 +9,7 @@
       "description": "Tiêu đề ngắn gọn, súc tích của nội dung",
       "maxLength": 200
     },
-    "mo_dau": {
+    "mở_đầu": {
       "type": "object",
       "description": "Phần mở đầu của nội dung",
       "properties": {
@@ -35,7 +35,7 @@
       },
       "required": ["summary"]
     },
-    "bao_cao": {
+    "báo_cáo": {
       "type": "object",
       "description": "Phần báo cáo các thông tin, dữ liệu, cập nhật",
       "properties": {
@@ -65,7 +65,7 @@
       },
       "required": ["summary", "key_points"]
     },
-    "thao_luan": {
+    "thảo_luận": {
       "type": "object",
       "description": "Phần thảo luận, trao đổi ý kiến",
       "properties": {
@@ -107,7 +107,7 @@
       },
       "required": ["summary", "topics"]
     },
-    "ket_luan": {
+    "kết_luận": {
       "type": "object",
       "description": "Phần kết luận, quyết định",
       "properties": {
@@ -137,7 +137,7 @@
       },
       "required": ["summary"]
     },
-    "giao_viec": {
+    "giao_việc": {
       "type": "object",
       "description": "Phần giao việc, phân công nhiệm vụ",
       "properties": {
@@ -193,11 +193,11 @@
   },
   "required": [
     "title",
-    "mo_dau",
-    "bao_cao",
-    "thao_luan",
-    "ket_luan",
-    "giao_viec",
+    "mở_đầu",
+    "báo_cáo",
+    "thảo_luận",
+    "kết_luận",
+    "giao_việc",
     "tags"
   ],
   "additionalProperties": false

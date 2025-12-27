@@ -4,17 +4,17 @@
   "description": "Định dạng có cấu trúc cho bản ghi phỏng vấn với các thẻ phân loại. Tùy chọn bao gồm interview_date nếu bản ghi chứa nó một cách rõ ràng.",
   "type": "object",
   "properties": {
-    "interview_date": {
+    "ngày_phỏng_vấn": {
       "type": ["string", "null"],
       "description": "Ngày phỏng vấn (YYYY-MM-DD) hoặc null nếu không xác định được",
       "pattern": "^d{4}-d{2}-d{2}$"
     },
-    "interview_summary": {
+    "tóm_tắt_phỏng_vấn": {
       "type": "string",
       "description": "Tóm tắt toàn diện về nội dung cuộc phỏng vấn",
       "maxLength": 2000
     },
-    "key_insights": {
+    "những_hiểu_biết_chính": {
       "type": "array",
       "description": "Những hiểu biết hoặc phát hiện chính từ cuộc phỏng vấn",
       "items": {
@@ -24,7 +24,7 @@
       "minItems": 1,
       "maxItems": 10
     },
-    "participant_sentiment": {
+    "cảm_tính_người_tham_gia": {
       "type": "string",
       "description": "Cảm tính chung của (những) người tham gia phỏng vấn",
       "enum": ["positive", "neutral", "negative", "mixed"]
@@ -41,9 +41,9 @@
     }
   },
   "required": [
-    "interview_summary",
-    "key_insights",
-    "participant_sentiment",
+    "tóm_tắt_phỏng_vấn",
+    "những_hiểu_biết_chính",
+    "cảm_tính_người_tham_gia",
     "tags"
   ],
   "additionalProperties": false

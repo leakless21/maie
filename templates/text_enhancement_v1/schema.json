@@ -4,23 +4,28 @@
   "description": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
   "type": "object",
   "properties": {
-    "original_text": {
+    "title": {
+      "type": "string",
+      "description": "Tiêu đề ngắn gọn mô tả loại hoặc chủ đề của văn bản được cải thiện",
+      "maxLength": 200
+    },
+    "văn_bản_gốc": {
       "type": "string",
       "description": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
       "maxLength": 50000
     },
-    "enhanced_text": {
+    "văn_bản_cải_thiện": {
       "type": "string",
       "description": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
       "maxLength": 50000
     },
-    "quality_score": {
+    "điểm_chất_lượng": {
       "type": "number",
       "description": "Điểm chất lượng của văn bản gốc trên thang điểm từ 0.0 (rất kém) đến 1.0 (hoàn hảo)",
       "minimum": 0.0,
       "maximum": 1.0
     },
-    "language": {
+    "ngôn_ngữ": {
       "type": "string",
       "description": "Mã ngôn ngữ chính của văn bản (ISO 639-1, ví dụ: 'vi' cho tiếng Việt, 'en' cho tiếng Anh)",
       "pattern": "^[a-z]{2}$",
@@ -38,10 +43,11 @@
     }
   },
   "required": [
-    "original_text",
-    "enhanced_text",
-    "quality_score",
-    "language",
+    "title",
+    "văn_bản_gốc",
+    "văn_bản_cải_thiện",
+    "điểm_chất_lượng",
+    "ngôn_ngữ",
     "tags"
   ],
   "additionalProperties": false

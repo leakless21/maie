@@ -20,19 +20,19 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
 
 ## Cấu trúc Output
 
-### 1. Mở đầu (mo_dau)
+### 1. Mở đầu (mở_đầu)
 
 - **summary**: Tóm tắt phần mở đầu
 - **participants**: Danh sách người tham gia
 - **context**: Bối cảnh, mục đích
 
-### 2. Báo cáo (bao_cao)
+### 2. Báo cáo (báo_cáo)
 
 - **summary**: Tóm tắt nội dung báo cáo
 - **key_points**: Các điểm chính (max 20)
 - **data_mentioned**: Số liệu được đề cập (max 30)
 
-### 3. Thảo luận (thao_luan)
+### 3. Thảo luận (thảo_luận)
 
 - **summary**: Tóm tắt thảo luận
 - **topics**: Các chủ đề được thảo luận (max 15)
@@ -40,13 +40,13 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
   - speaker: Người nói
   - point: Nội dung ý kiến
 
-### 4. Kết luận (ket_luan)
+### 4. Kết luận (kết_luận)
 
 - **summary**: Tóm tắt kết luận
 - **decisions**: Các quyết định (max 20)
 - **agreements**: Các thỏa thuận (max 20)
 
-### 5. Giao việc (giao_viec)
+### 5. Giao việc (giao_việc)
 
 - **summary**: Tóm tắt phần giao việc
 - **tasks**: Danh sách công việc (max 50)

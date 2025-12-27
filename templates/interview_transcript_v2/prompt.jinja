@@ -9,10 +9,10 @@ You are an expert interview analyst for Vietnamese transcripts. Your primary goa
 
 {% block specific_guidelines %}
 **Field-Specific Rules:**
-- **Interview Summary:** Provide a **comprehensive but concise** narrative of the interview. Focus on the interviewee's core message, background, and main arguments. Avoid chronological play-by-play.
-- **Key Insights:** Extract **distinct, high-value points** or "aha!" moments. Avoid trivial details or restating the summary.
-- **Dates (`interview_date`):** If a date is mentioned (e.g., "2024-12-01", "hôm qua"), include it as-is. If not, this field must be `null`.
-- **Participant Sentiment:** Choose one of the four allowed values based on the participant's overall tone and explicit statements.
+- **Tóm tắt phỏng vấn (Interview Summary):** Provide a **comprehensive but concise** narrative of the interview. Focus on the interviewee's core message, background, and main arguments. Avoid chronological play-by-play.
+- **Những hiểu biết chính (Key Insights):** Extract **distinct, high-value points** or "aha!" moments. Avoid trivial details or restating the summary.
+- **Dates (`ngày_phỏng_vấn`):** If a date is mentioned (e.g., "2024-12-01", "hôm qua"), include it as-is. If not, this field must be `null`.
+- **Cảm tính người tham gia (Participant Sentiment):** Choose one of the four allowed values based on the participant's overall tone and explicit statements.
 {% endblock %}
 
 {% block schema_limits %}
@@ -29,25 +29,25 @@ Schema Limits (Enforce these strictly):
    - **Expected Output**:
      ```json
      {
-       "interview_date": null,
-       "interview_summary": "Cuộc phỏng vấn với chị An về những thách thức khi triển khai DevOps. Chị An nhấn mạnh rằng rào cản lớn nhất là văn hóa chứ không phải công nghệ, cụ thể là sự khác biệt về mục tiêu giữa đội ngũ Dev (tốc độ) và Ops (ổn định). Giải pháp của team là xây dựng một 'văn hóa DevOps' với trách nhiệm chung, thông qua các buổi workshop, công cụ dashboard minh bạch, và một quy trình 'on-call' chung cho cả Dev và Ops. Việc để dev cùng chịu trách nhiệm khi có sự cố đã tạo ra sự thay đổi lớn trong tư duy và chất lượng code.",
-       "key_insights": [
+       "ngày_phỏng_vấn": null,
+       "tóm_tắt_phỏng_vấn": "Cuộc phỏng vấn với chị An về những thách thức khi triển khai DevOps. Chị An nhấn mạnh rằng rào cản lớn nhất là văn hóa chứ không phải công nghệ, cụ thể là sự khác biệt về mục tiêu giữa đội ngũ Dev (tốc độ) và Ops (ổn định). Giải pháp của team là xây dựng một 'văn hóa DevOps' với trách nhiệm chung, thông qua các buổi workshop, công cụ dashboard minh bạch, và một quy trình 'on-call' chung cho cả Dev và Ops. Việc để dev cùng chịu trách nhiệm khi có sự cố đã tạo ra sự thay đổi lớn trong tư duy và chất lượng code.",
+       "những_hiểu_biết_chính": [
          "Thách thức lớn nhất khi áp dụng DevOps là thay đổi văn hóa.",
          "Xung đột ban đầu đến từ mục tiêu khác nhau giữa Dev (tốc độ) và Ops (ổn định).",
          "Xây dựng trách nhiệm chung là chìa khóa để thành công.",
          "Quy trình 'on-call' chung cho cả Dev và Ops đã thay đổi tư duy của team."
        ],
-       "participant_sentiment": "positive",
+       "cảm_tính_người_tham_gia": "positive",
        "tags": ["devops", "văn hóa doanh nghiệp", "phỏng vấn", "quản lý"]
      }
      ```
 
 2. **DIFFICULT CASE: Subtle or Neutral Sentiment**:
    - Input: "tôi nghĩ rằng thị trường sẽ đi ngang. không có gì đặc biệt sẽ xảy ra trong quý tới. chúng tôi chỉ tiếp tục làm việc."
-   - Output: {"interview_date": null, "interview_summary": "Người được phỏng vấn trình bày một quan điểm trung lập về thị trường, dự đoán không có thay đổi đáng kể và cho biết nhóm sẽ tiếp tục công việc như bình thường.", "key_insights": ["Thị trường dự kiến đi ngang", "Không có sự kiện đặc biệt trong quý tới"], "participant_sentiment": "neutral", "tags": ["thị trường", "dự báo"]}
+   - Output: {"ngày_phỏng_vấn": null, "tóm_tắt_phỏng_vấn": "Người được phỏng vấn trình bày một quan điểm trung lập về thị trường, dự đoán không có thay đổi đáng kể và cho biết nhóm sẽ tiếp tục công việc như bình thường.", "những_hiểu_biết_chính": ["Thị trường dự kiến đi ngang", "Không có sự kiện đặc biệt trong quý tới"], "cảm_tính_người_tham_gia": "neutral", "tags": ["thị trường", "dự báo"]}
 
 3. **DIFFICULT CASE: Content-Light / No Real Insights**:
    - Input: "vâng. đúng vậy. tôi đồng ý. cảm ơn."
-   - Output: {"interview_date": null, "interview_summary": "Người được phỏng vấn chủ yếu bày tỏ sự đồng tình ngắn gọn mà không cung cấp thông tin chi tiết hay quan điểm sâu sắc.", "key_insights": ["Bày tỏ sự đồng tình"], "participant_sentiment": "neutral", "tags": ["phỏng vấn ngắn"]}
+   - Output: {"ngày_phỏng_vấn": null, "tóm_tắt_phỏng_vấn": "Người được phỏng vấn chủ yếu bày tỏ sự đồng tình ngắn gọn mà không cung cấp thông tin chi tiết hay quan điểm sâu sắc.", "những_hiểu_biết_chính": ["Bày tỏ sự đồng tình"], "cảm_tính_người_tham_gia": "neutral", "tags": ["phỏng vấn ngắn"]}
 {% endblock %}
 

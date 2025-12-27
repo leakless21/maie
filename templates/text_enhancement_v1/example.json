@@ -1,7 +1,8 @@
 {
-  "original_text": "xin chào mọi người hôm nay chúng ta sẽ thảo luận về dự án mới ừ dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn",
-  "enhanced_text": "Xin chào mọi người, hôm nay chúng ta sẽ thảo luận về dự án mới. Dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn.",
-  "quality_score": 0.62,
-  "language": "vi",
+  "title": "Cải thiện ghi chú về dự án giáo dục",
+  "văn_bản_gốc": "xin chào mọi người hôm nay chúng ta sẽ thảo luận về dự án mới ừ dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn",
+  "văn_bản_cải_thiện": "Xin chào mọi người, hôm nay chúng ta sẽ thảo luận về dự án mới. Dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn.",
+  "điểm_chất_lượng": 0.62,
+  "ngôn_ngữ": "vi",
   "tags": ["transcription", "education", "moderate_quality"]
 }

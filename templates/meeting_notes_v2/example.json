@@ -1,8 +1,8 @@
 {
   "title": "Họp dự án Y – rà soát tiến độ và phân công",
-  "participants": ["Bình", "Chi", "Dũng"],
+  "người_tham_gia": ["Bình", "Chi", "Dũng"],
   "summary": "Cuộc họp tập trung rà soát tiến độ sprint hiện tại, thống nhất phạm vi đợt phát hành sắp tới và phân công các đầu việc tiếp theo. Nhóm quyết định ưu tiên xử lý lỗi còn tồn đọng trước khi mở rộng phạm vi tính năng.",
-  "agenda": [
+  "chương_trình_nghị_sự": [
     "Cập nhật tiến độ sprint",
     "Phạm vi phát hành",
     "Phân công công việc"

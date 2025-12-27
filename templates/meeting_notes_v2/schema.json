@@ -9,11 +9,11 @@
       "maxLength": 200,
       "description": "Tiêu đề ngắn gọn và phù hợp của cuộc họp."
     },
-    "meeting_date": {
+    "ngày_họp": {
       "type": ["string", "null"],
       "description": "Ngày diễn ra cuộc họp (YYYY-MM-DD) hoặc null nếu không rõ."
     },
-    "participants": {
+    "người_tham_gia": {
       "type": "array",
       "items": {
         "type": "string",
@@ -27,7 +27,7 @@
       "maxLength": 2000,
       "description": "Tóm tắt nội dung cuộc họp."
     },
-    "agenda": {
+    "chương_trình_nghị_sự": {
       "type": "array",
       "items": {
         "type": "string",
@@ -82,10 +82,10 @@
   },
   "required": [
     "title",
-    "meeting_date",
-    "participants",
+    "ngày_họp",
+    "người_tham_gia",
     "summary",
-    "agenda",
+    "chương_trình_nghị_sự",
     "decisions",
     "action_items",
     "tags"
