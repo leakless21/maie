@@ -29,31 +29,31 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
 ### 2. Báo cáo (báo_cáo)
 
 - **summary**: Tóm tắt nội dung báo cáo
-- **key_points**: Các điểm chính (max 20)
-- **data_mentioned**: Số liệu được đề cập (max 30)
+- **điểm_chính**: Các điểm chính (max 20)
+- **số_liệu_đề_cập**: Số liệu được đề cập (max 30)
 
 ### 3. Thảo luận (thảo_luận)
 
 - **summary**: Tóm tắt thảo luận
-- **topics**: Các chủ đề được thảo luận (max 15)
-- **opinions**: Ý kiến của từng người (max 30)
-  - speaker: Người nói
-  - point: Nội dung ý kiến
+- **chủ_đề**: Các chủ đề được thảo luận (max 15)
+- **ý_kiến**: Ý kiến của từng người (max 30)
+  - người_nói: Người nói
+  - nội_dung: Nội dung ý kiến
 
 ### 4. Kết luận (kết_luận)
 
-- **summary**: Tóm tắt kết luận
-- **decisions**: Các quyết định (max 20)
-- **agreements**: Các thỏa thuận (max 20)
+- **tóm_tắt**: Tóm tắt kết luận
+- **quyết_định**: Các quyết định (max 20)
+- **thỏa_thuận**: Các thỏa thuận (max 20)
 
 ### 5. Giao việc (giao_việc)
 
 - **summary**: Tóm tắt phần giao việc
-- **tasks**: Danh sách công việc (max 50)
-  - description: Mô tả công việc
-  - assignee: Người được giao
-  - deadline: Hạn hoàn thành (YYYY-MM-DD hoặc text)
-  - priority: cao | trung bình | thấp | không xác định
+- **công_việc**: Danh sách công việc (max 50)
+  - mô_tả: Mô tả công việc
+  - người_phụ_trách: Người được giao
+  - hạn_chót: Hạn hoàn thành (YYYY-MM-DD hoặc text)
+  - mức_độ_ưu_tiên: cao | trung bình | thấp | không xác định
 
 ### 6. Tags
 
@@ -64,7 +64,7 @@ Template **Phân tích nội dung có cấu trúc** được thiết kế để 
 So với `meeting_notes_v2`, template này:
 
 - ✅ **Phân tích chi tiết hơn** với 5 phần rõ ràng
-- ✅ **Theo dõi opinions** từng người trong thảo luận
+- ✅ **Theo dõi ý kiến** từng người trong thảo luận
 - ✅ **Phân tích số liệu** được đề cập trong báo cáo
 - ✅ **Ánh xạ workflow** của cuộc họp (mở đầu → báo cáo → thảo luận → kết luận → giao việc)
 - ✅ **Phù hợp với văn hóa họp hành Việt Nam**

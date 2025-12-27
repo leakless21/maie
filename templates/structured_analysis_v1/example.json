@@ -12,13 +12,13 @@
   },
   "báo_cáo": {
     "summary": "Báo cáo hiện trạng dự án: đã hoàn thành phần nghiên cứu thị trường và phân tích đối thủ. Đã có bản wireframe sơ bộ và đã chọn được tech stack. Tiến độ đạt 30% so với kế hoạch ban đầu.",
-    "key_points": [
+    "điểm_chính": [
       "Hoàn thành nghiên cứu thị trường",
       "Hoàn thành phân tích đối thủ",
       "Có bản wireframe sơ bộ",
       "Đã chọn tech stack: React, Node.js, MongoDB"
     ],
-    "data_mentioned": [
+    "số_liệu_đề_cập": [
       "Tiến độ đạt 30%",
       "4 thành viên tham gia",
       "Dự kiến triển khai Q1 2026"
@@ -26,35 +26,35 @@
   },
   "thảo_luận": {
     "summary": "Thảo luận tập trung vào lựa chọn payment gateway, thiết kế giao diện mobile-first, và chiến lược marketing ban đầu. Có một số quan điểm khác nhau về việc ưu tiên tính năng nào trước.",
-    "topics": [
+    "chủ_đề": [
       "Lựa chọn payment gateway",
       "Thiết kế mobile-first",
       "Chiến lược marketing ban đầu",
       "Ưu tiên tính năng"
     ],
-    "opinions": [
+    "ý_kiến": [
       {
-        "speaker": "Anh Khoa",
-        "point": "Nên dùng VNPay cho payment vì phổ biến và dễ tích hợp"
+        "người_nói": "Anh Khoa",
+        "nội_dung": "Nên dùng VNPay cho payment vì phổ biến và dễ tích hợp"
       },
       {
-        "speaker": "Chị Hoa",
-        "point": "Đề xuất thiết kế mobile-first vì 70% traffic từ mobile"
+        "người_nói": "Chị Hoa",
+        "nội_dung": "Đề xuất thiết kế mobile-first vì 70% traffic từ mobile"
       },
       {
-        "speaker": "Em Linh",
-        "point": "Cần có chiến dịch teaser trước khi launch 2 tuần"
+        "người_nói": "Em Linh",
+        "nội_dung": "Cần có chiến dịch teaser trước khi launch 2 tuần"
       }
     ]
   },
   "kết_luận": {
-    "summary": "Team đồng thuận sử dụng VNPay làm payment gateway chính, áp dụng thiết kế mobile-first, và triển khai chiến dịch marketing trước launch 2 tuần. Mục tiêu launch vào cuối tháng 3/2026.",
-    "decisions": [
+    "tóm_tắt": "Team đồng thuận sử dụng VNPay làm payment gateway chính, áp dụng thiết kế mobile-first, và triển khai chiến dịch marketing trước launch 2 tuần. Mục tiêu launch vào cuối tháng 3/2026.",
+    "quyết_định": [
       "Sử dụng VNPay làm payment gateway",
       "Áp dụng thiết kế mobile-first",
       "Launch cuối tháng 3/2026"
     ],
-    "agreements": [
+    "thỏa_thuận": [
       "Đồng thuận về payment gateway",
       "Đồng thuận về approach mobile-first",
       "Đồng thuận về timeline và chiến lược marketing"
@@ -62,30 +62,30 @@
   },
   "giao_việc": {
     "summary": "Phân công các công việc cụ thể cho từng thành viên với deadline rõ ràng để đảm bảo tiến độ dự án.",
-    "tasks": [
+    "công_việc": [
       {
-        "description": "Hoàn thiện wireframe đầy đủ cho tất cả màn hình",
-        "assignee": "Chị Hoa",
-        "deadline": "2026-01-15",
-        "priority": "cao"
+        "mô_tả": "Hoàn thiện wireframe đầy đủ cho tất cả màn hình",
+        "người_phụ_trách": "Chị Hoa",
+        "hạn_chót": "2026-01-15",
+        "mức_độ_ưu_tiên": "cao"
       },
       {
-        "description": "Tích hợp VNPay và test thanh toán",
-        "assignee": "Anh Khoa",
-        "deadline": "2026-02-01",
-        "priority": "cao"
+        "mô_tả": "Tích hợp VNPay và test thanh toán",
+        "người_phụ_trách": "Anh Khoa",
+        "hạn_chót": "2026-02-01",
+        "mức_độ_ưu_tiên": "cao"
       },
       {
-        "description": "Chuẩn bị content và chiến dịch teaser",
-        "assignee": "Em Linh",
-        "deadline": "2026-03-15",
-        "priority": "trung bình"
+        "mô_tả": "Chuẩn bị content và chiến dịch teaser",
+        "người_phụ_trách": "Em Linh",
+        "hạn_chót": "2026-03-15",
+        "mức_độ_ưu_tiên": "trung bình"
       },
       {
-        "description": "Tổ chức họp review tiến độ hàng tuần",
-        "assignee": "Anh Tuấn",
-        "deadline": null,
-        "priority": "cao"
+        "mô_tả": "Tổ chức họp review tiến độ hàng tuần",
+        "người_phụ_trách": "Anh Tuấn",
+        "hạn_chót": null,
+        "mức_độ_ưu_tiên": "cao"
       }
     ]
   },
