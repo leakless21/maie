@@ -12,8 +12,15 @@
     "Giữ nguyên phạm vi tính năng hiện tại"
   ],
   "action_items": [
-    {"description": "Chi tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm", "assignee": "Chi", "due_date": "2025-10-24"},
-    {"description": "Dũng cập nhật test cases cho tính năng thanh toán", "assignee": "Dũng"}
+    {
+      "description": "Chi tổng hợp danh sách lỗi ưu tiên và chia sẻ với nhóm",
+      "assignee": "Chi",
+      "due_date": "2025-10-24"
+    },
+    {
+      "description": "Dũng cập nhật test cases cho tính năng thanh toán",
+      "assignee": "Dũng"
+    }
   ],
   "tags": ["họp nhóm", "dự án", "kế hoạch"]
 }

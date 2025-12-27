@@ -1,6 +1,7 @@
 # Template Translation Mapping (MAIE Constraints Compliant)
 
 ## Constraint Summary
+
 - **Keep in English:** Canonical keys (`title`, `summary`, `tags`, `key_topics`, `action_items`, `attendees`, `decisions`)
 - **Keep in English:** API envelope (task_id, status, results, template_id, timestamps, metrics)
 - **Keep in English:** Enum/status values (PENDING, COMPLETE, FAILED, etc.)
@@ -14,11 +15,13 @@
 ### 1. meeting_notes_v2
 
 **Canonical fields (KEEP English):**
+
 ```
 title, summary, tags, decisions, action_items
 ```
 
 **Template-specific fields (TRANSLATE to Vietnamese):**
+
 ```
 meeting_date          → ngày_họp
 participants          → người_tham_gia
@@ -26,6 +29,7 @@ agenda                → chương_trình_nghị_sự
 ```
 
 **Schema changes:**
+
 ```json
 {
   "properties": {
@@ -47,11 +51,13 @@ agenda                → chương_trình_nghị_sự
 ### 2. interview_transcript_v2
 
 **Canonical fields (KEEP English):**
+
 ```
 title (implied), summary (implied), tags
 ```
 
 **Template-specific fields (TRANSLATE to Vietnamese):**
+
 ```
 interview_date          → ngày_phỏng_vấn
 interview_summary       → tóm_tắt_phỏng_vấn
@@ -60,6 +66,7 @@ participant_sentiment   → cảm_tính_người_tham_gia
 ```
 
 **Schema changes:**
+
 ```json
 {
   "properties": {
@@ -78,11 +85,13 @@ participant_sentiment   → cảm_tính_người_tham_gia
 ### 3. text_enhancement_v1
 
 **Canonical fields (KEEP English):**
+
 ```
 title (implied), summary (implied), tags
 ```
 
 **Template-specific fields (TRANSLATE to Vietnamese):**
+
 ```
 original_text       → văn_bản_gốc
 enhanced_text       → văn_bản_cải_thiện
@@ -91,6 +100,7 @@ language            → ngôn_ngữ
 ```
 
 **Schema changes:**
+
 ```json
 {
   "properties": {
@@ -109,6 +119,7 @@ language            → ngôn_ngữ
 ### 4. generic_summary_v2
 
 **All fields are canonical (KEEP English):**
+
 ```
 title, summary, key_topics, tags
 ```
@@ -120,6 +131,7 @@ title, summary, key_topics, tags
 ### 5. generic_summary_en_v2
 
 **All fields are canonical + intentionally English (KEEP English):**
+
 ```
 title, summary, key_topics, tags
 ```
@@ -131,11 +143,13 @@ title, summary, key_topics, tags
 ### 6. structured_analysis_v1
 
 **Canonical fields (KEEP English):**
+
 ```
 title, summary, tags
 ```
 
 **Template-specific sections (ALREADY TRANSLATED ✓):**
+
 ```
 mở_đầu, báo_cáo, thảo_luận, kết_luận, giao_việc
 ```
@@ -146,14 +160,14 @@ mở_đầu, báo_cáo, thảo_luận, kết_luận, giao_việc
 
 ## Benefits of This Approach
 
-| Aspect | Benefit |
-|--------|---------|
-| **Server compatibility** | Canonical keys untouched; server uses them without code changes |
-| **Frontend safe** | UI/exporters don't break on extra translated fields; they ignore unknowns |
-| **Gradual rollout** | Update frontend selectors for translations as time permits |
-| **Backward compatible** | Existing clients that expect only canonical keys still work |
-| **Vietnamese UX** | Better display names for Vietnamese users in template editors/docs |
-| **No enum risk** | Status, sentiment, language codes stay English (international standard) |
+| Aspect                   | Benefit                                                                   |
+| ------------------------ | ------------------------------------------------------------------------- |
+| **Server compatibility** | Canonical keys untouched; server uses them without code changes           |
+| **Frontend safe**        | UI/exporters don't break on extra translated fields; they ignore unknowns |
+| **Gradual rollout**      | Update frontend selectors for translations as time permits                |
+| **Backward compatible**  | Existing clients that expect only canonical keys still work               |
+| **Vietnamese UX**        | Better display names for Vietnamese users in template editors/docs        |
+| **No enum risk**         | Status, sentiment, language codes stay English (international standard)   |
 
 ---
 
@@ -164,6 +178,7 @@ mở_đầu, báo_cáo, thảo_luận, kết_luận, giao_việc
 3. **text_enhancement_v1** (low risk: 4 field renames)
 
 Each update follows the same pattern:
+
 - Rename field keys in schema.json
 - Update example.json with new keys
 - Update prompt.jinja examples with new keys
@@ -177,14 +192,15 @@ Each update follows the same pattern:
 Once templates are updated, frontend can be updated on its own timeline:
 
 **Current state (server returns Vietnamese keys, UI expects old English keys):**
+
 - UI sees unfamiliar keys → ignored/dropped
 - Core keys (title, summary, tags) still work
 - Template output partially functional
 
 **After frontend update (selector mapping):**
+
 - UI updated to look for Vietnamese keys in template-specific contexts
 - Full functionality restored
 - Dual support for fallback if needed
 
 **No API changes needed** – just template schema updates and frontend selector updates.
-
