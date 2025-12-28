@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Generic Summary with Bullet Points",
-  "description": "Structured summary format with bullet-point breakdown in Vietnamese",
+  "title": "Tóm tắt chung dạng gạch đầu dòng",
+  "description": "Định dạng tóm tắt có cấu trúc với các ý chính trình bày dạng gạch đầu dòng (tiếng Việt)",
   "type": "object",
   "properties": {
     "title": {

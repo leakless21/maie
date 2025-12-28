@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Bilingual Summary with Bullet Points",
-  "description": "Structured bilingual summary format with Vietnamese as primary language and separate bullet points array",
+  "title": "Tóm tắt song ngữ dạng gạch đầu dòng",
+  "description": "Định dạng tóm tắt có cấu trúc: tiếng Việt là chính, kèm phần tiếng Anh tùy chọn và danh sách các ý chính dạng gạch đầu dòng",
   "type": "object",
   "properties": {
     "title": {
