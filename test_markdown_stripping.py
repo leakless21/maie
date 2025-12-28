@@ -16,31 +16,31 @@ test_cases = [
     (
         '```json\n{"title": "Test", "tags": ["tag1"]}\n```',
         {"title": "Test", "tags": ["tag1"]},
-        "Basic markdown fence with json"
+        "Basic markdown fence with json",
     ),
     # Valid JSON with just triple backticks
     (
         '```\n{"title": "Test", "tags": ["tag1"]}\n```',
         {"title": "Test", "tags": ["tag1"]},
-        "Markdown fence without json language"
+        "Markdown fence without json language",
     ),
     # Valid JSON with 4 backticks
     (
         '````\n{"title": "Test", "tags": ["tag1"]}\n````',
         {"title": "Test", "tags": ["tag1"]},
-        "Markdown fence with 4 backticks"
+        "Markdown fence with 4 backticks",
     ),
     # Plain JSON without fences
     (
         '{"title": "Test", "tags": ["tag1"]}',
         {"title": "Test", "tags": ["tag1"]},
-        "Plain JSON without fences"
+        "Plain JSON without fences",
     ),
     # Vietnamese JSON with markdown fence
     (
         '```json\n{"title": "Giá rau tại Hà Nội", "tags": ["kinh tế"]}\n```',
         {"title": "Giá rau tại Hà Nội", "tags": ["kinh tế"]},
-        "Vietnamese content with markdown fence"
+        "Vietnamese content with markdown fence",
     ),
 ]
 
@@ -50,14 +50,14 @@ all_passed = True
 for input_str, expected, description in test_cases:
     print(f"\nTest: {description}")
     print(f"Input preview: {input_str[:50]}...")
-    
+
     # Test stripping
     stripped = _strip_markdown_code_fence(input_str)
     print(f"Stripped preview: {stripped[:50]}...")
-    
+
     # Test parsing
     parsed, error = safe_parse_json(input_str)
-    
+
     if error:
         print(f"❌ FAILED: {error}")
         all_passed = False
