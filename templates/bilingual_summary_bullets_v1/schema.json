@@ -1,32 +1,47 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "title": "Bilingual Summary with Bullet Points",
-  "description": "Structured bilingual summary format with bullet-point breakdowns in English and Vietnamese",
+  "description": "Structured bilingual summary format with Vietnamese as primary language and separate bullet points array",
   "type": "object",
   "properties": {
-    "title_en": {
+    "title": {
       "type": "string",
-      "description": "Brief, relevant English title capturing the main topic (max 15 words)",
+      "description": "Tiêu đề ngắn gọn, phù hợp, nắm bắt được chủ đề chính (tối đa 15 từ)",
       "maxLength": 200
     },
-    "title_vi": {
+    "summary": {
       "type": "string",
-      "description": "Brief, relevant Vietnamese title capturing the main topic (max 15 words)",
-      "maxLength": 200
+      "description": "Tóm tắt toàn diện về nội dung bằng tiếng Việt (không có bullet points, chỉ văn bản thuần túy)",
+      "maxLength": 2000
+    },
+    "bullet_points": {
+      "type": "array",
+      "description": "Các điểm chính của nội dung dưới dạng danh sách (5-10 điểm bằng tiếng Việt)",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 3,
+      "maxItems": 15
     },
     "summary_en": {
       "type": "string",
-      "description": "Comprehensive English summary with bullet-point breakdown of key points (5-10 bullet points)",
-      "maxLength": 3000
+      "description": "English summary of the content (optional, plain text without bullets)",
+      "maxLength": 2000
     },
-    "summary_vi": {
-      "type": "string",
-      "description": "Comprehensive Vietnamese summary with bullet-point breakdown of key points (5-10 bullet points)",
-      "maxLength": 3000
+    "bullet_points_en": {
+      "type": "array",
+      "description": "Key points in English as a list (optional, 5-10 points)",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 3,
+      "maxItems": 15
     },
     "key_topics": {
       "type": "array",
-      "description": "Main topics or themes identified in the content (in English)",
+      "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung (bằng tiếng Việt)",
       "items": {
         "type": "string",
         "maxLength": 300
@@ -36,7 +51,7 @@
     },
     "tags": {
       "type": "array",
-      "description": "Categorical tags for content classification (in English, lowercase)",
+      "description": "Thẻ danh mục để phân loại nội dung (lowercase)",
       "items": {
         "type": "string",
         "maxLength": 50
@@ -46,10 +61,9 @@
     }
   },
   "required": [
-    "title_en",
-    "title_vi",
-    "summary_en",
-    "summary_vi",
+    "title",
+    "summary",
+    "bullet_points",
     "key_topics",
     "tags"
   ],
