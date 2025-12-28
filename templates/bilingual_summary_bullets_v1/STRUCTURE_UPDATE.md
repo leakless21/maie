@@ -12,11 +12,11 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 
 ```json
 {
-  "title": "string",              // Vietnamese only - for Android app parsing
-  "summary": "string",            // Vietnamese paragraph (NO bullet points)
-  "bullet_points": ["string"],    // Vietnamese array of key points
-  "key_topics": ["string"],       // Vietnamese array of topics
-  "tags": ["string"]              // Array of tags (Vietnamese or English)
+  "title": "string", // Vietnamese only - for Android app parsing
+  "summary": "string", // Vietnamese paragraph (NO bullet points)
+  "bullet_points": ["string"], // Vietnamese array of key points
+  "key_topics": ["string"], // Vietnamese array of topics
+  "tags": ["string"] // Array of tags (Vietnamese or English)
 }
 ```
 
@@ -24,8 +24,8 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 
 ```json
 {
-  "summary_en": "string",         // English paragraph summary
-  "bullet_points_en": ["string"]  // English array of key points
+  "summary_en": "string", // English paragraph summary
+  "bullet_points_en": ["string"] // English array of key points
 }
 ```
 
@@ -34,6 +34,7 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 ## Key Changes
 
 ### 1. **Single Title Field** ✅
+
 **Before:** `title_en` and `title_vi` (two separate fields)
 **After:** `title` (single Vietnamese field)
 
@@ -42,12 +43,15 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 ---
 
 ### 2. **Plain Text Summary** ✅
+
 **Before:** Summary contained embedded bullet points with `\n\n• ` formatting
+
 ```json
 "summary_vi": "Overview...\n\n• Point 1\n• Point 2"
 ```
 
 **After:** Summary is pure paragraph text, bullet points in separate array
+
 ```json
 "summary": "Overview paragraph without any bullets.",
 "bullet_points": ["Point 1", "Point 2", "Point 3"]
@@ -58,10 +62,12 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 ---
 
 ### 3. **Bullet Points as Array** ✅
+
 **Before:** Bullet points embedded in summary string
 **After:** Dedicated `bullet_points` array field
 
 **Benefits:**
+
 - Android app can display as formatted list (like `key_topics`)
 - Easier to iterate and render with bullet character: `• Point 1`
 - Better data structure for future processing
@@ -69,15 +75,18 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 ---
 
 ### 4. **Vietnamese as Primary Language** ✅
+
 **Before:** English fields were required, Vietnamese secondary
 **After:** Vietnamese fields are required, English optional
 
 **Changed Fields:**
+
 - `key_topics`: Now in Vietnamese (was English)
 - `tags`: Now in Vietnamese or English (was English only)
 - All required fields: Vietnamese
 
 **English fields are now optional:**
+
 - `summary_en`: Optional English summary
 - `bullet_points_en`: Optional English bullet array
 
@@ -138,6 +147,7 @@ The `bilingual_summary_bullets_v1` template has been restructured to make **Viet
 ### Android Parsing Support
 
 The Android app's `OverlayController.kt` already handles:
+
 - ✅ Single `title` field (line 4086-4099)
 - ✅ `summary` as plain text string (line 4072)
 - ✅ `bullet_points` array displayed with `• ` prefix (line 3881-3884)
@@ -162,11 +172,7 @@ The Android app's `OverlayController.kt` already handles:
     "Ngân sách 500 triệu đồng",
     "Mục tiêu tăng 25% thị phần"
   ],
-  "key_topics": [
-    "Chiến lược",
-    "Phát triển sản phẩm",
-    "Thị trường"
-  ],
+  "key_topics": ["Chiến lược", "Phát triển sản phẩm", "Thị trường"],
   "tags": ["chiến lược", "sản phẩm", "thị trường"]
 }
 ```
@@ -192,11 +198,7 @@ The Android app's `OverlayController.kt` already handles:
     "Encrypt sensitive data",
     "Establish security logging"
   ],
-  "key_topics": [
-    "Bảo mật",
-    "Lập trình",
-    "Mã hóa"
-  ],
+  "key_topics": ["Bảo mật", "Lập trình", "Mã hóa"],
   "tags": ["bảo mật", "lập trình", "mã hóa"]
 }
 ```
@@ -208,20 +210,22 @@ The Android app's `OverlayController.kt` already handles:
 ### From Old Format to New Format
 
 **Old format:**
+
 ```json
 {
   "title_en": "Meeting",
   "title_vi": "Cuộc họp",
   "summary_vi": "Overview...\n\n• Point 1\n• Point 2",
-  "key_topics": ["Topic A", "Topic B"]  // English
+  "key_topics": ["Topic A", "Topic B"] // English
 }
 ```
 
 **New format:**
+
 ```json
 {
-  "title": "Cuộc họp",                    // Single Vietnamese title
-  "summary": "Overview...",               // Plain text, no bullets
+  "title": "Cuộc họp", // Single Vietnamese title
+  "summary": "Overview...", // Plain text, no bullets
   "bullet_points": ["Point 1", "Point 2"], // Separate array
   "key_topics": ["Chủ đề A", "Chủ đề B"] // Vietnamese
 }
@@ -232,24 +236,29 @@ The Android app's `OverlayController.kt` already handles:
 ## Advantages of New Structure
 
 ### 1. **Better Android Compatibility** ✅
+
 - Single `title` field matches app's parsing logic
 - Arrays display automatically with bullet formatting
 
 ### 2. **Cleaner Data Structure** ✅
+
 - Separation of concerns: summary vs. bullet points
 - No embedded formatting characters in strings
 - Easier to validate and process
 
 ### 3. **Flexible Display** ✅
+
 - App can choose to display summary only, bullets only, or both
 - Easier to apply custom formatting per platform
 
 ### 4. **Vietnamese Priority** ✅
+
 - Vietnamese is the primary language (required fields)
 - English is secondary (optional enhancement)
 - Aligns with target audience
 
 ### 5. **Better Database Storage** ✅
+
 - Separate fields enable better querying
 - Can search/filter by bullet points independently
 - Structured data for analytics
@@ -261,12 +270,14 @@ The Android app's `OverlayController.kt` already handles:
 ### When to Include English Fields
 
 **Include English fields when:**
+
 - International audience needs access
 - Documentation requires bilingual support
 - Business stakeholders prefer English
 - Export/sharing with English speakers
 
 **Omit English fields when:**
+
 - Vietnamese-only audience
 - Internal use only
 - Faster processing needed
@@ -296,6 +307,7 @@ The Android app's `OverlayController.kt` already handles:
 3. **example.json** - Updated to show new structure
 
 All files are located in:
+
 ```
 /maie/templates/bilingual_summary_bullets_v1/
 ```
@@ -307,10 +319,12 @@ All files are located in:
 ⚠️ **Breaking Change**: This is NOT backward compatible with the old format.
 
 **Old Android app behavior:**
+
 - Would look for `title_en` or `title_vi` → Now looks for `title` ✅
 - Would display `summary_vi` with embedded bullets → Now displays `summary` + `bullet_points` array ✅
 
 **Server/MAIE changes needed:**
+
 - Update template usage to generate new structure
 - Existing stored results with old format will still display (app is flexible)
 
@@ -319,6 +333,7 @@ All files are located in:
 ## Summary
 
 The bilingual template now has:
+
 - ✅ Vietnamese as primary language
 - ✅ Single `title` field for app parsing
 - ✅ Clean `summary` text without bullets

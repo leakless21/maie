@@ -60,12 +60,6 @@
       "maxItems": 10
     }
   },
-  "required": [
-    "title",
-    "summary",
-    "bullet_points",
-    "key_topics",
-    "tags"
-  ],
+  "required": ["title", "summary", "bullet_points", "key_topics", "tags"],
   "additionalProperties": false
 }
