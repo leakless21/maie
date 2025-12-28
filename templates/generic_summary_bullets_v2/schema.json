@@ -1,0 +1,40 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Generic Summary with Bullet Points",
+  "description": "Structured summary format with bullet-point breakdown in Vietnamese",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Một tiêu đề ngắn gọn, phù hợp, nắm bắt được bản chất của nội dung (tối đa 15 từ)",
+      "maxLength": 200
+    },
+    "summary": {
+      "type": "string",
+      "description": "Tóm tắt toàn diện với các điểm chính được liệt kê dưới dạng bullet points (5-10 điểm)",
+      "maxLength": 3000
+    },
+    "key_topics": {
+      "type": "array",
+      "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      },
+      "minItems": 1,
+      "maxItems": 15
+    },
+    "tags": {
+      "type": "array",
+      "description": "Thẻ danh mục để phân loại nội dung",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": ["title", "summary", "key_topics", "tags"],
+  "additionalProperties": false
+}

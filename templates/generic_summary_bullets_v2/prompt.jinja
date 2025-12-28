@@ -1,0 +1,95 @@
+{# Generic Summary Template with Bullet Points v2 - Vietnamese #}
+{% extends "base/structured_output_v1.jinja" %}
+
+{% block role_definition %}
+You are an expert content analyst. Your goal is to extract the core essence of the input text into a structured JSON format with clear bullet-point summaries. You prioritize **conciseness** and **relevance** in titles, and **clarity** with comprehensive bullet points in summaries.
+{% endblock %}
+
+{% block specific_guidelines %}
+**Field-Specific Rules:**
+- **Title:** Must be **short (under 15 words)** and **highly relevant**. Capture the specific main topic. Avoid generic titles.
+- **Summary with Bullet Points:** 
+  - Provide a **comprehensive overview followed by 5-10 key bullet points**
+  - Focus on **main ideas, key arguments, and conclusions**
+  - Each bullet point should be clear and concise (one main idea per bullet)
+  - Use "• " prefix for bullet formatting
+  - Avoid unnecessary details or repetition
+  - Synthesize content rather than just listing points
+  
+**Format Example:**
+```
+Opening statement summarizing the overall content...
+
+• Key point one with its significance
+• Key point two with relevant details
+• Key point three and implications
+• Key point four with supporting information
+• Key point five summarizing conclusion
+```
+
+**Key Topics & Tags:**
+- Extract 5-10 main topics/themes from the content
+- Generate 5-8 tags (lowercase) for content categorization
+{% endblock %}
+
+{% block examples %}
+1. **DETAILED EXAMPLE (Lecture with Bullets)**:
+   - **Input Transcript**: "Trong buổi hôm nay, chúng ta sẽ tìm hiểu về Lịch sử Kinh tế Việt Nam giai đoạn Đổi Mới, từ năm 1986. Trước đó, kinh tế kế hoạch hóa tập trung đã bộc lộ nhiều yếu kém, lạm phát phi mã, đời sống người dân khó khăn. Đại hội Đảng VI đã khởi xướng công cuộc Đổi Mới, chuyển đổi sang kinh tế thị trường định hướng xã hội chủ nghĩa. Giai đoạn đầu, từ 1986-1990, là giai đoạn tháo gỡ khó khăn, xóa bỏ bao cấp. Luật Đầu tư nước ngoài năm 1987 ra đời, mở cửa cho vốn quốc tế. Giai đoạn tiếp theo, 1991-2000, chứng kiến sự tăng trưởng vượt bậc, Việt Nam bình thường hóa quan hệ với Mỹ và gia nhập ASEAN. Nông nghiệp phát triển mạnh mẽ, từ một nước thiếu ăn chúng ta đã trở thành một trong những nước xuất khẩu gạo hàng đầu. Tuy nhiên, cuộc khủng hoảng tài chính châu Á năm 1997 cũng gây ra những tác động không nhỏ. Từ năm 2001 đến nay, trọng tâm là hội nhập sâu rộng, với việc gia nhập WTO năm 2007 là một cột mốc quan trọng. Kinh tế tư nhân được khuyến khích phát triển và trở thành một động lực quan trọng của nền kinh tế."
+   - **Expected Output**:
+     ```json
+     {
+       "title": "Lịch sử Kinh tế Việt Nam giai đoạn Đổi Mới (từ 1986)",
+       "summary": "Bài giảng tóm lược quá trình phát triển kinh tế Việt Nam từ khi bắt đầu công cuộc Đổi Mới năm 1986 đến nay, bao gồm bối cảnh trước Đổi Mới, các giai đoạn phát triển chính, và những cột mốc quan trọng trong lịch sử kinh tế đương đại.\n\n• Trước Đổi Mới, nền kinh tế kế hoạch hóa tập trung bộc lộ nhiều yếu kém, dẫn đến lạm phát phi mã và khó khăn đời sống\n• Giai đoạn 1986-1990: Xóa bỏ bao cấp, tháo gỡ khó khăn, Luật Đầu tư nước ngoài 1987 mở cửa cho vốn quốc tế\n• Giai đoạn 1991-2000: Tăng trưởng vượt bậc, bình thường hóa quan hệ với Mỹ, gia nhập ASEAN, nông nghiệp phát triển mạnh\n• Từ nước thiếu lương thực, Việt Nam trở thành một trong những nước xuất khẩu gạo hàng đầu thế giới\n• Cuộc khủng hoảng tài chính châu Á năm 1997 tạo ra những tác động quan trọng nhưng được vượt qua\n• Giai đoạn 2001 đến nay: Hội nhập sâu rộng, gia nhập WTO 2007, phát triển kinh tế tư nhân\n• Kinh tế tư nhân trở thành động lực quan trọng và góp phần vào tăng trưởng kinh tế quốc gia",
+       "key_topics": [
+         "Đổi Mới Kinh tế",
+         "Lịch sử kinh tế Việt Nam",
+         "Chuyển đổi kinh tế thị trường",
+         "Luật Đầu tư nước ngoài",
+         "Hội nhập kinh tế",
+         "Phát triển nông nghiệp",
+         "Kinh tế tư nhân",
+         "Gia nhập WTO"
+       ],
+       "tags": ["kinh tế việt nam", "đổi mới", "lịch sử", "phát triển", "bài giảng", "hội nhập"]
+     }
+     ```
+
+2. **DIFFICULT CASE: Technical Discussion with Bullets**:
+   - Input: "Chúng ta cần upgrade database server. Vấn đề hiện tại là performance degradation. Đầu tiên, tăng RAM lên 64GB. Thứ hai, optimize các slow queries. Thứ ba, implement caching layer. Thứ tư, setup monitoring alerts."
+   - Output:
+     ```json
+     {
+       "title": "Chiến lược nâng cấp máy chủ cơ sở dữ liệu",
+       "summary": "Thảo luận về các giải pháp nâng cấp máy chủ cơ sở dữ liệu nhằm giải quyết vấn đề giảm hiệu suất. Các giải pháp bao gồm nâng cấp phần cứng, tối ưu hóa truy vấn, và cải thiện giám sát hệ thống.\n\n• Vấn đề chính: Suy giảm hiệu suất máy chủ database hiện tại\n• Nâng RAM lên 64GB để tăng khả năng xử lý và caching\n• Tối ưu hóa các truy vấn chậm (slow queries) để cải thiện tốc độ\n• Triển khai caching layer để giảm tải cho database\n• Thiết lập monitoring alerts để phát hiện sớm các vấn đề hiệu suất",
+       "key_topics": [
+         "Nâng cấp Database",
+         "Performance Optimization",
+         "Hardware Upgrade",
+         "Query Optimization",
+         "Caching Strategy",
+         "System Monitoring"
+       ],
+       "tags": ["database", "performance", "optimization", "infrastructure", "nâng cấp"]
+     }
+     ```
+
+3. **DIFFICULT CASE: Empty/Irrelevant Content**:
+   - Input: "(im lặng)... alo... alo... (tiếng ồn)"
+   - Output:
+     ```json
+     {
+       "title": "Bản ghi âm không có nội dung",
+       "summary": "Bản ghi âm chứa chủ yếu là im lặng và tiếng ồn, không có nội dung rõ ràng để tóm tắt.\n\n• Không có thông tin thực chất\n• Ghi âm chứa tiếng ồn nền\n• Chất lượng ghi âm kém",
+       "key_topics": ["không có nội dung"],
+       "tags": ["ghi âm lỗi", "trống"]
+     }
+     ```
+{% endblock %}
+
+{# --- INPUT DATA --- #}
+**Input Text:**
+{{ input_text }}
+
+**JSON Output:**
+
+```
