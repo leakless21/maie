@@ -12,15 +12,43 @@ from .types import JSONDict, JSONParseResult, ErrorContext, ValidationResult
 
 
 def _strip_markdown_code_fence(text: str) -> str:
-    """Remove surrounding Markdown code fences to recover raw payload."""
+    """Remove surrounding Markdown code fences to recover raw payload.
+    
+    Handles various markdown code fence formats:
+    - ```json ... ```
+    - ``` ... ```
+    - ````json ... ````
+    - etc.
+    """
     stripped = text.strip()
-    if not stripped.startswith("```"):
+    if not stripped.startswith("`"):
         return stripped
 
     lines = stripped.splitlines()
-    if len(lines) >= 2 and lines[-1].strip() == "```":
-        # Drop the opening fence (with optional language) and closing fence
-        return "\n".join(lines[1:-1]).strip()
+    
+    # Check if we have opening and closing fences
+    if len(lines) < 2:
+        return stripped
+    
+    first_line = lines[0].strip()
+    last_line = lines[-1].strip()
+    
+    # Both must start with backticks to be valid fences
+    if not first_line.startswith("`") or not last_line.startswith("`"):
+        return stripped
+    
+    # Count backticks to match opening and closing
+    first_backticks = len(first_line) - len(first_line.lstrip("`"))
+    last_backticks = len(last_line) - len(last_line.lstrip("`"))
+    
+    # If backtick counts match and closing line is all backticks (no other chars after)
+    if first_backticks == last_backticks and last_line == "`" * last_backticks:
+        # Extract content between fences
+        content_lines = lines[1:-1]
+        if content_lines:
+            return "\n".join(content_lines).strip()
+        return ""
+    
     return stripped
 
 
@@ -44,10 +72,20 @@ def safe_parse_json(
     """
     try:
         normalized_json = _strip_markdown_code_fence(json_str)
+        
+        # Additional check: ensure we have content after stripping
+        if not normalized_json or not normalized_json.strip():
+            return None, "JSON string is empty or contains only whitespace after stripping markdown fences"
+        
         parsed_data = json.loads(normalized_json)
         return parsed_data, None
     except json.JSONDecodeError as e:
         error_msg = f"JSON decode error: {str(e)}"
+        if error_context:
+            error_msg += f" (context: {error_context})"
+        return None, error_msg
+    except Exception as e:
+        error_msg = f"Unexpected error parsing JSON: {str(e)}"
         if error_context:
             error_msg += f" (context: {error_context})"
         return None, error_msg
