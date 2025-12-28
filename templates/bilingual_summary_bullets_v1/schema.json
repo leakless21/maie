@@ -45,6 +45,13 @@
       "maxItems": 10
     }
   },
-  "required": ["title_en", "title_vi", "summary_en", "summary_vi", "key_topics", "tags"],
+  "required": [
+    "title_en",
+    "title_vi",
+    "summary_en",
+    "summary_vi",
+    "key_topics",
+    "tags"
+  ],
   "additionalProperties": false
 }

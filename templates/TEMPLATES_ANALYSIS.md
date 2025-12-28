@@ -1,6 +1,7 @@
 # Template Analysis & New Templates Documentation
 
 ## Overview
+
 This document provides analysis of existing templates and describes the two new templates created with bilingual support and bullet-point summaries.
 
 ---
@@ -8,16 +9,20 @@ This document provides analysis of existing templates and describes the two new 
 ## Existing Templates Analysis
 
 ### 1. **base/structured_output_v1.jinja**
+
 The foundational template that all other templates extend. Provides:
+
 - Standard structure for LLM prompts requiring JSON output
 - Blocks for role definition, core task, step-by-step guides, guidelines, and examples
 - Language configuration (defaults to Vietnamese)
 - Extensible block system for customization
 
 ### 2. **generic_summary_v2/**
+
 Vietnamese summary template for general content analysis:
+
 - **Schema**: Title, Summary, Key Topics (array), Tags (array)
-- **Key Features**: 
+- **Key Features**:
   - Concise titles (max 15 words)
   - Comprehensive summaries without bullet points
   - 1-15 key topics
@@ -25,12 +30,15 @@ Vietnamese summary template for general content analysis:
 - **Use Cases**: General content summaries, meeting notes, lectures
 
 ### 3. **generic_summary_en_v2/**
+
 English version of the generic summary template:
+
 - Identical schema to generic_summary_v2
 - English language output
 - Same field constraints and requirements
 
 ### 4. **Other Templates**
+
 - `interview_transcript_v2/`: Specialized for interview transcripts
 - `meeting_notes_v2/`: Optimized for meeting summaries
 - `structured_analysis_v1/`: For complex structured data extraction
@@ -41,9 +49,11 @@ English version of the generic summary template:
 ## New Templates Created
 
 ### 1. **bilingual_summary_bullets_v1/** ⭐ NEW
+
 **Purpose**: Bilingual (English & Vietnamese) summary with structured bullet points
 
 #### Schema Structure
+
 ```json
 {
   "title_en": "English title (max 15 words)",
@@ -56,6 +66,7 @@ English version of the generic summary template:
 ```
 
 #### Key Features
+
 - **Bilingual Output**: Complete summaries in both English and Vietnamese
 - **Bullet-Point Format**: 5-10 structured bullet points per language
 - **Parallel Structure**: Maintains consistency of meaning across languages
@@ -63,6 +74,7 @@ English version of the generic summary template:
 - **Comprehensive Coverage**: Captures key ideas, arguments, and conclusions
 
 #### Use Cases
+
 - International business meetings and presentations
 - Multilingual documentation projects
 - Training sessions with diverse audiences
@@ -70,6 +82,7 @@ English version of the generic summary template:
 - Compliance documentation
 
 #### Example Output Format
+
 ```json
 {
   "title_en": "Q3 Strategic Meeting: New Product Development",
@@ -84,9 +97,11 @@ English version of the generic summary template:
 ---
 
 ### 2. **generic_summary_bullets_v2/** ⭐ NEW
+
 **Purpose**: Vietnamese generic summary with structured bullet points (enhanced version of generic_summary_v2)
 
 #### Schema Structure
+
 ```json
 {
   "title": "Title in Vietnamese (max 15 words)",
@@ -97,6 +112,7 @@ English version of the generic summary template:
 ```
 
 #### Key Features
+
 - **Bullet-Point Format**: Organizes summaries into clear, actionable bullet points
 - **Improved Readability**: Easier to scan and understand compared to paragraph format
 - **Standard Format**: Uses "• " prefix for consistent bullet styling
@@ -104,6 +120,7 @@ English version of the generic summary template:
 - **Enhanced Structure**: Opening statement + 5-10 bullet points
 
 #### Bullet Point Guidelines
+
 - Each bullet focuses on one distinct idea
 - Points follow a logical progression
 - Include supporting details when relevant
@@ -111,6 +128,7 @@ English version of the generic summary template:
 - Total length max 3000 characters
 
 #### Use Cases
+
 - Meeting summaries with action items
 - Lecture notes and training materials
 - Project documentation
@@ -119,6 +137,7 @@ English version of the generic summary template:
 - Presentation takeaways
 
 #### Example Output Format
+
 ```json
 {
   "title": "Lịch sử Kinh tế Việt Nam giai đoạn Đổi Mới",
@@ -132,28 +151,30 @@ English version of the generic summary template:
 
 ## Comparison Matrix
 
-| Feature | generic_summary_v2 | generic_summary_bullets_v2 | bilingual_summary_bullets_v1 |
-|---------|-------------------|---------------------------|------------------------------|
-| Language | Vietnamese | Vietnamese | English & Vietnamese |
-| Format | Paragraph | Bullet Points | Bullet Points |
-| Title Fields | 1 (title) | 1 (title) | 2 (title_en, title_vi) |
-| Summary Fields | 1 | 1 | 2 (summary_en, summary_vi) |
-| Max Summary Length | 2000 chars | 3000 chars | 3000 chars each |
-| Key Topics | 1-15 | 1-15 | 1-15 (in English) |
-| Tags | 1-10 | 1-10 | 1-10 (in English) |
-| Best For | General Vietnamese summaries | Vietnamese summaries with structure | Bilingual content & international use |
+| Feature            | generic_summary_v2           | generic_summary_bullets_v2          | bilingual_summary_bullets_v1          |
+| ------------------ | ---------------------------- | ----------------------------------- | ------------------------------------- |
+| Language           | Vietnamese                   | Vietnamese                          | English & Vietnamese                  |
+| Format             | Paragraph                    | Bullet Points                       | Bullet Points                         |
+| Title Fields       | 1 (title)                    | 1 (title)                           | 2 (title_en, title_vi)                |
+| Summary Fields     | 1                            | 1                                   | 2 (summary_en, summary_vi)            |
+| Max Summary Length | 2000 chars                   | 3000 chars                          | 3000 chars each                       |
+| Key Topics         | 1-15                         | 1-15                                | 1-15 (in English)                     |
+| Tags               | 1-10                         | 1-10                                | 1-10 (in English)                     |
+| Best For           | General Vietnamese summaries | Vietnamese summaries with structure | Bilingual content & international use |
 
 ---
 
 ## Implementation Recommendations
 
 ### Choose generic_summary_v2 when:
+
 - Summarizing Vietnamese-only content
 - Paragraph format is preferred
 - Simple, flowing narrative is needed
 - No specific bullet point requirements
 
 ### Choose generic_summary_bullets_v2 when:
+
 - Vietnamese content needs structured breakdown
 - Bullet-point format improves clarity
 - Action items or key takeaways are important
@@ -161,6 +182,7 @@ English version of the generic summary template:
 - Training or documentation purposes
 
 ### Choose bilingual_summary_bullets_v1 when:
+
 - Content must be available in both languages
 - International audiences are involved
 - Bullet-point structure is essential
@@ -183,11 +205,13 @@ template_name/
 ### Files Included
 
 **bilingual_summary_bullets_v1/**
+
 - `prompt.jinja`: Bilingual prompt with examples in English and Vietnamese
 - `schema.json`: Schema supporting title_en, title_vi, summary_en, summary_vi
 - `example.json`: Example showing bilingual output with bullets
 
 **generic_summary_bullets_v2/**
+
 - `prompt.jinja`: Vietnamese prompt with bullet-point emphasis
 - `schema.json`: Vietnamese schema with extended summary field
 - `example.json`: Example showing bullet-point structure
@@ -205,6 +229,7 @@ template_name/
 5. **Clarity**: Each bullet should stand independently
 
 ### Example Well-Formatted Summary
+
 ```
 Opening overview statement that sets context for the content...
 
@@ -225,6 +250,7 @@ Opening overview statement that sets context for the content...
 **Input**: Meeting transcript (English or Vietnamese or mixed)
 
 **Output**: Structured bilingual summary with parallel bullet points
+
 - Perfect for international teams
 - Ensures message consistency across languages
 - Easy to translate reference content
@@ -234,6 +260,7 @@ Opening overview statement that sets context for the content...
 **Input**: Lecture notes, meeting minutes, training material
 
 **Output**: Vietnamese summary with organized bullet points
+
 - Improves readability and recall
 - Facilitates documentation
 - Enables quick reference lookup
@@ -267,6 +294,7 @@ If you have existing summaries in generic_summary_v2 format and want to convert 
 ## Questions & Support
 
 For questions about:
+
 - **Template Usage**: Refer to the example.json in each template directory
 - **Schema Validation**: Check schema.json for field requirements and constraints
 - **Customization**: Review the prompt.jinja blocks that can be extended
