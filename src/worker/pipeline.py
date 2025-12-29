@@ -392,6 +392,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     processing_audio_path = audio_path  # Path to use for ASR (normalized or raw)
     version_metadata: Optional[Dict[str, Any]] = None
     vad_result: Optional[Dict[str, Any]] = None  # Track VAD processing results
+    enhanced_result: Optional[Dict[str, Any]] = None  # Track enhancement results
 
     try:
         # =====================================================================
@@ -1490,6 +1491,15 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
         if "summary" in features and structured_summary:
             results_payload["summary"] = structured_summary
+        elif "clean_transcript" in features and enhanced_result:
+            # If no explicit summary but we have enhancement metadata, use it as summary
+            # so the web app can display universal fields (title, tags, etc.)
+            universal_fields = ["title", "tags", "quality_score", "language"]
+            extracted_meta = {
+                k: enhanced_result[k] for k in universal_fields if k in enhanced_result
+            }
+            if extracted_meta:
+                results_payload["summary"] = extracted_meta
 
         if "clean_transcript" in features:
             results_payload["clean_transcript"] = clean_transcript or transcription
@@ -1766,6 +1776,7 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     start_time = time.time()
     llm_model = None
     version_metadata: Optional[Dict[str, Any]] = None
+    enhanced_result = None  # Track enhancement results for metrics
 
     try:
         logger.info(
@@ -1867,8 +1878,25 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             "transcription_length": len(text),
         }
 
+        # Add enhancement metrics if available
+        if "enhancement_metrics" in features and enhanced_result is not None:
+            edit_rate = enhanced_result.get("edit_rate", 0.0)
+            metrics["edit_rate_cleaning"] = edit_rate
+
         # Prepare results
         results_payload = {"clean_transcript": clean_transcript}
+
+        # If no explicit summary but we have enhancement metadata, use it as summary
+        # so the web app can display universal fields (title, tags, etc.)
+        if not structured_summary and enhanced_result:
+            # Extract universal fields if any are present
+            universal_fields = ["title", "tags", "quality_score", "language"]
+            extracted_meta = {
+                k: enhanced_result[k] for k in universal_fields if k in enhanced_result
+            }
+            if extracted_meta:
+                structured_summary = extracted_meta
+
         if structured_summary:
             results_payload["summary"] = structured_summary
         results_payload["raw_transcript"] = text

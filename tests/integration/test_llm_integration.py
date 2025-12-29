@@ -54,7 +54,6 @@ class TestLLMIntegration:
             "max_num_batched_tokens": None,
             "max_num_partial_prefills": None,
             "structured_outputs_enabled": True,
-            "structured_outputs_backend": "xgrammar",
         }
 
         if enhance_overrides:
@@ -72,11 +71,13 @@ class TestLLMIntegration:
     def test_end_to_end_enhancement_pipeline(self, tmp_path):
         """Test complete text enhancement pipeline."""
         # Create template directory and files
-        templates_dir = tmp_path / "templates" / "prompts"
+        templates_dir = tmp_path / "templates"
         templates_dir.mkdir(parents=True)
 
         # Create enhancement template
-        enhancement_template = templates_dir / "text_enhancement_v1.jinja"
+        template_dir = templates_dir / "text_enhancement_v1"
+        template_dir.mkdir(parents=True)
+        enhancement_template = template_dir / "prompt.jinja"
         enhancement_template.write_text(
             """
         Please enhance the following transcript by adding proper punctuation and capitalization:
@@ -147,9 +148,9 @@ class TestLLMIntegration:
         templates_dir.mkdir()
 
         # Create schema file
-        schemas_dir = templates_dir / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = templates_dir / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
             "properties": {
@@ -174,9 +175,7 @@ class TestLLMIntegration:
         schema_file.write_text(json.dumps(schema, indent=2))
 
         # Create prompt template
-        prompts_dir = templates_dir / "prompts"
-        prompts_dir.mkdir()
-        prompt_template = prompts_dir / "meeting_notes_v1.jinja"
+        prompt_template = template_dir / "prompt.jinja"
         prompt_template.write_text(
             """
         Please summarize the following meeting transcript in the specified JSON format:
@@ -280,9 +279,9 @@ class TestLLMIntegration:
     def test_sequential_load_execute_unload_cycle(self, tmp_path):
         """Test sequential model loading, execution, and unloading."""
         # Create minimal template
-        templates_dir = tmp_path / "templates" / "prompts"
-        templates_dir.mkdir(parents=True)
-        enhancement_template = templates_dir / "text_enhancement_v1.jinja"
+        template_dir = tmp_path / "templates" / "text_enhancement_v1"
+        template_dir.mkdir(parents=True)
+        enhancement_template = template_dir / "prompt.jinja"
         enhancement_template.write_text("{{ text_input }}")
 
         processor = LLMProcessor()
@@ -344,9 +343,9 @@ class TestLLMIntegration:
     def test_multiple_inferences_same_model_instance(self, tmp_path):
         """Test multiple inferences with the same model instance."""
         # Create minimal template
-        templates_dir = tmp_path / "templates" / "prompts"
-        templates_dir.mkdir(parents=True)
-        enhancement_template = templates_dir / "text_enhancement_v1.jinja"
+        template_dir = tmp_path / "templates" / "text_enhancement_v1"
+        template_dir.mkdir(parents=True)
+        enhancement_template = template_dir / "prompt.jinja"
         enhancement_template.write_text("{{ text_input }}")
 
         # Mock vLLM components
@@ -418,11 +417,11 @@ class TestLLMIntegration:
 
     @pytest.mark.integration
     def test_error_handling_and_recovery(self, tmp_path):
-        """Test error handling and recovery mechanisms."""
+        """Test error handling and recovery during inference."""
         # Create minimal template
-        templates_dir = tmp_path / "templates" / "prompts"
-        templates_dir.mkdir(parents=True)
-        enhancement_template = templates_dir / "text_enhancement_v1.jinja"
+        template_dir = tmp_path / "templates" / "text_enhancement_v1"
+        template_dir.mkdir(parents=True)
+        enhancement_template = template_dir / "prompt.jinja"
         enhancement_template.write_text("{{ text_input }}")
 
         with (
@@ -508,9 +507,9 @@ class TestLLMIntegration:
         templates_dir.mkdir()
 
         # Create schema file
-        schemas_dir = templates_dir / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = templates_dir / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
             "properties": {
@@ -525,11 +524,8 @@ class TestLLMIntegration:
             "required": ["title", "tags"],
         }
         schema_file.write_text(json.dumps(schema))
-
         # Create prompt template
-        prompts_dir = templates_dir / "prompts"
-        prompts_dir.mkdir()
-        prompt_template = prompts_dir / "meeting_notes_v1.jinja"
+        prompt_template = template_dir / "prompt.jinja"
         prompt_template.write_text("{{ transcript }}")
 
         # Mock model with different outputs for retries
@@ -625,9 +621,9 @@ class TestLLMIntegration:
     def test_version_info_completeness(self, tmp_path):
         """Test that version info is complete and accurate."""
         # Create minimal template
-        templates_dir = tmp_path / "templates" / "prompts"
-        templates_dir.mkdir(parents=True)
-        enhancement_template = templates_dir / "text_enhancement_v1.jinja"
+        template_dir = tmp_path / "templates" / "text_enhancement_v1"
+        template_dir.mkdir(parents=True)
+        enhancement_template = template_dir / "prompt.jinja"
         enhancement_template.write_text("{{ text_input }}")
 
         # Mock model loading with proper list support for chat()
@@ -687,8 +683,8 @@ class TestLLMIntegration:
                         assert version_info["thinking"] is False
                         assert version_info["reasoning_parser"] is None
                         assert (
-                            version_info["structured_output"]["backend"]
-                            == "xgrammar"
+                            version_info["structured_output"]["status"]
+                            == "enabled"
                         )
                         assert "decoding_params" in version_info
                         assert version_info["decoding_params"]["temperature"] == 0.7

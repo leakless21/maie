@@ -377,15 +377,6 @@ class LlmSumSettings(BaseModel):
         default=False,
         description="Enable structured output generation for summary (slower but more reliable)",
     )
-    structured_outputs_backend: Literal[
-        "xgrammar", "guidance", "outlines", "lm-format-enforcer", "auto"
-    ] = Field(
-        default="guidance",
-        description=(
-            "Structured outputs backend to use for summary tasks. "
-            "See vLLM structured outputs docs for supported backends."
-        ),
-    )
 
     model_config = ConfigDict(validate_assignment=True)
 

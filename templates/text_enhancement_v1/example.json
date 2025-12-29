@@ -1,8 +1,12 @@
 {
-  "title": "Cải thiện ghi chú về dự án giáo dục",
-  "văn_bản_gốc": "xin chào mọi người hôm nay chúng ta sẽ thảo luận về dự án mới ừ dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn",
-  "văn_bản_cải_thiện": "Xin chào mọi người, hôm nay chúng ta sẽ thảo luận về dự án mới. Dự án này liên quan đến việc phát triển một ứng dụng di động cho ngành giáo dục mà sẽ giúp học sinh học tập tốt hơn.",
-  "điểm_chất_lượng": 0.62,
-  "ngôn_ngữ": "vi",
-  "tags": ["transcription", "education", "moderate_quality"]
+  "title": "Ví dụ về cải thiện văn bản",
+  "văn_bản_gốc": "xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam",
+  "văn_bản_cải_thiện": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam.",
+  "quality_score": 0.65,
+  "language": "vi",
+  "tags": [
+    "transcription",
+    "technology",
+    "education"
+  ]
 }

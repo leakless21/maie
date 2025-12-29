@@ -72,13 +72,19 @@ class TestLoadModel:
         with patch("src.processors.llm.processor.settings") as mock_settings:
             mock_settings.llm_backend = LlmBackendType.LOCAL_VLLM
             mock_settings.llm_enhance = SimpleNamespace(
-                enhance_base_url="http://test-server/v1",
-                enhance_api_key=None,
-                enhance_model_name="test-model",
-                summary_url="http://test-server/v1",
-                summary_api_key=None,
-                summary_model_name="test-model",
-                request_timeout_seconds=60.0,
+                model="test-model",
+                gpu_memory_utilization=0.9,
+                max_model_len=32768,
+                quantization=None,
+                max_num_seqs=None,
+                max_num_batched_tokens=None,
+                max_num_partial_prefills=None,
+            )
+            mock_settings.llm_sum = SimpleNamespace(
+                temperature=0.7,
+                top_p=0.9,
+                top_k=20,
+                max_tokens=1000,
             )
 
             with patch("vllm.LLM") as mock_llm_class:
@@ -402,19 +408,48 @@ class TestNeedsEnhancement:
 class TestGenerateSummary:
     """Test structured summarization functionality."""
 
-    def test_generate_summary_without_model(self):
+    def test_generate_summary_without_model(self, tmp_path):
         """Test summarization when model is not available."""
         processor = LLMProcessor()
 
+        # Create valid schema file
+        template_dir = tmp_path / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
+        schema = {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string"},
+                "tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["title", "tags"],
+        }
+        schema_file.write_text(json.dumps(schema))
+
         # Mock _load_model to simulate failure to load (does not set _model_loaded=True)
         with patch.object(processor, "_load_model") as mock_load:
-            # After load, if no client is configured we expect an error (no fallback)
-            processor._model_loaded = True
-            processor.client_summary = None
-            with pytest.raises(RuntimeError, match="No LLM client configured"):
-                processor.generate_summary("transcript", "meeting_notes_v1")
-            mock_load.assert_called_once()
-            mock_load.assert_called_once()
+            with patch("src.processors.llm.processor.settings") as mock_settings:
+                mock_settings.paths.templates_dir = tmp_path
+                mock_settings.llm_sum = SimpleNamespace(
+                    temperature=0.7,
+                    top_p=0.9,
+                    top_k=20,
+                    max_tokens=1000,
+                    structured_outputs_enabled=False,
+                )
+                # After load, if no client is configured we expect an error (no fallback)
+                processor._model_loaded = False
+                processor.client_summary = None
+                # generate_summary returns a dict with error instead of raising
+                result = processor.generate_summary("transcript", "meeting_notes_v1")
+                assert result["summary"] is None
+                assert "LLM model not available" in result["error"]
+                mock_load.assert_called_once()
 
     def test_generate_summary_schema_load_error(self, tmp_path):
         """Test summarization when schema loading fails."""
@@ -437,9 +472,9 @@ class TestGenerateSummary:
         processor.model = Mock()
 
         # Create valid schema file
-        schemas_dir = tmp_path / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = tmp_path / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
             "properties": {
@@ -480,9 +515,9 @@ class TestGenerateSummary:
         processor._model_loaded = True
 
         # Create valid schema file
-        schemas_dir = tmp_path / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = tmp_path / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
             "properties": {
@@ -543,9 +578,9 @@ class TestGenerateSummary:
         processor._model_loaded = True
 
         # Create valid schema file
-        schemas_dir = tmp_path / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = tmp_path / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
             "properties": {
@@ -610,12 +645,21 @@ class TestGenerateSummary:
         processor._model_loaded = True
 
         # Create minimal schema file
-        schemas_dir = tmp_path / "schemas"
-        schemas_dir.mkdir()
-        schema_file = schemas_dir / "meeting_notes_v1.json"
+        template_dir = tmp_path / "meeting_notes_v1"
+        template_dir.mkdir()
+        schema_file = template_dir / "schema.json"
         schema = {
             "type": "object",
-            "properties": {"title": {"type": "string"}},
+            "properties": {
+                "title": {"type": "string"},
+                "tags": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 5,
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["title", "tags"],
         }
         schema_file.write_text(json.dumps(schema))
 
@@ -754,7 +798,6 @@ class TestGetVersionInfo:
                 top_k=20,
                 max_tokens=1000,
                 structured_outputs_enabled=True,
-                structured_outputs_backend="guidance",
             )
 
             info = processor.get_version_info()
@@ -762,7 +805,7 @@ class TestGetVersionInfo:
             assert info["name"] == "test-model"
             assert info["checkpoint_hash"] == "test-hash"
             assert info["quantization"] == "awq-4bit"
-            assert info["structured_output"]["backend"] == "guidance"
+            assert info["structured_output"]["status"] == "enabled"
             assert info["structured_output"]["schema_id"] == "template"
             assert info["structured_output"]["schema_hash"] == "schema-hash"
 
@@ -781,7 +824,6 @@ class TestGetVersionInfo:
                 top_k=20,
                 max_tokens=1000,
                 structured_outputs_enabled=False,
-                structured_outputs_backend="xgrammar",
             )
 
             info = processor.get_version_info()

@@ -1,39 +1,39 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Cải thiện văn bản",
-  "description": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
+  "tiêu_đề": "Cải thiện văn bản",
+  "mô_tả": "Định dạng có cấu trúc cho việc sửa lỗi và cải thiện văn bản tiếng Việt",
   "type": "object",
   "properties": {
     "title": {
       "type": "string",
-      "description": "Tiêu đề ngắn gọn mô tả loại hoặc chủ đề của văn bản được cải thiện",
+      "description": "A concise title for the text being enhanced",
       "maxLength": 200
     },
     "văn_bản_gốc": {
       "type": "string",
-      "description": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
+      "mô_tả": "Văn bản đầu vào gốc được cung cấp, lưu giữ để tham khảo",
       "maxLength": 50000
     },
     "văn_bản_cải_thiện": {
       "type": "string",
-      "description": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
+      "mô_tả": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
       "maxLength": 50000
     },
-    "điểm_chất_lượng": {
+    "quality_score": {
       "type": "number",
-      "description": "Điểm chất lượng của văn bản gốc trên thang điểm từ 0.0 (rất kém) đến 1.0 (hoàn hảo)",
+      "description": "Quality score of the original text from 0.0 (poor) to 1.0 (perfect)",
       "minimum": 0.0,
       "maximum": 1.0
     },
-    "ngôn_ngữ": {
+    "language": {
       "type": "string",
-      "description": "Mã ngôn ngữ chính của văn bản (ISO 639-1, ví dụ: 'vi' cho tiếng Việt, 'en' cho tiếng Anh)",
+      "description": "Primary language code (ISO 639-1, e.g., 'vi', 'en')",
       "pattern": "^[a-z]{2}$",
       "maxLength": 2
     },
     "tags": {
       "type": "array",
-      "description": "Các thẻ phân loại cho văn bản (ví dụ: loại nội dung, lĩnh vực, mức độ chất lượng)",
+      "description": "Category tags for classification (FR-6)",
       "items": {
         "type": "string",
         "maxLength": 50
@@ -46,8 +46,8 @@
     "title",
     "văn_bản_gốc",
     "văn_bản_cải_thiện",
-    "điểm_chất_lượng",
-    "ngôn_ngữ",
+    "quality_score",
+    "language",
     "tags"
   ],
   "additionalProperties": false

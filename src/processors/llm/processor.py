@@ -348,7 +348,8 @@ class LLMProcessor(LLMBackend):
         except ImportError:
             logger.warning("vLLM not installed, LLM features will be unavailable")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = "vllm_not_installed"
             self.model_info = {
                 "model_name": "unavailable",
@@ -357,7 +358,8 @@ class LLMProcessor(LLMBackend):
         except (RuntimeError, OSError, MemoryError) as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -367,7 +369,8 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -511,7 +514,7 @@ class LLMProcessor(LLMBackend):
 
         # Ensure model is loaded
         if not self._model_loaded:
-            self._load_model(**kwargs)  # Keep original kwargs for _load_model
+            self._load_model(**kwargs)
 
         # Select client based on task type
         if task == "summary":
@@ -540,9 +543,6 @@ class LLMProcessor(LLMBackend):
             kwargs=kwargs,
         )
 
-        # Load model if not already loaded
-        if not self._model_loaded:
-            self._load_model(**kwargs)
 
         # Initialize variables for different code paths
         use_chat_api = False
@@ -633,10 +633,9 @@ class LLMProcessor(LLMBackend):
                     from vllm.sampling_params import StructuredOutputsParams
 
                     kwargs["structured_outputs"] = StructuredOutputsParams(
-                        json=json.dumps(schema),
-                        backend=settings.llm_sum.structured_outputs_backend
+                        json=json.dumps(schema)
                     )
-                    logger.debug(f"Set up structured output (JSON) with backend={settings.llm_sum.structured_outputs_backend}")
+                    logger.debug("Set up structured output (JSON)")
                 except Exception as e:
                     logger.warning(f"Failed to set up structured outputs: {e}")
             else:
@@ -644,9 +643,29 @@ class LLMProcessor(LLMBackend):
         elif task == "enhancement":
             # Handle enhancement task with chat API (matching summary pattern)
             try:
+                # Load schema for structured outputs enforcement
+                schema = load_template_schema(
+                    "text_enhancement_v1", Path(settings.paths.templates_dir)
+                )
+
                 # Render system prompt (contains instructions and examples)
                 system_prompt = self.prompt_renderer.render("text_enhancement_v1")
                 logger.debug("Rendered enhancement system prompt")
+                use_chat_api = True
+
+                # Set up structured outputs (JSON schema enforcement) if enabled
+                if settings.llm_sum.structured_outputs_enabled:
+                    try:
+                        from vllm.sampling_params import StructuredOutputsParams
+
+                        kwargs["structured_outputs"] = StructuredOutputsParams(
+                            json=json.dumps(schema)
+                        )
+                        logger.debug("Set up structured output (JSON) for enhancement")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to set up structured outputs for enhancement: {e}"
+                        )
             except Exception as e:
                 logger.error(f"Failed to render enhancement template: {e}")
                 return LLMResult(
@@ -1062,6 +1081,22 @@ class LLMProcessor(LLMBackend):
                     result_metadata["validation"] = "error"
                     result_metadata["error"] = str(e)
 
+            elif task == "enhancement":
+                try:
+                    # Parse JSON output using safe utility
+                    structured_output, parse_error = safe_parse_json(generated_text)
+
+                    if structured_output is not None:
+                        result_metadata["structured_enhancement"] = structured_output
+                        logger.debug("Enhancement JSON parsed successfully")
+                    else:
+                        logger.error(f"Failed to parse enhancement JSON: {parse_error}")
+                        result_metadata["parse_error"] = parse_error
+
+                except Exception as e:
+                    logger.error(f"Enhancement parsing error: {e}")
+                    result_metadata["error"] = str(e)
+
             # DEBUG: Log LLM output preview
             output_text = generated_text or text
             output_preview = (
@@ -1155,14 +1190,52 @@ class LLMProcessor(LLMBackend):
 
         # Generate enhanced text (execute() will render the chat template)
         result = self.execute(text, task="enhancement", **kwargs)
-        enhanced_text = result.text.strip()
+
+        # Extract enhanced text and metadata from structured output if available
+        enhanced_text = text  # Default fallback
+        metadata = {}
+        if result.metadata and "structured_enhancement" in result.metadata:
+            structured = result.metadata["structured_enhancement"]
+            # Try both Vietnamese and English keys for enhanced text
+            enhanced_text = (
+                structured.get("văn_bản_cải_thiện")
+                or structured.get("enhanced_text")
+                or result.text
+            )
+            # Extract universal fields
+            metadata["title"] = structured.get("title")
+            metadata["quality_score"] = structured.get("quality_score")
+            metadata["language"] = structured.get("language")
+            metadata["tags"] = structured.get("tags")
+        else:
+            # Fallback: try to parse result.text as JSON manually if execute didn't do it
+            try:
+                structured, _ = safe_parse_json(result.text)
+                if structured and isinstance(structured, dict):
+                    enhanced_text = (
+                        structured.get("văn_bản_cải_thiện")
+                        or structured.get("enhanced_text")
+                        or result.text
+                    )
+                    # Extract universal fields
+                    metadata["title"] = structured.get("title")
+                    metadata["quality_score"] = structured.get("quality_score")
+                    metadata["language"] = structured.get("language")
+                    metadata["tags"] = structured.get("tags")
+                else:
+                    enhanced_text = result.text
+            except Exception:
+                enhanced_text = result.text
+
+        enhanced_text = enhanced_text.strip()
 
         # Calculate edit distance for metrics
         edit_distance = levenshtein_distance(text, enhanced_text)
         max_length = max(len(text), len(enhanced_text))
         edit_rate = edit_distance / max_length if max_length > 0 else 0
 
-        return {
+        # Build final result dictionary
+        res = {
             "enhanced_text": enhanced_text,
             "original_text": text,
             "enhancement_applied": True,
@@ -1170,6 +1243,12 @@ class LLMProcessor(LLMBackend):
             "edit_rate": edit_rate,
             "model_info": result.model_info,
         }
+
+        # Include universal fields directly at top level if available
+        if metadata:
+            res.update(metadata)
+
+        return res
 
     def needs_enhancement(self, asr_backend: str) -> bool:
         """
@@ -1247,8 +1326,7 @@ class LLMProcessor(LLMBackend):
                 from vllm.sampling_params import StructuredOutputsParams
 
                 sampling_override = StructuredOutputsParams(
-                    json=json.dumps(schema),
-                    backend=settings.llm_sum.structured_outputs_backend
+                    json=json.dumps(schema)
                 )
             except Exception as e:
                 logger.warning(f"Failed to initialize structured outputs: {e}")
@@ -1294,9 +1372,10 @@ class LLMProcessor(LLMBackend):
                     "stop": [
                         "<|im_end|>"
                     ],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
-                    "structured_outputs": sampling_override,
                     **kwargs,
                 }
+                if sampling_override is not None:
+                    sampling_kwargs["structured_outputs"] = sampling_override
 
                 # Only pass max_tokens if explicitly provided by caller
                 if "max_tokens" in kwargs:
@@ -1606,18 +1685,9 @@ class LLMProcessor(LLMBackend):
         Returns:
             Dictionary containing comprehensive version metadata
         """
-        # Determine structured outputs backend from settings, respecting enable flag.
-        # This is metadata only; actual backend selection is controlled by vLLM's
-        # structured outputs configuration (see vLLM docs).
-        try:
-            structured_backend = (
-                settings.llm_sum.structured_outputs_backend
-                if settings.llm_sum.structured_outputs_enabled
-                else "none"
-            )
-        except Exception:
-            # Fallback for legacy or partially-mocked settings
-            structured_backend = "none"
+        structured_status = (
+            "enabled" if settings.llm_sum.structured_outputs_enabled else "disabled"
+        )
 
         return {
             "name": (
@@ -1630,7 +1700,7 @@ class LLMProcessor(LLMBackend):
             "thinking": False,
             "reasoning_parser": None,
             "structured_output": {
-                "backend": structured_backend,
+                "status": structured_status,
                 "schema_id": self.current_template_id or "none",
                 "schema_hash": self.current_schema_hash or "none",
             },
