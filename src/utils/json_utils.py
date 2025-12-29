@@ -18,7 +18,7 @@ def _strip_markdown_code_fence(text: str) -> str:
     - ```json ... ```
     - ``` ... ```
     - ````json ... ````
-    - etc.
+    - Truncated outputs with opening fence but no closing fence (common with max_tokens limit)
     """
     stripped = text.strip()
     if not stripped.startswith("`"):
@@ -26,25 +26,37 @@ def _strip_markdown_code_fence(text: str) -> str:
 
     lines = stripped.splitlines()
 
-    # Check if we have opening and closing fences
+    # Check if we have at least an opening fence
     if len(lines) < 2:
         return stripped
 
     first_line = lines[0].strip()
     last_line = lines[-1].strip()
 
-    # Both must start with backticks to be valid fences
-    if not first_line.startswith("`") or not last_line.startswith("`"):
-        return stripped
-
-    # Count backticks to match opening and closing
+    # Count backticks in the first line
     first_backticks = len(first_line) - len(first_line.lstrip("`"))
-    last_backticks = len(last_line) - len(last_line.lstrip("`"))
-
-    # If backtick counts match and closing line is all backticks (no other chars after)
-    if first_backticks == last_backticks and last_line == "`" * last_backticks:
-        # Extract content between fences
-        content_lines = lines[1:-1]
+    
+    # Check if last line is a valid closing fence
+    last_line_is_closing_fence = (
+        last_line.startswith("`") and 
+        last_line == "`" * (len(last_line) - len(last_line.lstrip("`")))
+    )
+    
+    if last_line_is_closing_fence:
+        last_backticks = len(last_line) - len(last_line.lstrip("`"))
+        # If backtick counts match, we have a complete fence
+        if first_backticks == last_backticks:
+            # Extract content between fences
+            content_lines = lines[1:-1]
+            if content_lines:
+                return "\n".join(content_lines).strip()
+            return ""
+    
+    # Handle truncated output: opening fence present but no closing fence
+    # This commonly happens when LLM output is truncated due to max_tokens limit
+    # Strip just the opening fence line and return the rest
+    if first_backticks >= 3:
+        content_lines = lines[1:]
         if content_lines:
             return "\n".join(content_lines).strip()
         return ""

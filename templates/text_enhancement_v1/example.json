@@ -1,12 +1,8 @@
 {
-  "title": "Ví dụ về cải thiện văn bản",
-  "văn_bản_gốc": "xin chào các bạn hôm nay tôi sẽ nói về trí tuệ nhân tạo ây ai mà hiện nay đang rất phổ biến ở việt nam",
+  "title": "Bài nói chuyện về trí tuệ nhân tạo",
   "văn_bản_cải_thiện": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam.",
-  "quality_score": 0.65,
-  "language": "vi",
-  "tags": [
-    "transcription",
-    "technology",
-    "education"
-  ]
+  "điểm_chất_lượng": 0.55,
+  "ngôn_ngữ": "vi",
+  "tags": ["transcription", "education", "technology", "moderate_quality"]
 }
+

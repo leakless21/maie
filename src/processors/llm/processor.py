@@ -1202,10 +1202,11 @@ class LLMProcessor(LLMBackend):
                 or structured.get("enhanced_text")
                 or result.text
             )
-            # Extract universal fields
+            # Extract universal fields (with Vietnamese key support)
             metadata["title"] = structured.get("title")
-            metadata["quality_score"] = structured.get("quality_score")
-            metadata["language"] = structured.get("language")
+            # Map Vietnamese keys to English for backward compatibility
+            metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+            metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
             metadata["tags"] = structured.get("tags")
         else:
             # Fallback: try to parse result.text as JSON manually if execute didn't do it
@@ -1217,10 +1218,14 @@ class LLMProcessor(LLMBackend):
                         or structured.get("enhanced_text")
                         or result.text
                     )
-                    # Extract universal fields
+                    # Extract universal fields (with Vietnamese key support)
                     metadata["title"] = structured.get("title")
-                    metadata["quality_score"] = structured.get("quality_score")
-                    metadata["language"] = structured.get("language")
+                    # Map Vietnamese keys to English for backward compatibility
+                    logger.debug(f"Structured keys: {list(structured.keys())}")
+                    logger.debug(f"điểm_chất_lượng value: {structured.get('điểm_chất_lượng')}")
+                    logger.debug(f"ngôn_ngữ value: {structured.get('ngôn_ngữ')}")
+                    metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                    metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
                     metadata["tags"] = structured.get("tags")
                 else:
                     enhanced_text = result.text
