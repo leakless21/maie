@@ -448,7 +448,29 @@ class LLMProcessor(LLMBackend):
                 # Best-effort only; don't fail the pipeline on strange types
                 continue
 
-        return data
+    def _estimate_tokens(self, text: str) -> int:
+        """
+        Estimate the number of tokens in a text string.
+        Uses the tokenizer if available, otherwise falls back to character-based estimation.
+        
+        Args:
+            text: Input text string
+            
+        Returns:
+            Estimated token count
+        """
+        if self.tokenizer is not None:
+            try:
+                return len(self.tokenizer.encode(text, add_special_tokens=False))
+            except Exception as e:
+                logger.warning(f"Tokenizer encoding failed: {e}")
+        
+        # Fallback: character-based estimation
+        # For multilingual text (Vietnamese, Chinese, etc.), 3.5 chars/token is a safe middle ground.
+        # For primarily Latin text, it's closer to 4.
+        estimated = int(len(text) / 3.5)
+        logger.debug(f"Using character-based token estimation: {estimated} tokens (text length: {len(text)})")
+        return estimated
 
     def _ensure_tokenizer(self, model_name: str) -> None:
         """
@@ -480,9 +502,37 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             logger.debug(f"Unable to obtain tokenizer from vLLM model: {e}")
 
-        # Fallback to Hugging Face tokenizer
+        # Fallback 1: Local cache (setup via scripts/download_tokenizer.py)
         try:
-            logger.debug(f"Falling back to Hugging Face tokenizer for {model_name}")
+            cache_dir = Path("data/tokenizers")
+            if cache_dir.exists():
+                # Try known model names that we might have cached
+                # Currently we only cache Qwen3-4B
+                cached_models = ["Qwen/Qwen3-4B"]
+                
+                from transformers import AutoTokenizer
+                for m_name in cached_models:
+                    # Check if this model exists in cache (look for the directory structure)
+                    safe_m_name = m_name.replace("/", "--")
+                    if list(cache_dir.glob(f"models--{safe_m_name}")):
+                        logger.debug(f"Attempting to load tokenizer {m_name} from local cache: {cache_dir}")
+                        try:
+                            self.tokenizer = AutoTokenizer.from_pretrained(
+                                m_name,
+                                cache_dir=str(cache_dir),
+                                local_files_only=True,
+                                trust_remote_code=True
+                            )
+                            logger.debug(f"Successfully loaded tokenizer {m_name} from local cache")
+                            return
+                        except Exception as e:
+                            logger.debug(f"Failed to load {m_name} from cache: {e}")
+        except Exception as e:
+            logger.debug(f"Error during local cache tokenizer search: {e}")
+
+        # Fallback 2: Hugging Face tokenizer (online or existing HF cache)
+        try:
+            logger.debug(f"Attempting to load tokenizer for {model_name} from Hugging Face")
             from transformers import (
                 AutoTokenizer,
             )  # local import to avoid hard dep when unused
@@ -490,10 +540,11 @@ class LLMProcessor(LLMBackend):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, trust_remote_code=True
             )
-            logger.debug(f"Successfully loaded Hugging Face tokenizer for {model_name}")
+            logger.debug(f"Successfully loaded tokenizer for {model_name}")
         except Exception as e:
             logger.warning(
-                f"Failed to load Hugging Face tokenizer for {model_name}: {e}"
+                f"Failed to load tokenizer for {model_name}: {e}. "
+                "Will use character-based estimation for chunking."
             )
             self.tokenizer = None
 
@@ -1311,16 +1362,15 @@ class LLMProcessor(LLMBackend):
         if self.tokenizer is None:
             self._ensure_tokenizer(self.model_path)
             
-        if self.tokenizer is not None:
-            try:
-                token_count = len(self.tokenizer.encode(transcript, add_special_tokens=False))
-                max_model_len = settings.llm_sum.max_model_len
-                
-                if token_count > max_model_len * 0.75:
-                    logger.info(f"Transcript too long ({token_count} tokens, max: {max_model_len}), triggering map-reduce")
-                    return self._map_reduce_summary(transcript, template_id, **kwargs)
-            except Exception as e:
-                logger.warning(f"Failed to check token count for map-reduce: {e}")
+        try:
+            token_count = self._estimate_tokens(transcript)
+            max_model_len = settings.llm_sum.max_model_len
+            
+            if token_count > max_model_len * 0.75:
+                logger.info(f"Transcript too long ({token_count} tokens, max: {max_model_len}), triggering map-reduce")
+                return self._map_reduce_summary(transcript, template_id, **kwargs)
+        except Exception as e:
+            logger.warning(f"Failed to check token count for map-reduce: {e}")
 
         # Load and validate template schema
         try:
@@ -1650,7 +1700,7 @@ class LLMProcessor(LLMBackend):
         if self.tokenizer is None:
             self._ensure_tokenizer(self.model_path)
             
-        if self.chunker is None and self.tokenizer is not None:
+        if self.chunker is None:
             # Calculate chunk size dynamically based on max_model_len
             # Use ~18-20% of max_model_len for chunks to leave room for:
             # - Prompt instructions (~1000 tokens)
@@ -1660,8 +1710,9 @@ class LLMProcessor(LLMBackend):
             chunk_size = int(max_model_len * 0.18)  # ~18% of context window
             logger.info(f"Initializing TextChunker with chunk_size={chunk_size} (based on max_model_len={max_model_len})")
             self.chunker = TextChunker(self.model_path, max_tokens=chunk_size)
-            # Inject the already loaded tokenizer to avoid reloading
-            self.chunker.tokenizer = self.tokenizer
+            
+        # Inject the current tokenizer (might be None, which is fine)
+        self.chunker.tokenizer = self.tokenizer
 
         if self.chunker is None:
             logger.error("Failed to initialize chunker for map-reduce")

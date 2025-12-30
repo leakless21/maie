@@ -23,8 +23,17 @@
       },
       "minItems": 1,
       "maxItems": 10
+    },
+    "tags": {
+      "type": "array",
+      "description": "3-5 concise tags summarizing this section",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 10
     }
   },
-  "required": ["section_summary", "key_points", "topics"],
+  "required": ["section_summary", "key_points", "topics", "tags"],
   "additionalProperties": false
 }

@@ -21,7 +21,12 @@ class TextChunker:
             max_tokens: Maximum tokens per chunk.
             overlap_tokens: Number of tokens to overlap between chunks (for fallback).
         """
-        self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+        try:
+            self.tokenizer = AutoTokenizer.from_pretrained(tokenizer_path, trust_remote_code=True)
+        except Exception as e:
+            logger.warning(f"Failed to load tokenizer for TextChunker from {tokenizer_path}: {e}. Will use character-based estimation.")
+            self.tokenizer = None
+            
         self.max_tokens = max_tokens
         self.overlap_tokens = overlap_tokens
         self._nlp = None
@@ -37,8 +42,15 @@ class TextChunker:
         return self._nlp
 
     def count_tokens(self, text: str) -> int:
-        """Count tokens in text."""
-        return len(self.tokenizer.encode(text, add_special_tokens=False))
+        """Count tokens in text with character-based fallback."""
+        if self.tokenizer is not None:
+            try:
+                return len(self.tokenizer.encode(text, add_special_tokens=False))
+            except Exception as e:
+                logger.warning(f"Tokenizer encoding failed in TextChunker: {e}")
+        
+        # Fallback: 3.5 chars per token for multilingual support
+        return int(len(text) / 3.5)
 
     def split(self, text: str) -> List[str]:
         """
@@ -102,22 +114,47 @@ class TextChunker:
 
     def _split_fixed_tokens(self, text: str) -> List[str]:
         """Fallback: split text into fixed-token chunks with overlap."""
-        tokens = self.tokenizer.encode(text, add_special_tokens=False)
-        chunks = []
+        if self.tokenizer is not None:
+            try:
+                tokens = self.tokenizer.encode(text, add_special_tokens=False)
+                chunks = []
+                
+                start = 0
+                while start < len(tokens):
+                    end = min(start + self.max_tokens, len(tokens))
+                    chunk_tokens = tokens[start:end]
+                    chunks.append(self.tokenizer.decode(chunk_tokens, skip_special_tokens=True))
+                    
+                    if end == len(tokens):
+                        break
+                        
+                    start = end - self.overlap_tokens
+                    if start < 0:
+                        start = 0
+                    if start >= end:
+                        start = end
+                        
+                return chunks
+            except Exception as e:
+                logger.warning(f"Fixed-token splitting failed: {e}. Falling back to character-based splitting.")
+
+        # Character-based fallback
+        # max_tokens * 3.5 chars per chunk
+        max_chars = int(self.max_tokens * 3.5)
+        overlap_chars = int(self.overlap_tokens * 3.5)
         
+        chunks = []
         start = 0
-        while start < len(tokens):
-            end = min(start + self.max_tokens, len(tokens))
-            chunk_tokens = tokens[start:end]
-            chunks.append(self.tokenizer.decode(chunk_tokens, skip_special_tokens=True))
+        while start < len(text):
+            end = min(start + max_chars, len(text))
+            chunks.append(text[start:end])
             
-            if end == len(tokens):
+            if end == len(text):
                 break
                 
-            start = end - self.overlap_tokens
+            start = end - overlap_chars
             if start < 0:
                 start = 0
-            # Ensure we make progress
             if start >= end:
                 start = end
                 
