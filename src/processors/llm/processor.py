@@ -78,7 +78,8 @@ class LLMProcessor(LLMBackend):
         self.model_info = None
         self.current_template_id = None
         self.current_schema_hash = None
-        self.chunker: Optional[TextChunker] = None
+        self.chunker_enhance: Optional[TextChunker] = None
+        self.chunker_summary: Optional[TextChunker] = None
 
         # Initialize prompt rendering system
         template_loader = TemplateLoader(settings.paths.templates_dir)
@@ -1250,7 +1251,7 @@ class LLMProcessor(LLMBackend):
         token_count = self._estimate_tokens(text)
         max_model_len = settings.llm_enhance.max_model_len
         
-        if token_count > max_model_len * 0.75:
+        if token_count > max_model_len * 0.40:
             logger.info(
                 f"Text too long for single-pass enhancement ({token_count} tokens, max: {max_model_len}), using chunked enhancement"
             )
@@ -1340,18 +1341,20 @@ class LLMProcessor(LLMBackend):
         if self.tokenizer is None:
             self._ensure_tokenizer(self.model_path)
             
-        if self.chunker is None:
+        if self.chunker_enhance is None:
             max_model_len = settings.llm_enhance.max_model_len
-            chunk_size = int(max_model_len * 0.18)  # ~18% of context window
-            overlap_tokens = int(chunk_size * 0.15)  # 15% overlap
+            # For enhancement, input + output is ~2x input. 
+            # Use 40% of context for input to leave 60% for output + system prompt.
+            chunk_size = int(max_model_len * 0.40)
+            overlap_tokens = int(chunk_size * 0.10)  # 10% overlap
             logger.info(f"Initializing TextChunker for enhancement with chunk_size={chunk_size}, overlap={overlap_tokens}")
-            self.chunker = TextChunker(self.model_path, max_tokens=chunk_size, overlap_tokens=overlap_tokens)
+            self.chunker_enhance = TextChunker(self.model_path, max_tokens=chunk_size, overlap_tokens=overlap_tokens)
             
         # Inject tokenizer
-        self.chunker.tokenizer = self.tokenizer
+        self.chunker_enhance.tokenizer = self.tokenizer
         
         # Split text into overlapping chunks
-        chunks = self.chunker.split(text)
+        chunks = self.chunker_enhance.split(text)
         logger.info(f"Split text into {len(chunks)} chunks for enhancement")
         
         # Enhance each chunk
@@ -1542,6 +1545,20 @@ class LLMProcessor(LLMBackend):
                 "summary": None,
                 "error": "LLM model not available",
                 "model_info": self.model_info or {"model_name": "unavailable"},
+            }
+
+        # SPECIAL CASE: If template is text_enhancement_v1, route to enhance_text()
+        # for better overlap handling and sentence-level deduplication.
+        if template_id == "text_enhancement_v1":
+            logger.info("Routing text_enhancement_v1 template to enhance_text() for better overlap handling")
+            enhanced_res = self.enhance_text(transcript, **kwargs)
+            # Wrap enhanced result in summary format expected by pipeline
+            return {
+                "summary": enhanced_res.get("enhanced_text"),
+                "metadata": enhanced_res,
+                "model_info": enhanced_res.get("model_info"),
+                "chunked_processing": enhanced_res.get("chunked_processing", False),
+                "chunk_count": enhanced_res.get("chunk_count", 0)
             }
 
         # Check if transcript is too long for a single pass
@@ -1887,7 +1904,7 @@ class LLMProcessor(LLMBackend):
         if self.tokenizer is None:
             self._ensure_tokenizer(self.model_path)
             
-        if self.chunker is None:
+        if self.chunker_summary is None:
             # Calculate chunk size dynamically based on max_model_len
             # Use ~18-20% of max_model_len for chunks to leave room for:
             # - Prompt instructions (~1000 tokens)
@@ -1895,18 +1912,18 @@ class LLMProcessor(LLMBackend):
             # - Output generation (~1500 tokens)
             max_model_len = settings.llm_sum.max_model_len
             chunk_size = int(max_model_len * 0.18)  # ~18% of context window
-            logger.info(f"Initializing TextChunker with chunk_size={chunk_size} (based on max_model_len={max_model_len})")
-            self.chunker = TextChunker(self.model_path, max_tokens=chunk_size)
+            logger.info(f"Initializing TextChunker for summary with chunk_size={chunk_size} (based on max_model_len={max_model_len})")
+            self.chunker_summary = TextChunker(self.model_path, max_tokens=chunk_size)
             
         # Inject the current tokenizer (might be None, which is fine)
-        self.chunker.tokenizer = self.tokenizer
+        self.chunker_summary.tokenizer = self.tokenizer
 
-        if self.chunker is None:
+        if self.chunker_summary is None:
             logger.error("Failed to initialize chunker for map-reduce")
             return {"summary": None, "error": "Chunker initialization failed"}
 
         # Step 1: Map Phase - Chunk and summarize each chunk
-        chunks = self.chunker.split(transcript)
+        chunks = self.chunker_summary.split(transcript)
         logger.info(f"Split transcript into {len(chunks)} chunks for map phase")
         
         # Get redis connection from kwargs if available (passed from pipeline)
