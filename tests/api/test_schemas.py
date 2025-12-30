@@ -40,6 +40,7 @@ def test_enums_have_expected_members():
     members = {m.value for m in schemas.TaskStatus}
     assert "PENDING" in members
     assert "COMPLETE" in members
+    assert "PROCESSING_DIARIZATION" in members
     features = {f.value for f in schemas.Feature}
     assert "raw_transcript" in features
     assert "summary" in features

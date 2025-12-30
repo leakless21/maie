@@ -5,6 +5,7 @@ for JSON-related operations across the codebase.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 from jsonschema import validate, ValidationError
@@ -24,44 +25,18 @@ def _strip_markdown_code_fence(text: str) -> str:
     if not stripped.startswith("`"):
         return stripped
 
-    lines = stripped.splitlines()
-
-    # Check if we have at least an opening fence
-    if len(lines) < 2:
+    fence_match = re.match(r"^(`{3,})(?:[A-Za-z0-9_-]+)?[ \t]*\n?(.*)", stripped, re.DOTALL)
+    if not fence_match:
         return stripped
 
-    first_line = lines[0].strip()
-    last_line = lines[-1].strip()
+    fence = fence_match.group(1)
+    body = fence_match.group(2)
 
-    # Count backticks in the first line
-    first_backticks = len(first_line) - len(first_line.lstrip("`"))
-    
-    # Check if last line is a valid closing fence
-    last_line_is_closing_fence = (
-        last_line.startswith("`") and 
-        last_line == "`" * (len(last_line) - len(last_line.lstrip("`")))
-    )
-    
-    if last_line_is_closing_fence:
-        last_backticks = len(last_line) - len(last_line.lstrip("`"))
-        # If backtick counts match, we have a complete fence
-        if first_backticks == last_backticks:
-            # Extract content between fences
-            content_lines = lines[1:-1]
-            if content_lines:
-                return "\n".join(content_lines).strip()
-            return ""
-    
-    # Handle truncated output: opening fence present but no closing fence
-    # This commonly happens when LLM output is truncated due to max_tokens limit
-    # Strip just the opening fence line and return the rest
-    if first_backticks >= 3:
-        content_lines = lines[1:]
-        if content_lines:
-            return "\n".join(content_lines).strip()
-        return ""
+    # Remove a matching closing fence at the very end (with optional whitespace).
+    closing_fence = re.compile(rf"(?:\n)?{re.escape(fence)}\s*$")
+    body = closing_fence.sub("", body)
 
-    return stripped
+    return body.strip()
 
 
 def safe_parse_json(

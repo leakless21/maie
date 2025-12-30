@@ -333,9 +333,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     1. Redis Connection (DB 1 for results)
     2. Status: PREPROCESSING - Audio validation & normalization
     3. Status: PROCESSING_ASR - Load → Transcribe → Unload → Clear GPU
-    4. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
-    5. Collect versions and metrics
-    6. Status: COMPLETE - Store final results
+    4. Status: PROCESSING_DIARIZATION - Speaker attribution (optional)
+    5. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
+    6. Collect versions and metrics
+    7. Status: COMPLETE - Store final results
 
     Args:
         task_params: Dictionary containing task parameters including:
@@ -976,6 +977,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         try:
             # Apply diarization if enabled globally AND requested for this task
             if settings.diarization.enabled and enable_diarization:
+                if redis_conn:
+                    _update_status(
+                        redis_conn, task_key, TaskStatus.PROCESSING_DIARIZATION
+                    )
                 logger.info("Starting speaker diarization")
                 try:
                     from src.processors.audio.diarizer import get_diarizer

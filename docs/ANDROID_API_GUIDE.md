@@ -170,6 +170,7 @@ The response **changes** as the task progresses:
 - `PENDING` - Queued, waiting to start
 - `PREPROCESSING` - Audio preprocessing
 - `PROCESSING_ASR` - Transcription in progress
+- `PROCESSING_DIARIZATION` - Speaker diarization in progress
 - `PROCESSING_LLM` - AI analysis in progress
 - `COMPLETE` - ✅ Done! Results available
 - `FAILED` - ❌ Error occurred
@@ -562,6 +563,7 @@ class MaieRepository(
                 "PENDING" -> emit(ProcessingState.Queued)
                 "PREPROCESSING" -> emit(ProcessingState.Preprocessing)
                 "PROCESSING_ASR" -> emit(ProcessingState.Transcribing)
+                "PROCESSING_DIARIZATION" -> emit(ProcessingState.Diarizing)
                 "PROCESSING_LLM" -> emit(ProcessingState.Analyzing)
                 "COMPLETE" -> {
                     emit(ProcessingState.Complete(statusResponse))
@@ -587,6 +589,7 @@ sealed class ProcessingState {
     object Queued : ProcessingState()
     object Preprocessing : ProcessingState()
     object Transcribing : ProcessingState()
+    object Diarizing : ProcessingState()
     object Analyzing : ProcessingState()
     data class Complete(val response: StatusResponse) : ProcessingState()
     data class Failed(val error: String, val errorCode: String?) : ProcessingState()

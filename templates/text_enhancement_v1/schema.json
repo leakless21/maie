@@ -7,28 +7,33 @@
     "title": {
       "type": "string",
       "description": "A concise title for the text being enhanced",
+      "x-display-label": "Tiêu đề",
       "maxLength": 200
     },
     "văn_bản_cải_thiện": {
       "type": "string",
       "mô_tả": "Phiên bản văn bản đã được sửa lỗi và cải thiện hoàn toàn với tất cả các chỉnh sửa được áp dụng",
+      "x-display-label": "Văn bản cải thiện",
       "maxLength": 50000
     },
     "điểm_chất_lượng": {
       "type": "number",
       "mô_tả": "Điểm chất lượng của văn bản gốc từ 0.0 (kém) đến 1.0 (hoàn hảo)",
+      "x-display-label": "Điểm chất lượng",
       "minimum": 0.0,
       "maximum": 1.0
     },
     "ngôn_ngữ": {
       "type": "string",
       "mô_tả": "Mã ngôn ngữ chính (ISO 639-1, ví dụ: 'vi', 'en')",
+      "x-display-label": "Ngôn ngữ",
       "pattern": "^[a-z]{2}$",
       "maxLength": 2
     },
     "tags": {
       "type": "array",
       "description": "Category tags for classification (FR-6)",
+      "x-display-label": "Thẻ",
       "items": {
         "type": "string",
         "maxLength": 50

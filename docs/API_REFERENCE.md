@@ -337,6 +337,7 @@ Check the processing status of a previously submitted task. Returns comprehensiv
 - `PENDING` - Task queued, awaiting processing
 - `PREPROCESSING` - Audio preprocessing in progress
 - `PROCESSING_ASR` - ASR transcription running
+- `PROCESSING_DIARIZATION` - Speaker diarization running (when enabled)
 - `PROCESSING_LLM` - LLM processing (summary/enhancement) running
 - `COMPLETE` - Processing finished successfully
 - `FAILED` - Processing failed with error

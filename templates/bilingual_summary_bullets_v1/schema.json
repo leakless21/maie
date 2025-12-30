@@ -7,16 +7,19 @@
     "title": {
       "type": "string",
       "description": "Tiêu đề ngắn gọn, phù hợp, nắm bắt được chủ đề chính (tối đa 15 từ)",
+      "x-display-label": "Tiêu đề",
       "maxLength": 200
     },
     "summary": {
       "type": "string",
       "description": "Tóm tắt toàn diện về nội dung bằng tiếng Việt (không có bullet points, chỉ văn bản thuần túy)",
+      "x-display-label": "Tóm tắt (VN)",
       "maxLength": 2000
     },
     "bullet_points": {
       "type": "array",
       "description": "Các điểm chính của nội dung dưới dạng danh sách (5-10 điểm bằng tiếng Việt)",
+      "x-display-label": "Điểm chính (VN)",
       "items": {
         "type": "string",
         "maxLength": 500
@@ -27,11 +30,13 @@
     "summary_en": {
       "type": "string",
       "description": "English summary of the content (optional, plain text without bullets)",
+      "x-display-label": "Summary (EN)",
       "maxLength": 2000
     },
     "bullet_points_en": {
       "type": "array",
       "description": "Key points in English as a list (optional, 5-10 points)",
+      "x-display-label": "Key Points (EN)",
       "items": {
         "type": "string",
         "maxLength": 500
@@ -42,6 +47,7 @@
     "key_topics": {
       "type": "array",
       "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung (bằng tiếng Việt)",
+      "x-display-label": "Chủ đề chính",
       "items": {
         "type": "string",
         "maxLength": 300
@@ -52,6 +58,7 @@
     "tags": {
       "type": "array",
       "description": "Thẻ danh mục để phân loại nội dung (lowercase)",
+      "x-display-label": "Thẻ",
       "items": {
         "type": "string",
         "maxLength": 50

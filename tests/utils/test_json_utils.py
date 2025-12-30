@@ -50,6 +50,34 @@ class TestSafeParseJson:
         assert data == {"key": "value"}
         assert error is None
 
+    def test_safe_parse_json_with_inline_markdown_fence(self):
+        """Test safe_parse_json handles inline Markdown-fenced JSON payloads."""
+        fenced_json = '```json {"key": "value"}```'
+        data, error = safe_parse_json(fenced_json)
+        assert data == {"key": "value"}
+        assert error is None
+
+    def test_safe_parse_json_with_four_backtick_fence(self):
+        """Test safe_parse_json handles longer Markdown fences."""
+        fenced_json = "````json\n{\n  \"key\": \"value\"\n}\n````"
+        data, error = safe_parse_json(fenced_json)
+        assert data == {"key": "value"}
+        assert error is None
+
+    def test_safe_parse_json_with_truncated_fence(self):
+        """Test safe_parse_json handles truncated fences without closing."""
+        fenced_json = "```json\n{\n  \"key\": \"value\"\n}\n"
+        data, error = safe_parse_json(fenced_json)
+        assert data == {"key": "value"}
+        assert error is None
+
+    def test_safe_parse_json_with_empty_fenced_payload(self):
+        """Test safe_parse_json returns error for empty fenced payloads."""
+        fenced_json = "```json\n```"
+        data, error = safe_parse_json(fenced_json)
+        assert data is None
+        assert error is not None
+
 
 class TestValidateJsonSchema:
     """Tests for validate_json_schema function."""

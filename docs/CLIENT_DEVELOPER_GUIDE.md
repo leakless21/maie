@@ -213,6 +213,7 @@ A template consists of:
 - `PENDING`: Task accepted, waiting in queue.
 - `PREPROCESSING`: Audio validation/conversion in progress.
 - `PROCESSING_ASR`: Transcribing audio.
+- `PROCESSING_DIARIZATION`: Assigning speakers (when enabled).
 - `PROCESSING_LLM`: Generating summary/enhancement.
 - `COMPLETE`: Finished successfully. Results available.
 - `FAILED`: Error occurred.

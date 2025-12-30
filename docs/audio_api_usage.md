@@ -91,7 +91,7 @@ không cần upload audio.
 Theo dõi tiến trình và lấy kết quả.
 
 - Headers: `X-API-Key: <key>`
-- Trạng thái: `PENDING`, `PREPROCESSING`, `PROCESSING_ASR`, `PROCESSING_LLM`,
+- Trạng thái: `PENDING`, `PREPROCESSING`, `PROCESSING_ASR`, `PROCESSING_DIARIZATION`, `PROCESSING_LLM`,
   `COMPLETE`, `FAILED`.
 - Nên polling mỗi 2–5 giây tới khi `COMPLETE` hoặc `FAILED`.
 
