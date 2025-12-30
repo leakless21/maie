@@ -731,6 +731,23 @@ def scan_templates_directory() -> TemplatesResponseSchema:
             "Auto-discovered template based on JSON schema.",
         )
 
+        # Load metadata if available
+        metadata: Dict[str, Any] = {}
+        metadata_path = bundle_dir / "metadata.json"
+        if metadata_path.exists():
+            try:
+                with metadata_path.open("r", encoding="utf-8") as mf:
+                    metadata = json.load(mf)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load metadata JSON",
+                    extra={"template_id": template_id, "error": str(e)},
+                )
+
+        # Skip hidden templates
+        if metadata.get("hidden"):
+            continue
+
         # Load example if available
         example: Dict[str, Any] | None = None
         example_path = bundle_dir / "example.json"

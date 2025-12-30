@@ -1,0 +1,14 @@
+{
+  "name": "Map-Reduce Notes (v1)",
+  "description": "Template for summarizing individual parts in a Map-Reduce workflow. Used for concise intermediate summaries.",
+  "version": "1.0.0",
+  "category": "map_reduce",
+  "is_intermediate": true,
+  "hidden": true,
+  "output_language": "Dynamic",
+  "display_labels": {
+    "section_summary": "Section Summary",
+    "key_points": "Key Points",
+    "topics": "Topics"
+  }
+}

@@ -61,6 +61,8 @@ python-Levenshtein = "*"
 flashinfer-python = ">=0.5.2,<0.6"
 aiofiles = "*"
 flashinfer-jit-cache = { url = "https://github.com/flashinfer-ai/flashinfer/releases/download/v0.5.2/flashinfer_jit_cache-0.5.2%2Bcu128-cp39-abi3-manylinux_2_28_x86_64.whl" }
+pip = "*"
+spacy = "*"
 
 [tool.pixi.feature.dev.dependencies]
 pytest = "*"

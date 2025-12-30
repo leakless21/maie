@@ -7,7 +7,9 @@ import json
 import time
 from pathlib import Path
 import unicodedata
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+from .chunking import TextChunker
 
 from Levenshtein import distance as levenshtein_distance
 
@@ -76,6 +78,7 @@ class LLMProcessor(LLMBackend):
         self.model_info = None
         self.current_template_id = None
         self.current_schema_hash = None
+        self.chunker: Optional[TextChunker] = None
 
         # Initialize prompt rendering system
         template_loader = TemplateLoader(settings.paths.templates_dir)
@@ -1303,6 +1306,22 @@ class LLMProcessor(LLMBackend):
                 "model_info": self.model_info or {"model_name": "unavailable"},
             }
 
+        # Check if transcript is too long for a single pass
+        # We use a threshold of 75% of max_model_len to be safe
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        if self.tokenizer is not None:
+            try:
+                token_count = len(self.tokenizer.encode(transcript, add_special_tokens=False))
+                max_model_len = settings.llm_sum.max_model_len
+                
+                if token_count > max_model_len * 0.75:
+                    logger.info(f"Transcript too long ({token_count} tokens, max: {max_model_len}), triggering map-reduce")
+                    return self._map_reduce_summary(transcript, template_id, **kwargs)
+            except Exception as e:
+                logger.warning(f"Failed to check token count for map-reduce: {e}")
+
         # Load and validate template schema
         try:
             schema = load_template_schema(template_id, settings.paths.templates_dir)
@@ -1618,6 +1637,111 @@ class LLMProcessor(LLMBackend):
                         "error": f"Generation failed after {max_retries + 1} attempts: {e}",
                         "model_info": self.model_info or {"model_name": "unavailable"},
                     }
+
+    def _map_reduce_summary(
+        self, transcript: str, template_id: str, **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Execute map-reduce summarization for long transcripts.
+        """
+        logger.info(f"Executing map-reduce summary for template {template_id}")
+        
+        # Ensure tokenizer and chunker are ready
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        if self.chunker is None and self.tokenizer is not None:
+            # Calculate chunk size dynamically based on max_model_len
+            # Use ~18-20% of max_model_len for chunks to leave room for:
+            # - Prompt instructions (~1000 tokens)
+            # - Schema/examples (~500 tokens)
+            # - Output generation (~1500 tokens)
+            max_model_len = settings.llm_sum.max_model_len
+            chunk_size = int(max_model_len * 0.18)  # ~18% of context window
+            logger.info(f"Initializing TextChunker with chunk_size={chunk_size} (based on max_model_len={max_model_len})")
+            self.chunker = TextChunker(self.model_path, max_tokens=chunk_size)
+            # Inject the already loaded tokenizer to avoid reloading
+            self.chunker.tokenizer = self.tokenizer
+
+        if self.chunker is None:
+            logger.error("Failed to initialize chunker for map-reduce")
+            return {"summary": None, "error": "Chunker initialization failed"}
+
+        # Step 1: Map Phase - Chunk and summarize each chunk
+        chunks = self.chunker.split(transcript)
+        logger.info(f"Split transcript into {len(chunks)} chunks for map phase")
+        
+        # Get redis connection from kwargs if available (passed from pipeline)
+        redis_conn = kwargs.get("redis_conn")
+        task_key = kwargs.get("task_key")
+
+        chunk_summaries = []
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Summarizing chunk {i+1}/{len(chunks)}")
+            
+            if redis_conn and task_key:
+                from src.worker.pipeline import _update_status, TaskStatus
+                _update_status(
+                    redis_conn, 
+                    task_key, 
+                    TaskStatus.PROCESSING_LLM, 
+                    {"progress_detail": f"Đang tóm tắt phần {i+1}/{len(chunks)}"}
+                )
+
+            # For map phase, use the lightweight map_reduce_notes_v1 template
+            # Pass chunk index and total chunks for context in the prompt
+            result = self.execute(
+                chunk, 
+                task="summary", 
+                template_id="map_reduce_notes_v1", 
+                chunk_index=i+1, 
+                total_chunks=len(chunks),
+                **kwargs
+            )
+            
+            if result.metadata.get("structured_summary"):
+                summary_data = result.metadata["structured_summary"]
+                # Extract the main summary text from map_reduce_notes_v1 schema (English keys)
+                chunk_summary_text = (
+                    summary_data.get("section_summary") 
+                    or summary_data.get("tóm_tắt_phần") 
+                    or summary_data.get("summary") 
+                    or str(summary_data)
+                )
+                key_points = summary_data.get("key_points") or summary_data.get("điểm_chính") or []
+                if key_points:
+                    chunk_summary_text += "\n" + "\n".join([f"• {p}" for p in key_points])
+                chunk_summaries.append(chunk_summary_text)
+            else:
+                logger.warning(f"Chunk {i+1} failed to produce structured summary, using raw text")
+                chunk_summaries.append(result.text[:1000] + "...")
+
+        # Step 2: Reduce Phase - Combine chunk summaries and generate final summary
+        combined_summaries = "\n\n".join([f"**Phần {i+1}:**\n{s}" for i, s in enumerate(chunk_summaries)])
+        logger.info("Executing reduce phase on combined chunk summaries")
+        
+        if redis_conn and task_key:
+            from src.worker.pipeline import _update_status, TaskStatus
+            _update_status(
+                redis_conn, 
+                task_key, 
+                TaskStatus.PROCESSING_LLM, 
+                {"progress_detail": "Đang tổng hợp kết quả cuối cùng"}
+            )
+
+        # Final call uses the ORIGINAL template to produce the final structured output
+        final_result = self.execute(combined_summaries, task="summary", template_id=template_id, **kwargs)
+        
+        # Add chunking metadata
+        if final_result.metadata:
+            final_result.metadata["chunked_processing"] = True
+            final_result.metadata["chunk_count"] = len(chunks)
+            
+        return {
+            "summary": final_result.metadata.get("structured_summary") if final_result.metadata else None,
+            "metadata": final_result.metadata,
+            "model_info": final_result.model_info
+        }
 
     def unload(self) -> None:
         """

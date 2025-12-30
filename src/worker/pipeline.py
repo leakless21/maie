@@ -276,6 +276,7 @@ def calculate_metrics(
     asr_rtf: float,
     vad_result: Optional[Dict[str, Any]] = None,
     asr_confidence_avg: Optional[float] = None,
+    llm_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Calculate runtime metrics for the processing per MetricsSchema and FR-5.
@@ -321,6 +322,12 @@ def calculate_metrics(
     if enhanced_text and enhanced_text != original_text:
         edit_rate = _calculate_edit_rate(original_text, enhanced_text)
         metrics["edit_rate_cleaning"] = edit_rate
+
+    # Add chunking metadata if available
+    if llm_metadata:
+        if llm_metadata.get("chunked_processing"):
+            metrics["chunked_processing"] = True
+            metrics["chunk_count"] = llm_metadata.get("chunk_count")
 
     return metrics
 
@@ -1386,7 +1393,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                     summary_result = llm_model.generate_summary(
-                        transcript=clean_transcript, template_id=template_id
+                        transcript=clean_transcript, 
+                        template_id=template_id,
+                        redis_conn=redis_conn,
+                        task_key=task_key
                     )
                     if summary_result.get("summary"):
                         structured_summary = summary_result["summary"]
@@ -1488,6 +1498,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             asr_rtf,
             vad_result,
             asr_confidence_avg=confidence,
+            llm_metadata=summary_result.get("metadata") if "summary" in features and summary_result else None,
         )
 
         # Collect version metadata if not already resolved
@@ -1848,7 +1859,10 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
 
             try:
                 summary_result = llm_model.generate_summary(
-                    transcript=clean_transcript, template_id=template_id
+                    transcript=clean_transcript, 
+                    template_id=template_id,
+                    redis_conn=redis_conn,
+                    task_key=task_key
                 )
                 if summary_result.get("summary"):
                     structured_summary = summary_result["summary"]
@@ -1885,6 +1899,13 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             "asr_confidence_avg": 1.0,
             "transcription_length": len(text),
         }
+
+        # Add chunking metadata if available
+        if summary_result and summary_result.get("metadata"):
+            llm_meta = summary_result["metadata"]
+            if llm_meta.get("chunked_processing"):
+                metrics["chunked_processing"] = True
+                metrics["chunk_count"] = llm_meta.get("chunk_count")
 
         # Add enhancement metrics if available
         if "enhancement_metrics" in features and enhanced_result is not None:

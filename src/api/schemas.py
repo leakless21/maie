@@ -355,6 +355,12 @@ class MetricsSchema(BaseModel):
     edit_rate_cleaning: float | None = Field(
         default=None, description="Edit distance rate for enhancement"
     )
+    chunked_processing: bool | None = Field(
+        default=None, description="Whether the content was processed in chunks"
+    )
+    chunk_count: int | None = Field(
+        default=None, description="Number of chunks processed"
+    )
 
 
 class ResultsSchema(BaseModel):
