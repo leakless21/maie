@@ -1242,6 +1242,20 @@ class LLMProcessor(LLMBackend):
                 "model_info": self.model_info or {"model_name": "unavailable"},
             }
 
+        # Check if text is too long for single-pass enhancement
+        # Use enhancement-specific max_model_len if available
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        token_count = self._estimate_tokens(text)
+        max_model_len = settings.llm_enhance.max_model_len
+        
+        if token_count > max_model_len * 0.75:
+            logger.info(
+                f"Text too long for single-pass enhancement ({token_count} tokens, max: {max_model_len}), using chunked enhancement"
+            )
+            return self._chunked_enhance_text(text, **kwargs)
+
         # Generate enhanced text (execute() will render the chat template)
         result = self.execute(text, task="enhancement", **kwargs)
 
@@ -1308,6 +1322,179 @@ class LLMProcessor(LLMBackend):
             res.update(metadata)
 
         return res
+
+    def _chunked_enhance_text(self, text: str, **kwargs) -> Dict[str, Any]:
+        """
+        Enhance long text by splitting into overlapping chunks and deduplicating.
+        
+        Args:
+            text: Long text to enhance
+            **kwargs: Additional parameters for enhancement
+            
+        Returns:
+            Dictionary containing enhanced text and metrics
+        """
+        logger.info("Starting chunked text enhancement")
+        
+        # Ensure chunker is ready
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        if self.chunker is None:
+            max_model_len = settings.llm_enhance.max_model_len
+            chunk_size = int(max_model_len * 0.18)  # ~18% of context window
+            overlap_tokens = int(chunk_size * 0.15)  # 15% overlap
+            logger.info(f"Initializing TextChunker for enhancement with chunk_size={chunk_size}, overlap={overlap_tokens}")
+            self.chunker = TextChunker(self.model_path, max_tokens=chunk_size, overlap_tokens=overlap_tokens)
+            
+        # Inject tokenizer
+        self.chunker.tokenizer = self.tokenizer
+        
+        # Split text into overlapping chunks
+        chunks = self.chunker.split(text)
+        logger.info(f"Split text into {len(chunks)} chunks for enhancement")
+        
+        # Enhance each chunk
+        enhanced_chunks = []
+        all_metadata = {}
+        
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Enhancing chunk {i+1}/{len(chunks)}")
+            
+            result = self.execute(chunk, task="enhancement", **kwargs)
+            
+            # Extract enhanced text
+            enhanced_text = chunk  # Default fallback
+            if result.metadata and "structured_enhancement" in result.metadata:
+                structured = result.metadata["structured_enhancement"]
+                enhanced_text = (
+                    structured.get("văn_bản_cải_thiện")
+                    or structured.get("enhanced_text")
+                    or result.text
+                )
+                # Collect metadata from first chunk only (title, tags, etc.)
+                if i == 0:
+                    all_metadata["title"] = structured.get("title")
+                    all_metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                    all_metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+                    all_metadata["tags"] = structured.get("tags")
+            else:
+                # Try parsing result.text as JSON
+                try:
+                    structured, _ = safe_parse_json(result.text)
+                    if structured and isinstance(structured, dict):
+                        enhanced_text = (
+                            structured.get("văn_bản_cải_thiện")
+                            or structured.get("enhanced_text")
+                            or result.text
+                        )
+                        if i == 0:
+                            all_metadata["title"] = structured.get("title")
+                            all_metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                            all_metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+                            all_metadata["tags"] = structured.get("tags")
+                    else:
+                        enhanced_text = result.text
+                except Exception:
+                    enhanced_text = result.text
+            
+            enhanced_chunks.append(enhanced_text.strip())
+        
+        # Deduplicate overlapping regions and concatenate
+        final_text = self._deduplicate_overlap(enhanced_chunks)
+        
+        # Calculate metrics
+        edit_distance = levenshtein_distance(text, final_text)
+        max_length = max(len(text), len(final_text))
+        edit_rate = edit_distance / max_length if max_length > 0 else 0
+        
+        res = {
+            "enhanced_text": final_text,
+            "original_text": text,
+            "enhancement_applied": True,
+            "edit_distance": edit_distance,
+            "edit_rate": edit_rate,
+            "model_info": self.model_info or {"model_name": "unknown"},
+            "chunked_processing": True,
+            "chunk_count": len(chunks),
+        }
+        
+        if all_metadata:
+            res.update(all_metadata)
+            
+        logger.info(f"Chunked enhancement complete: {len(chunks)} chunks, edit_rate={edit_rate:.2%}")
+        return res
+
+    def _deduplicate_overlap(self, chunks: list) -> str:
+        """
+        Deduplicate overlapping regions between adjacent chunks.
+        
+        Uses sentence-level comparison to find and remove duplicate content
+        at chunk boundaries.
+        
+        Args:
+            chunks: List of enhanced text chunks
+            
+        Returns:
+            Concatenated text with overlap removed
+        """
+        if not chunks:
+            return ""
+        if len(chunks) == 1:
+            return chunks[0]
+        
+        result_parts = [chunks[0]]
+        
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            curr_chunk = chunks[i]
+            
+            # Split into sentences for comparison
+            prev_sentences = self._split_sentences(prev_chunk)
+            curr_sentences = self._split_sentences(curr_chunk)
+            
+            # Find overlap: check how many sentences at end of prev match start of curr
+            overlap_count = 0
+            max_check = min(10, len(prev_sentences), len(curr_sentences))  # Check up to 10 sentences
+            
+            for check_len in range(1, max_check + 1):
+                # Get last 'check_len' sentences from prev
+                prev_end = prev_sentences[-check_len:]
+                # Get first 'check_len' sentences from curr
+                curr_start = curr_sentences[:check_len]
+                
+                # Normalize for comparison (lowercase, strip whitespace)
+                prev_normalized = [s.lower().strip() for s in prev_end]
+                curr_normalized = [s.lower().strip() for s in curr_start]
+                
+                if prev_normalized == curr_normalized:
+                    overlap_count = check_len
+            
+            # Remove overlapping sentences from current chunk
+            if overlap_count > 0:
+                logger.debug(f"Removing {overlap_count} overlapping sentences between chunks {i} and {i+1}")
+                curr_sentences = curr_sentences[overlap_count:]
+            
+            # Append non-overlapping portion
+            if curr_sentences:
+                result_parts.append(" ".join(curr_sentences))
+        
+        return " ".join(result_parts)
+
+    def _split_sentences(self, text: str) -> list:
+        """
+        Simple sentence splitting based on punctuation.
+        
+        Args:
+            text: Text to split
+            
+        Returns:
+            List of sentences
+        """
+        import re
+        # Split on sentence-ending punctuation followed by space or end of string
+        sentences = re.split(r'(?<=[.!?。！？])\s+', text.strip())
+        return [s for s in sentences if s.strip()]
 
     def needs_enhancement(self, asr_backend: str) -> bool:
         """
