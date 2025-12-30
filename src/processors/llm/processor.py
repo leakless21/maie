@@ -1553,9 +1553,19 @@ class LLMProcessor(LLMBackend):
         if template_id == "text_enhancement_v1":
             logger.info("Routing text_enhancement_v1 template to enhance_text() for better overlap handling")
             enhanced_res = self.enhance_text(transcript, **kwargs)
-            # Wrap enhanced result in summary format expected by pipeline
+            
+            # Construct a dictionary that matches the text_enhancement_v1 schema
+            # Required fields: title, enhanced_text, quality_score, language, tags
+            summary_data = {
+                "title": enhanced_res.get("title", "Cải thiện văn bản"),
+                "enhanced_text": enhanced_res.get("enhanced_text", transcript),
+                "quality_score": enhanced_res.get("quality_score", 1.0),
+                "language": enhanced_res.get("language", "vi"),
+                "tags": enhanced_res.get("tags", ["cải thiện"])
+            }
+            
             return {
-                "summary": enhanced_res.get("enhanced_text"),
+                "summary": summary_data,
                 "metadata": enhanced_res,
                 "model_info": enhanced_res.get("model_info"),
                 "chunked_processing": enhanced_res.get("chunked_processing", False),
