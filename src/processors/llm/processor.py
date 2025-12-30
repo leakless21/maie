@@ -1711,6 +1711,11 @@ class LLMProcessor(LLMBackend):
                 key_points = summary_data.get("key_points") or summary_data.get("điểm_chính") or []
                 if key_points:
                     chunk_summary_text += "\n" + "\n".join([f"• {p}" for p in key_points])
+                
+                topics = summary_data.get("topics") or summary_data.get("chủ_đề") or []
+                if topics:
+                    chunk_summary_text += "\n\n**Topics:** " + ", ".join(topics)
+
                 chunk_summaries.append(chunk_summary_text)
             else:
                 logger.warning(f"Chunk {i+1} failed to produce structured summary, using raw text")

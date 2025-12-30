@@ -211,10 +211,10 @@ class HallucinationSettings(BaseModel):
         description="Minimum average word probability threshold for segments",
     )
     pattern_file: str | None = Field(
-        default="data/asr_hallucinations.json",
+        default="src/config/llm_hallucinations.json",
         description=(
             "Path to JSON file containing ASR hallucination patterns. "
-            "Defaults to `data/asr_hallucinations.json`. Note: the LLM processor "
+            "Defaults to `src/config/llm_hallucinations.json`. Note: the LLM processor "
             "uses an independent exact-match config at `src/config/llm_hallucinations.json`."
         ),
     )
@@ -569,7 +569,7 @@ class VADSettings(BaseModel):
         description="Maximum continuous speech duration in milliseconds",
     )
     min_silence_duration_ms: int = Field(
-        default=500,
+        default=2000,
         ge=0,
         description="Minimum silence duration between speech segments in milliseconds",
     )
