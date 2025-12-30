@@ -448,6 +448,7 @@ class LLMProcessor(LLMBackend):
             except Exception:
                 # Best-effort only; don't fail the pipeline on strange types
                 continue
+        return data
 
     def _estimate_tokens(self, text: str) -> int:
         """
