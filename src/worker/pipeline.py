@@ -332,11 +332,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     Follows the sequential processing pattern per TDD.md section 3.2:
     1. Redis Connection (DB 1 for results)
     2. Status: PREPROCESSING - Audio validation & normalization
-    3. Status: PROCESSING_ASR - Load → Transcribe → Unload → Clear GPU
-    4. Status: PROCESSING_DIARIZATION - Speaker attribution (optional)
-    5. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
-    6. Collect versions and metrics
-    7. Status: COMPLETE - Store final results
+    3. Status: PROCESSING_VAD - Voice activity detection (optional)
+    4. Status: PROCESSING_ASR - Load → Transcribe → Unload → Clear GPU
+    5. Status: PROCESSING_DIARIZATION - Speaker attribution (optional)
+    6. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
+    7. Collect versions and metrics
+    8. Status: COMPLETE - Store final results
 
     Args:
         task_params: Dictionary containing task parameters including:
@@ -674,6 +675,8 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             )
 
             if vad_enabled:
+                if redis_conn:
+                    _update_status(redis_conn, task_key, TaskStatus.PROCESSING_VAD)
                 logger.info(
                     "Starting VAD processing",
                     task_id=job_id,

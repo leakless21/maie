@@ -164,6 +164,12 @@ Location: `src/worker/pipeline.py`
 4. Choose `processing_audio_path` (normalized if present), `audio_duration = metadata.duration`
 5. Errors handled and recorded via `handle_processing_error(..., stage="preprocessing")` with `TaskStatus.FAILED`
 
+#### Stage 1.5: PROCESSING_VAD (optional)
+1. `_update_status(..., PROCESSING_VAD)` when VAD is enabled
+2. Run VAD backend `detect_speech(processing_audio_path)`
+3. Store VAD metrics for downstream reporting
+4. Errors are logged; pipeline continues without VAD
+
 #### Stage 2: PROCESSING_ASR
 1. `_update_status(..., PROCESSING_ASR)`
 2. `load_asr_model(asr_backend, **config)` using `ASRFactory.create(...)`
@@ -203,7 +209,7 @@ Location: `src/worker/pipeline.py`
 - Key format: `task:{uuid}` (Hash in results DB)
 - Fields (subset, may be updated over time):
   - `task_id`: string
-  - `status`: one of `PENDING`, `PREPROCESSING`, `PROCESSING_ASR`, `PROCESSING_DIARIZATION`, `PROCESSING_LLM`, `COMPLETE`, `FAILED`
+  - `status`: one of `PENDING`, `PREPROCESSING`, `PROCESSING_VAD`, `PROCESSING_ASR`, `PROCESSING_DIARIZATION`, `PROCESSING_LLM`, `COMPLETE`, `FAILED`
   - `submitted_at`, `updated_at`, `completed_at`: timestamps
   - `features`: JSON string (array)
   - `template_id`: string

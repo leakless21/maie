@@ -121,7 +121,7 @@ Submits an audio file for asynchronous processing.
     - Default: `["clean_transcript", "summary"]`.
   - `template_id` (String, Conditional): Required if `summary` is in features.
   - `asr_backend` (String, Optional): `whisper` (default) or `chunkformer`.
-  - `enable_diarization` (Boolean, Optional): Enable speaker identification (default `false`).
+  - `enable_diarization` (Boolean, Optional): Enable speaker identification (default `true`).
   - `enable_vad` (Boolean, Optional): Enable Voice Activity Detection (default system setting).
   - `vad_threshold` (Float, Optional): VAD confidence threshold (0.0-1.0, default 0.5).
 
@@ -212,6 +212,7 @@ A template consists of:
 ### Processing States (`status` field)
 - `PENDING`: Task accepted, waiting in queue.
 - `PREPROCESSING`: Audio validation/conversion in progress.
+- `PROCESSING_VAD`: Detecting speech segments (when enabled).
 - `PROCESSING_ASR`: Transcribing audio.
 - `PROCESSING_DIARIZATION`: Assigning speakers (when enabled).
 - `PROCESSING_LLM`: Generating summary/enhancement.

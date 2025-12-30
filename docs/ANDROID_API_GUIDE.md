@@ -169,6 +169,7 @@ The response **changes** as the task progresses:
 
 - `PENDING` - Queued, waiting to start
 - `PREPROCESSING` - Audio preprocessing
+- `PROCESSING_VAD` - VAD (speech detection) in progress
 - `PROCESSING_ASR` - Transcription in progress
 - `PROCESSING_DIARIZATION` - Speaker diarization in progress
 - `PROCESSING_LLM` - AI analysis in progress

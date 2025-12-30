@@ -40,6 +40,7 @@ def test_enums_have_expected_members():
     members = {m.value for m in schemas.TaskStatus}
     assert "PENDING" in members
     assert "COMPLETE" in members
+    assert "PROCESSING_VAD" in members
     assert "PROCESSING_DIARIZATION" in members
     features = {f.value for f in schemas.Feature}
     assert "raw_transcript" in features
@@ -177,13 +178,13 @@ def test_results_schema_smoke():
     assert r.clean_transcript == "clean"
 
 
-def test_enable_diarization_defaults_to_false():
-    """RED: ProcessRequestSchema.enable_diarization defaults to False."""
+def test_enable_diarization_defaults_to_true():
+    """RED: ProcessRequestSchema.enable_diarization defaults to True."""
     req = schemas.ProcessRequestSchema(
         file="audio.wav",
         features=[schemas.Feature.RAW_TRANSCRIPT],
     )
-    assert req.enable_diarization is False
+    assert req.enable_diarization is True
 
 
 def test_enable_diarization_accepts_true():
