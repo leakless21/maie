@@ -1,8 +1,7 @@
 {
   "title": "Bài nói chuyện về trí tuệ nhân tạo",
-  "văn_bản_cải_thiện": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam.",
-  "điểm_chất_lượng": 0.55,
-  "ngôn_ngữ": "vi",
+  "enhanced_text": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam.",
+  "quality_score": 0.55,
+  "language": "vi",
   "tags": ["transcription", "education", "technology", "moderate_quality"]
 }
-

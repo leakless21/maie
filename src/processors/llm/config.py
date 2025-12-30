@@ -227,6 +227,8 @@ def calculate_dynamic_max_tokens(
     task: str,
     max_model_len: int,
     user_override: Optional[int] = None,
+    summary_ratio: float = 0.3,
+    summary_max_context_fraction: float = 0.5,
 ) -> int:
     """
     Calculate dynamic max_tokens based on input length and task.
@@ -244,6 +246,8 @@ def calculate_dynamic_max_tokens(
         task: 'enhancement' or 'summary'
         max_model_len: Model's maximum context length
         user_override: If provided, use this instead
+        summary_ratio: Compression ratio for summary tasks
+        summary_max_context_fraction: Max fraction of available context for summaries
 
     Returns:
         Calculated max_tokens value
@@ -267,11 +271,11 @@ def calculate_dynamic_max_tokens(
         # Enhancement can use almost full context: max_model_len - input - safety buffer
         max_tokens = available_tokens
     else:  # summarization
-        # Summarization: 30% compression ratio
-        output_tokens = int(input_tokens * 0.3)
+        # Summarization: compression ratio (configurable for templates with larger outputs)
+        output_tokens = int(input_tokens * summary_ratio)
         min_tokens = 128
         # Summarization: more conservative limit since output << input
-        max_tokens = int(available_tokens * 0.5)
+        max_tokens = int(available_tokens * summary_max_context_fraction)
 
     # Apply task-specific bounds
     output_tokens = max(min_tokens, min(output_tokens, max_tokens))

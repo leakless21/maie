@@ -12,7 +12,7 @@
     },
     "summary": {
       "type": "string",
-      "description": "Tóm tắt toàn diện về nội dung bằng tiếng Việt (không có bullet points, chỉ văn bản thuần túy)",
+      "description": "Tóm tắt toàn diện về nội dung bằng tiếng Việt (không có gạch đầu dòng, chỉ văn bản thuần túy)",
       "x-display-label": "Tóm tắt (VN)",
       "maxLength": 2000
     },
@@ -29,14 +29,14 @@
     },
     "summary_en": {
       "type": "string",
-      "description": "English summary of the content (optional, plain text without bullets)",
-      "x-display-label": "Summary (EN)",
+      "description": "Tóm tắt nội dung bằng tiếng Anh (tùy chọn, văn bản thuần túy, không có gạch đầu dòng)",
+      "x-display-label": "Tóm tắt (EN)",
       "maxLength": 2000
     },
     "bullet_points_en": {
       "type": "array",
-      "description": "Key points in English as a list (optional, 5-10 points)",
-      "x-display-label": "Key Points (EN)",
+      "description": "Các điểm chính bằng tiếng Anh dưới dạng danh sách (tùy chọn, 5-10 ý)",
+      "x-display-label": "Điểm chính (EN)",
       "items": {
         "type": "string",
         "maxLength": 500
@@ -57,7 +57,7 @@
     },
     "tags": {
       "type": "array",
-      "description": "Thẻ danh mục để phân loại nội dung (lowercase)",
+      "description": "Thẻ danh mục để phân loại nội dung (chữ thường)",
       "x-display-label": "Thẻ",
       "items": {
         "type": "string",

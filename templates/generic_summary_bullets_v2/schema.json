@@ -12,7 +12,7 @@
     },
     "summary": {
       "type": "string",
-      "description": "Tóm tắt toàn diện với các điểm chính được liệt kê dưới dạng bullet points (5-10 điểm)",
+      "description": "Tóm tắt toàn diện với các điểm chính được liệt kê dưới dạng gạch đầu dòng (5-10 điểm)",
       "x-display-label": "Tóm tắt",
       "maxLength": 3000
     },

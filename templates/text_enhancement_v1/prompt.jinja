@@ -8,9 +8,9 @@ You are an expert Vietnamese text editor and proofreader. Your PRIMARY goal is t
 {% block schema_limits %}
 Schema Limits (enforce these strictly):
 - title: Max 200 characters.
-- văn_bản_cải_thiện: Max 50000 characters.
-- điểm_chất_lượng: 0.0 to 1.0 (float).
-- ngôn_ngữ: String, typically 'vi' for Vietnamese.
+- enhanced_text: Max 50000 characters.
+- quality_score: 0.0 to 1.0 (float).
+- language: String, typically 'vi' for Vietnamese.
 - tags: 1-10 items.
 {% endblock %}
 
@@ -19,13 +19,13 @@ Schema Limits (enforce these strictly):
 
 - **title:** Provide a concise, descriptive title for the content being processed.
 
-- **văn_bản_cải_thiện:** This is the primary output containing only necessary corrections. Apply ONLY the following minimal corrections:
+- **enhanced_text:** This is the primary output containing only necessary corrections. Apply ONLY the following minimal corrections:
   - Fix clear spelling mistakes (typos, transcription errors like 'lai trim' → 'livestream')
   - Add missing punctuation ONLY where sentences clearly end (periods, question marks)
   - Add capitalization ONLY at sentence beginnings and proper nouns (e.g., 'Hà Nội', 'Facebook', 'AI')
   - Restore phonetically transcribed foreign words to their correct spelling
   - Fix obvious grammar errors ONLY (subject-verb disagreement)
-  
+
   **DO NOT:**
   - Rephrase or reword sentences
   - Change word order unless it's grammatically incorrect
@@ -34,14 +34,14 @@ Schema Limits (enforce these strictly):
   - Remove filler words unless they are excessively repeated and impede understanding
   - "Improve" or "enhance" the text beyond fixing clear mistakes
 
-- **điểm_chất_lượng:** Rate the original text quality on a 0.0-1.0 scale:
+- **quality_score:** Rate the original text quality on a 0.0-1.0 scale:
   - 0.9-1.0: Nearly perfect, minimal corrections needed
   - 0.7-0.9: Good quality, minor corrections
   - 0.5-0.7: Average quality, moderate corrections
   - 0.3-0.5: Poor quality, significant corrections
   - 0.0-0.3: Very poor quality, extensive corrections
 
-- **ngôn_ngữ:** Primary language of the text (typically 'vi' for Vietnamese). Use ISO 639-1 codes.
+- **language:** Primary language of the text (typically 'vi' for Vietnamese). Use ISO 639-1 codes.
 
 - **tags:** Provide 1-10 category tags for classification purposes. Consider:
   - Content domain (e.g., 'education', 'business', 'technology', 'general')
@@ -94,9 +94,9 @@ If it's #2, DO NOT change it.
      ```json
      {
        "title": "Bài nói chuyện về trí tuệ nhân tạo",
-       "văn_bản_cải_thiện": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam, đặc biệt là trong lĩnh vực giáo dục và y tế. Tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này.",
-       "điểm_chất_lượng": 0.55,
-       "ngôn_ngữ": "vi",
+       "enhanced_text": "Xin chào các bạn, hôm nay tôi sẽ nói về trí tuệ nhân tạo AI mà hiện nay đang rất phổ biến ở Việt Nam, đặc biệt là trong lĩnh vực giáo dục và y tế. Tôi nghĩ rằng chúng ta cần phải chuẩn bị cho tương lai này.",
+       "quality_score": 0.55,
+       "language": "vi",
        "tags": ["transcription", "education", "technology", "moderate_quality"]
      }
      ```
@@ -107,9 +107,9 @@ If it's #2, DO NOT change it.
      ```json
      {
        "title": "Báo cáo chất lượng giáo dục vùng miền núi",
-       "văn_bản_cải_thiện": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên, vẫn còn nhiều thách thức cần giải quyết.",
-       "điểm_chất_lượng": 0.88,
-       "ngôn_ngữ": "vi",
+       "enhanced_text": "Theo báo cáo mới nhất từ Bộ Giáo dục và Đào tạo, chất lượng giáo dục tại các vùng miền núi đã được cải thiện đáng kể. Tuy nhiên, vẫn còn nhiều thách thức cần giải quyết.",
+       "quality_score": 0.88,
+       "language": "vi",
        "tags": ["government", "education", "report", "high_quality"]
      }
      ```
@@ -120,9 +120,9 @@ If it's #2, DO NOT change it.
      ```json
      {
        "title": "Hướng dẫn sử dụng GitHub và Docker qua Livestream",
-       "văn_bản_cải_thiện": "Tôi đang xem một buổi livestream trên Facebook về cách sử dụng GitHub và Docker để phát triển phần mềm.",
-       "điểm_chất_lượng": 0.42,
-       "ngôn_ngữ": "vi",
+       "enhanced_text": "Tôi đang xem một buổi livestream trên Facebook về cách sử dụng GitHub và Docker để phát triển phần mềm.",
+       "quality_score": 0.42,
+       "language": "vi",
        "tags": ["transcription", "technology", "foreign_words", "poor_quality"]
      }
      ```
@@ -133,9 +133,9 @@ If it's #2, DO NOT change it.
      ```json
      {
        "title": "Đoạn hội thoại ngắn với nhiều từ đệm",
-       "văn_bản_cải_thiện": "Tôi muốn nói là có phải là cái đó không?",
-       "điểm_chất_lượng": 0.25,
-       "ngôn_ngữ": "vi",
+       "enhanced_text": "Tôi muốn nói là có phải là cái đó không?",
+       "quality_score": 0.25,
+       "language": "vi",
        "tags": ["transcription", "very_poor_quality", "excessive_fillers"]
      }
      ```
@@ -146,9 +146,9 @@ If it's #2, DO NOT change it.
      ```json
      {
        "title": "Lộ trình sản phẩm quý tới",
-       "văn_bản_cải_thiện": "The product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes.",
-       "điểm_chất_lượng": 0.78,
-       "ngôn_ngữ": "vi",
+       "enhanced_text": "The product roadmap của chúng ta for next quarter bao gồm feature mới và bug fixes.",
+       "quality_score": 0.78,
+       "language": "vi",
        "tags": ["business", "technology", "mixed_language", "good_quality"]
      }
      ```
