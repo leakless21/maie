@@ -98,7 +98,7 @@ def validate_llm_settings(settings: Dict[str, Any]) -> Dict[str, Any]:
         max_tokens = coerce_optional_int(settings["max_tokens"])
         if max_tokens is not None:
             validate_positive(max_tokens, "max_tokens")
-            validate_range(max_tokens, 1, 32768, "max_tokens")
+            validate_range(max_tokens, 1, 131072, "max_tokens")
             validated["max_tokens"] = max_tokens
 
     # Validate top_p

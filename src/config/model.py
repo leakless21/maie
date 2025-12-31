@@ -311,7 +311,7 @@ class ChunkformerSettings(BaseModel):
 class LlmEnhanceSettings(BaseModel):
     model: str = Field(default="data/models/qwen3-4b-instruct-2507-awq")
     gpu_memory_utilization: float = Field(default=0.6, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    max_model_len: int = Field(default=12500)
     temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
@@ -352,7 +352,7 @@ class LlmEnhanceSettings(BaseModel):
 class LlmSumSettings(BaseModel):
     model: str = Field(default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit")
     gpu_memory_utilization: float = Field(default=0.6, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    max_model_len: int = Field(default=12500)
     temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)

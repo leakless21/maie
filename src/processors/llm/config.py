@@ -255,11 +255,17 @@ def calculate_dynamic_max_tokens(
     if user_override is not None:
         return user_override
 
-    # Count input tokens using tokenizer (prefer excluding special tokens when supported)
-    try:
-        input_tokens = len(tokenizer.encode(input_text, add_special_tokens=False))
-    except TypeError:
-        input_tokens = len(tokenizer.encode(input_text))
+    # Count input tokens using tokenizer or character-based estimation
+    if tokenizer is not None:
+        try:
+            input_tokens = len(tokenizer.encode(input_text, add_special_tokens=False))
+        except (TypeError, AttributeError, Exception):
+            try:
+                input_tokens = len(tokenizer.encode(input_text))
+            except Exception:
+                input_tokens = int(len(input_text) / 3.5)
+    else:
+        input_tokens = int(len(input_text) / 3.5)
 
     # Ensure non-negative available token budget; keep a small safety margin
     available_tokens = max(0, max_model_len - input_tokens - 128)

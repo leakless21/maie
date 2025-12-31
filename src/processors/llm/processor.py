@@ -795,29 +795,16 @@ class LLMProcessor(LLMBackend):
             elif final_prompt is not None:
                 input_text_for_calc = final_prompt
 
-            if self.tokenizer is not None and input_text_for_calc is not None:
+            if input_text_for_calc is not None:
                 try:
-                    # Normalize task name for settings lookup (summary -> sum)
-                    task_key = (
-                        "sum"
-                        if task == "summary"
-                        else task.replace("enhancement", "enhance")
-                    )
-
-                    # Get model's max_model_len from settings
-                    max_model_len = getattr(
-                        settings, f"llm_{task_key}_max_model_len", 32768
-                    )
-                    if hasattr(settings, f"llm_{task_key}_max_model_len"):
-                        max_model_len = getattr(
-                            settings, f"llm_{task_key}_max_model_len"
-                        )
-                    elif hasattr(settings, "llm_enhance_max_model_len"):
-                        max_model_len = getattr(settings, "llm_enhance_max_model_len")
+                    # Get model's max_model_len from settings using correct nested path
+                    if task == "summary":
+                        max_model_len = getattr(settings.llm_sum, "max_model_len", 12500)
                     else:
-                        max_model_len = 32768  # fallback
+                        max_model_len = getattr(settings.llm_enhance, "max_model_len", 12500)
 
                     # Calculate dynamic max_tokens using input text
+                    # This now handles tokenizer=None gracefully
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
                         input_text=input_text_for_calc,
                         tokenizer=self.tokenizer,
@@ -835,19 +822,13 @@ class LLMProcessor(LLMBackend):
                     )
             else:
                 logger.debug(
-                    "Tokenizer or input text not available, skipping dynamic max_tokens calculation"
+                    "Input text not available, skipping dynamic max_tokens calculation"
                 )
 
-        # Safety fallback: ensure max_tokens is always set for summary tasks
+        # Safety fallback: ensure max_tokens is always set for summary tasks if calculation was skipped
         if task == "summary" and "max_tokens" not in runtime_overrides_dict:
-            fallback_max_tokens = (
-                8192  # Increased from 4096 to handle complete JSON generation
-            )
-            runtime_overrides_dict["max_tokens"] = fallback_max_tokens
-            logger.warning(
-                f"max_tokens not set for {task} task, using fallback: {fallback_max_tokens}. "
-                "Consider setting --max-tokens explicitly for better control."
-            )
+            runtime_overrides_dict["max_tokens"] = 8192
+            logger.warning("max_tokens not set for summary task, using fallback 8192")
 
         runtime_config = GenerationConfig(**runtime_overrides_dict)
 
