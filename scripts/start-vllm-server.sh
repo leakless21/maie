@@ -4,14 +4,20 @@
 
 set -e
 
-# Force all communication to local loopback
+# 1. Force vLLM to use IPv4 Loopback only
+export VLLM_HOST_IP=127.0.0.1
 export NCCL_SOCKET_IFNAME=lo
 export GLOO_SOCKET_IFNAME=lo
 export TP_SOCKET_IFNAME=lo
 
-# Ensure proxies don't block local traffic
-export no_proxy=localhost,127.0.0.1
-export NO_PROXY=localhost,127.0.0.1
+# 2. Disable IPv6 in PyTorch Distributed
+export NCCL_DEBUG=INFO
+export GLOO_SOCKET_FAMILY=INET
+
+# 3. Explicitly set the Master Address for the distributed store
+export MASTER_ADDR=127.0.0.1
+export MASTER_PORT=29500
+
 
 # Colors for output
 RED='\033[0;31m'
