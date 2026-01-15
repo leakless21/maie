@@ -506,6 +506,19 @@ class ChunkFormerBackend(ASRBackend):
                 word_count=len(text.split()) if text else 0,
             )
 
+            # Log individual segments for visibility
+            for idx, seg in enumerate(segments, start=1):
+                seg_text = seg.get("text", "").strip()
+                if seg_text:  # Only log non-empty segments
+                    logger.info(
+                        "Segment {}",
+                        idx,
+                        segment_index=idx,
+                        start_time=round(seg.get('start', 0), 2),
+                        end_time=round(seg.get('end', 0), 2),
+                        text=seg_text,
+                    )
+
             return ASRResult(
                 text=text, segments=segments, language=language, confidence=confidence
             )

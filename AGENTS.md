@@ -32,6 +32,12 @@ applyTo: "**"
 - Python (if introduced): Black + isort; 4‑space indent; `snake_case` for modules/functions, `PascalCase` for classes.
 - Markdown: wrap at ~100 cols; use fenced code blocks with language hints.
 
+## Design Principles
+
+- Apply YAGNI: do not implement features, abstractions, or configuration until there is a concrete need.
+- Apply KISS: prefer simple, explicit solutions over clever or overly generic designs.
+- Apply SOLID: when designing modules and classes, follow SOLID principles to keep responsibilities focused, dependencies clear, and code easy to change.
+
 ## Testing Guidelines
 
 - Place tests in `tests/` mirroring `src/` structure.

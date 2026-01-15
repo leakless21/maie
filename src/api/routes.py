@@ -2,7 +2,6 @@
 
 import json
 import logging.config
-import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -51,6 +50,11 @@ from src.utils.sanitization import sanitize_filename
 from src.utils.sanitization import sanitize_filename
 from src.utils.json_utils import safe_parse_json
 from src.utils.template_manager import TemplateManager
+from src.api.template_utils import (
+    load_template_detail,
+    load_template_schema,
+    scan_templates_directory,
+)
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -665,89 +669,6 @@ def get_available_models() -> ModelsResponseSchema:
     return ModelsResponseSchema(models=models)
 
 
-def scan_templates_directory() -> TemplatesResponseSchema:
-    """
-    Discover templates by scanning the configured templates directory.
-
-    Rules:
-    - Any subdirectory under `<templates_dir>` is considered a template bundle if it contains `schema.json`
-    - Template ID = directory name
-    - `name` comes from schema.title if present, otherwise prettified ID
-    - `description` comes from schema.description if present, otherwise a default
-    - `example` is loaded from `<templates_dir>/{id}/example.json` if it exists
-
-    Returns:
-        TemplatesResponseSchema: List of discovered templates.
-    """
-    templates: List[TemplateInfoSchema] = []
-    templates_dir = settings.paths.templates_dir
-
-    try:
-        # Scan for subdirectories
-        template_dirs = sorted(p for p in templates_dir.iterdir() if p.is_dir())
-    except Exception as e:
-        logger.error(f"Failed to scan templates directory {templates_dir}: {e}")
-        return TemplatesResponseSchema(templates=[])
-
-    for bundle_dir in template_dirs:
-        template_id = bundle_dir.name
-        
-        # Skip hidden directories or non-template dirs (e.g. schemas/prompts/examples if they still exist)
-        if template_id.startswith(".") or template_id in ["schemas", "prompts", "examples"]:
-            continue
-            
-        schema_path = bundle_dir / "schema.json"
-        if not schema_path.exists():
-            continue
-
-        try:
-            with schema_path.open("r", encoding="utf-8") as f:
-                schema_data = json.load(f)
-        except Exception as e:
-            logger.error(
-                "Failed to load schema",
-                extra={
-                    "template_id": template_id,
-                    "path": str(schema_path),
-                    "error": str(e),
-                },
-            )
-            continue
-
-        # Derive name/description
-        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
-        description = schema_data.get(
-            "description",
-            "Auto-discovered template based on JSON schema.",
-        )
-
-        # Load example if available
-        example: Dict[str, Any] | None = None
-        example_path = bundle_dir / "example.json"
-        if example_path.exists():
-            try:
-                with example_path.open("r", encoding="utf-8") as ef:
-                    example = json.load(ef)
-            except Exception as e:
-                logger.warning(
-                    "Failed to load example JSON",
-                    extra={"template_id": template_id, "error": str(e)},
-                )
-
-        templates.append(
-            TemplateInfoSchema(
-                id=template_id,
-                name=raw_name,
-                description=description,
-                schema_url=f"/v1/templates/{template_id}/schema",
-                parameters=schema_data.get("properties", {}),
-                example=example,
-            )
-        )
-
-    return TemplatesResponseSchema(templates=templates)
-
-
 class StatusController(Controller):
     """Controller for status checking endpoints."""
 
@@ -848,50 +769,7 @@ class TemplatesController(Controller):
         Returns:
             The JSON schema as a dictionary.
         """
-        # Prevent path traversal by allowing only safe characters in ID
-        if not re.fullmatch(r"[a-zA-Z0-9_-]+", template_id):
-            raise NotFoundException("Invalid template ID")
-
-        schema_path = settings.paths.templates_dir / template_id / "schema.json"
-        if not schema_path.exists() or not schema_path.is_file():
-            raise NotFoundException(f"Schema not found for template: {template_id}")
-
-        try:
-            with schema_path.open("r", encoding="utf-8") as f:
-                return json.load(f)
-        except json.JSONDecodeError as e:
-            raise HTTPException(
-                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=f"Invalid schema JSON for template {template_id}: {e}",
-            )
-        except Exception as e:
-            raise HTTPException(
-                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-                detail=f"Failed to load schema for template {template_id}: {e}",
-            )
-
-    async def _get_template_detail_logic(self, template_id: str, manager: TemplateManager) -> TemplateDetailSchema:
-        """Helper to get template details."""
-        try:
-            content = await manager.get_template_content(template_id)
-        except FileNotFoundError:
-            raise NotFoundException(f"Template {template_id} not found")
-
-        # Map content to schema
-        schema_data = content["schema"]
-        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
-        description = schema_data.get("description", "Template")
-
-        return TemplateDetailSchema(
-            id=template_id,
-            name=raw_name,
-            description=description,
-            schema_url=f"/v1/templates/{template_id}/schema",
-            parameters={},
-            example=content.get("example"),
-            prompt_template=content["prompt"],
-            schema_data=schema_data,
-        )
+        return load_template_schema(template_id)
 
     @get(
         "/{template_id:str}",
@@ -903,7 +781,7 @@ class TemplatesController(Controller):
         """
         Get full details of a template.
         """
-        return await self._get_template_detail_logic(template_id, manager)
+        return await load_template_detail(template_id, manager)
 
     @post(
         "/",
@@ -932,7 +810,7 @@ class TemplatesController(Controller):
             logger.error(f"Failed to create template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-        return await self._get_template_detail_logic(data.id, manager)
+        return await load_template_detail(data.id, manager)
 
     @put(
         "/{template_id:str}",
@@ -961,7 +839,7 @@ class TemplatesController(Controller):
             logger.error(f"Failed to update template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-        return await self._get_template_detail_logic(template_id, manager)
+        return await load_template_detail(template_id, manager)
 
     @delete(
         "/{template_id:str}",

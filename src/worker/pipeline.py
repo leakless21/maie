@@ -844,6 +844,21 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     word_count=word_count,
                 )
 
+                # Log individual segments for visibility
+                if result.segments:
+                    for idx, seg in enumerate(result.segments, start=1):
+                        seg_text = seg.get("text", "").strip() if isinstance(seg, dict) else ""
+                        if seg_text:  # Only log non-empty segments
+                            logger.info(
+                                "Segment {}",
+                                idx,
+                                segment_index=idx,
+                                start_time=round(seg.get('start', 0), 2),
+                                end_time=round(seg.get('end', 0), 2),
+                                text=seg_text,
+                                task_id=job_id,
+                            )
+
                 # Phase 1: Return full ASRResult object directly from backend
                 # Backends (ChunkFormer, Whisper) already return proper ASRResult with segments
                 asr_result = result

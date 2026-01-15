@@ -2303,7 +2303,7 @@ packages:
 - pypi: ./
   name: maie
   version: 0.1.0
-  sha256: 1c1315a8099f5b146a27266639222d4b617dd81da507ed91eca7202c7a4fd3bd
+  sha256: c9c180e7568160fe3411fa1e394d75777b6462bfced6d89a910ef0bfe290ab83
   requires_dist:
   - pydantic>=2.12.5,<3
   - pydantic-settings>=2.12.0,<3
