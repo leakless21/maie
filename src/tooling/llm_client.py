@@ -209,14 +209,22 @@ class VllmServerClient:
         # which is a list of objects with 'text', 'token_ids', 'finish_reason'.
         # Also 'prompt_token_ids'.
 
+        logger.debug(f"Raw server response keys: {list(response_json.keys())}")
+        
         choices = response_json.get("choices", [])
         if not choices:
+            logger.error("No choices in server response!")
+            logger.debug(f"Full response: {response_json}")
             return []
 
         choice = choices[0]
         message = choice.get("message", {})
         content = message.get("content", "")
         finish_reason = choice.get("finish_reason", "unknown")
+        
+        logger.debug(f"Server response - finish_reason: {finish_reason}, content_length: {len(content)}")
+        if not content:
+            logger.warning(f"Empty content in server response! Full choice: {choice}")
 
         usage = response_json.get("usage", {})
         prompt_tokens = usage.get("prompt_tokens", 0)

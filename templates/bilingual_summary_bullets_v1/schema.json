@@ -1,0 +1,72 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Tóm tắt song ngữ dạng gạch đầu dòng",
+  "description": "Định dạng tóm tắt có cấu trúc: tiếng Việt là chính, kèm phần tiếng Anh tùy chọn và danh sách các ý chính dạng gạch đầu dòng",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Tiêu đề ngắn gọn, phù hợp, nắm bắt được chủ đề chính (tối đa 15 từ)",
+      "x-display-label": "Tiêu đề",
+      "maxLength": 200
+    },
+    "summary": {
+      "type": "string",
+      "description": "Tóm tắt toàn diện về nội dung bằng tiếng Việt (không có gạch đầu dòng, chỉ văn bản thuần túy)",
+      "x-display-label": "Tóm tắt (VN)",
+      "maxLength": 2000
+    },
+    "bullet_points": {
+      "type": "array",
+      "description": "Các điểm chính của nội dung dưới dạng danh sách (5-10 điểm bằng tiếng Việt)",
+      "x-display-label": "Điểm chính (VN)",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 3,
+      "maxItems": 15
+    },
+    "summary_en": {
+      "type": "string",
+      "description": "Tóm tắt nội dung bằng tiếng Anh (tùy chọn, văn bản thuần túy, không có gạch đầu dòng)",
+      "x-display-label": "Tóm tắt (EN)",
+      "maxLength": 2000
+    },
+    "bullet_points_en": {
+      "type": "array",
+      "description": "Các điểm chính bằng tiếng Anh dưới dạng danh sách (tùy chọn, 5-10 ý)",
+      "x-display-label": "Điểm chính (EN)",
+      "items": {
+        "type": "string",
+        "maxLength": 500
+      },
+      "minItems": 3,
+      "maxItems": 15
+    },
+    "key_topics": {
+      "type": "array",
+      "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung (bằng tiếng Việt)",
+      "x-display-label": "Chủ đề chính",
+      "items": {
+        "type": "string",
+        "maxLength": 300
+      },
+      "minItems": 1,
+      "maxItems": 15
+    },
+    "tags": {
+      "type": "array",
+      "description": "Thẻ danh mục để phân loại nội dung (chữ thường)",
+      "x-display-label": "Thẻ",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": ["title", "summary", "bullet_points", "key_topics", "tags"],
+  "additionalProperties": false
+}

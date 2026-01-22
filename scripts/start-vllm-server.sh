@@ -4,6 +4,21 @@
 
 set -e
 
+# 1. Force vLLM to use IPv4 Loopback only
+export VLLM_HOST_IP=127.0.0.1
+export NCCL_SOCKET_IFNAME=lo
+export GLOO_SOCKET_IFNAME=lo
+export TP_SOCKET_IFNAME=lo
+
+# 2. Disable IPv6 in PyTorch Distributed
+export NCCL_DEBUG=INFO
+export GLOO_SOCKET_FAMILY=INET
+
+# 3. Explicitly set the Master Address for the distributed store
+export MASTER_ADDR=127.0.0.1
+export MASTER_PORT=29500
+
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -29,6 +44,16 @@ pixi install
 if [ -n "$CONDA_PREFIX" ] && [ -d "$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cuda_runtime" ]; then
     export CUDA_HOME="$CONDA_PREFIX/lib/python3.12/site-packages/nvidia/cuda_runtime"
     echo -e "${GREEN}✓ CUDA_HOME set to: $CUDA_HOME${NC}"
+fi
+
+# Clear torch.distributed env that can leak from other jobs and break local vLLM.
+if [ -z "${VLLM_KEEP_DISTRIBUTED_ENV:-}" ]; then
+    for var in MASTER_ADDR MASTER_PORT RANK WORLD_SIZE LOCAL_RANK GROUP_RANK LOCAL_WORLD_SIZE NODE_RANK; do
+        if [ -n "${!var:-}" ]; then
+            unset "$var"
+            echo -e "${YELLOW}Unsetting $var to avoid external distributed config${NC}"
+        fi
+    done
 fi
 
 # Disable TVM's optional torch C DLPack build when running inside the pixi env.

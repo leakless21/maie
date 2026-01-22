@@ -7,26 +7,30 @@
     "title": {
       "type": "string",
       "description": "Một tiêu đề ngắn gọn, phù hợp, nắm bắt được bản chất của nội dung",
+      "x-display-label": "Tiêu đề",
       "maxLength": 200
     },
     "summary": {
       "type": "string",
       "description": "Tóm tắt toàn diện về nội dung",
+      "x-display-label": "Tóm tắt",
       "maxLength": 2000
     },
     "key_topics": {
       "type": "array",
       "description": "Các chủ đề hoặc chủ đề chính được xác định trong nội dung",
+      "x-display-label": "Chủ đề chính",
       "items": {
         "type": "string",
-        "maxLength": 200
+        "maxLength": 300
       },
       "minItems": 1,
-      "maxItems": 10
+      "maxItems": 15
     },
     "tags": {
       "type": "array",
       "description": "Thẻ danh mục để phân loại nội dung (FR-6)",
+      "x-display-label": "Thẻ",
       "items": {
         "type": "string",
         "maxLength": 50
@@ -35,11 +39,6 @@
       "maxItems": 10
     }
   },
-  "required": [
-    "title",
-    "summary",
-    "key_topics",
-    "tags"
-  ],
+  "required": ["title", "summary", "key_topics", "tags"],
   "additionalProperties": false
 }

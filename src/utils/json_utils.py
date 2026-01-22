@@ -5,6 +5,7 @@ for JSON-related operations across the codebase.
 """
 
 import json
+import re
 from pathlib import Path
 from typing import Any, Dict, Optional
 from jsonschema import validate, ValidationError
@@ -12,16 +13,30 @@ from .types import JSONDict, JSONParseResult, ErrorContext, ValidationResult
 
 
 def _strip_markdown_code_fence(text: str) -> str:
-    """Remove surrounding Markdown code fences to recover raw payload."""
+    """Remove surrounding Markdown code fences to recover raw payload.
+
+    Handles various markdown code fence formats:
+    - ```json ... ```
+    - ``` ... ```
+    - ````json ... ````
+    - Truncated outputs with opening fence but no closing fence (common with max_tokens limit)
+    """
     stripped = text.strip()
-    if not stripped.startswith("```"):
+    if not stripped.startswith("`"):
         return stripped
 
-    lines = stripped.splitlines()
-    if len(lines) >= 2 and lines[-1].strip() == "```":
-        # Drop the opening fence (with optional language) and closing fence
-        return "\n".join(lines[1:-1]).strip()
-    return stripped
+    fence_match = re.match(r"^(`{3,})(?:[A-Za-z0-9_-]+)?[ \t]*\n?(.*)", stripped, re.DOTALL)
+    if not fence_match:
+        return stripped
+
+    fence = fence_match.group(1)
+    body = fence_match.group(2)
+
+    # Remove a matching closing fence at the very end (with optional whitespace).
+    closing_fence = re.compile(rf"(?:\n)?{re.escape(fence)}\s*$")
+    body = closing_fence.sub("", body)
+
+    return body.strip()
 
 
 def safe_parse_json(
@@ -44,10 +59,23 @@ def safe_parse_json(
     """
     try:
         normalized_json = _strip_markdown_code_fence(json_str)
+
+        # Additional check: ensure we have content after stripping
+        if not normalized_json or not normalized_json.strip():
+            return (
+                None,
+                "JSON string is empty or contains only whitespace after stripping markdown fences",
+            )
+
         parsed_data = json.loads(normalized_json)
         return parsed_data, None
     except json.JSONDecodeError as e:
         error_msg = f"JSON decode error: {str(e)}"
+        if error_context:
+            error_msg += f" (context: {error_context})"
+        return None, error_msg
+    except Exception as e:
+        error_msg = f"Unexpected error parsing JSON: {str(e)}"
         if error_context:
             error_msg += f" (context: {error_context})"
         return None, error_msg

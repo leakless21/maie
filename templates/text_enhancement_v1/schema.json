@@ -1,0 +1,53 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Cải thiện văn bản",
+  "description": "Định dạng đầu ra có cấu trúc để sửa các lỗi khách quan trong văn bản tiếng Việt (chỉ chỉnh sửa tối thiểu).",
+  "type": "object",
+  "properties": {
+    "title": {
+      "type": "string",
+      "description": "Tiêu đề ngắn gọn, mô tả nội dung văn bản đang được xử lý",
+      "x-display-label": "Tiêu đề",
+      "maxLength": 200
+    },
+    "enhanced_text": {
+      "type": "string",
+      "description": "Văn bản đã sửa với CHỈ các lỗi khách quan (chỉnh sửa tối thiểu; giữ nguyên bản gốc tối đa có thể). Không thêm nhãn/tiêu đề như 'Transcript:', không chèn bản gốc/RAW transcript riêng, không tạo phần 'Original/Before' bên cạnh bản sửa.",
+      "x-display-label": "Văn bản cải thiện",
+      "maxLength": 50000
+    },
+    "quality_score": {
+      "type": "number",
+      "description": "Điểm chất lượng của văn bản gốc từ 0.0 (kém) đến 1.0 (hoàn hảo)",
+      "x-display-label": "Điểm chất lượng",
+      "minimum": 0.0,
+      "maximum": 1.0
+    },
+    "language": {
+      "type": "string",
+      "description": "Mã ngôn ngữ chính (ISO 639-1, ví dụ: 'vi', 'en')",
+      "x-display-label": "Ngôn ngữ",
+      "pattern": "^[a-z]{2}$",
+      "maxLength": 2
+    },
+    "tags": {
+      "type": "array",
+      "description": "Thẻ danh mục để phân loại (FR-6)",
+      "x-display-label": "Thẻ",
+      "items": {
+        "type": "string",
+        "maxLength": 50
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": [
+    "title",
+    "enhanced_text",
+    "quality_score",
+    "language",
+    "tags"
+  ],
+  "additionalProperties": false
+}

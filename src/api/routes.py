@@ -2,6 +2,7 @@
 
 import json
 import logging.config
+import re
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -50,11 +51,6 @@ from src.utils.sanitization import sanitize_filename
 from src.utils.sanitization import sanitize_filename
 from src.utils.json_utils import safe_parse_json
 from src.utils.template_manager import TemplateManager
-from src.api.template_utils import (
-    load_template_detail,
-    load_template_schema,
-    scan_templates_directory,
-)
 
 # Create module-bound logger for better debugging
 logger = get_module_logger(__name__)
@@ -187,7 +183,9 @@ async def create_task_in_redis(
         file_path_value = request_params.get("file_path") or ""
         if isinstance(file_path_value, Path):
             file_path_value = str(file_path_value)
-        asr_backend_value = request_params.get("asr_backend") or settings.api.default_asr_backend
+        asr_backend_value = (
+            request_params.get("asr_backend") or settings.api.default_asr_backend
+        )
         features_value = request_params.get("features", ["summary"])
         features_json = json.dumps(features_value)
         task_data = {
@@ -227,8 +225,10 @@ def enqueue_job(
         "audio_path": str(file_path),
         "features": request_params.get("features", ["summary"]),
         "template_id": request_params.get("template_id"),
-        "asr_backend": request_params.get("asr_backend", settings.api.default_asr_backend),
-        "enable_diarization": request_params.get("enable_diarization", False),
+        "asr_backend": request_params.get(
+            "asr_backend", settings.api.default_asr_backend
+        ),
+        "enable_diarization": request_params.get("enable_diarization", True),
         "enable_vad": request_params.get("enable_vad"),
         "vad_threshold": request_params.get("vad_threshold"),
         "redis_host": "localhost",
@@ -283,6 +283,7 @@ class ProcessController(Controller):
 
         # Create task record in Redis
         from src.api.dependencies import get_results_redis
+
         redis_client = await get_results_redis()
         try:
             task_key = f"task:{task_id}"
@@ -302,10 +303,11 @@ class ProcessController(Controller):
 
         # Enqueue job
         from src.api.dependencies import get_rq_queue
+
         queue = get_rq_queue()
-        
+
         job_func = "src.worker.pipeline.process_text_task"
-        
+
         task_params = {
             "task_id": str(task_id),
             "text": data.text,
@@ -669,6 +671,110 @@ def get_available_models() -> ModelsResponseSchema:
     return ModelsResponseSchema(models=models)
 
 
+def scan_templates_directory() -> TemplatesResponseSchema:
+    """
+    Discover templates by scanning the configured templates directory.
+
+    Rules:
+    - Any subdirectory under `<templates_dir>` is considered a template bundle if it contains `schema.json`
+    - Template ID = directory name
+    - `name` comes from schema.title if present, otherwise prettified ID
+    - `description` comes from schema.description if present, otherwise a default
+    - `example` is loaded from `<templates_dir>/{id}/example.json` if it exists
+
+    Returns:
+        TemplatesResponseSchema: List of discovered templates.
+    """
+    templates: List[TemplateInfoSchema] = []
+    templates_dir = settings.paths.templates_dir
+
+    try:
+        # Scan for subdirectories
+        template_dirs = sorted(p for p in templates_dir.iterdir() if p.is_dir())
+    except Exception as e:
+        logger.error(f"Failed to scan templates directory {templates_dir}: {e}")
+        return TemplatesResponseSchema(templates=[])
+
+    for bundle_dir in template_dirs:
+        template_id = bundle_dir.name
+
+        # Skip hidden directories or non-template dirs (e.g. schemas/prompts/examples if they still exist)
+        if template_id.startswith(".") or template_id in [
+            "schemas",
+            "prompts",
+            "examples",
+        ]:
+            continue
+
+        schema_path = bundle_dir / "schema.json"
+        if not schema_path.exists():
+            continue
+
+        try:
+            with schema_path.open("r", encoding="utf-8") as f:
+                schema_data = json.load(f)
+        except Exception as e:
+            logger.error(
+                "Failed to load schema",
+                extra={
+                    "template_id": template_id,
+                    "path": str(schema_path),
+                    "error": str(e),
+                },
+            )
+            continue
+
+        # Derive name/description
+        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
+        description = schema_data.get(
+            "description",
+            "Auto-discovered template based on JSON schema.",
+        )
+
+        # Load metadata if available
+        metadata: Dict[str, Any] = {}
+        metadata_path = bundle_dir / "metadata.json"
+        if metadata_path.exists():
+            try:
+                with metadata_path.open("r", encoding="utf-8") as mf:
+                    metadata = json.load(mf)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load metadata JSON",
+                    extra={"template_id": template_id, "error": str(e)},
+                )
+
+        # Skip hidden templates
+        if metadata.get("hidden"):
+            continue
+
+        # Load example if available
+        example: Dict[str, Any] | None = None
+        example_path = bundle_dir / "example.json"
+        if example_path.exists():
+            try:
+                with example_path.open("r", encoding="utf-8") as ef:
+                    example = json.load(ef)
+            except Exception as e:
+                logger.warning(
+                    "Failed to load example JSON",
+                    extra={"template_id": template_id, "error": str(e)},
+                )
+
+        templates.append(
+            TemplateInfoSchema(
+                id=template_id,
+                name=raw_name,
+                description=description,
+                schema_url=f"/v1/templates/{template_id}/schema",
+                parameters=schema_data.get("properties", {}),
+                example=example,
+            )
+        )
+
+    return TemplatesResponseSchema(templates=templates)
+
+
 class StatusController(Controller):
     """Controller for status checking endpoints."""
 
@@ -739,7 +845,9 @@ class TemplatesController(Controller):
         description="Retrieve a list of available processing templates",
         tags=["Templates"],
     )
-    async def get_templates(self, manager: TemplateManager) -> TemplatesResponseSchema | Dict[str, Any]:
+    async def get_templates(
+        self, manager: TemplateManager
+    ) -> TemplatesResponseSchema | Dict[str, Any]:
         """
         Get a list of available processing templates.
 
@@ -769,7 +877,52 @@ class TemplatesController(Controller):
         Returns:
             The JSON schema as a dictionary.
         """
-        return load_template_schema(template_id)
+        # Prevent path traversal by allowing only safe characters in ID
+        if not re.fullmatch(r"[a-zA-Z0-9_-]+", template_id):
+            raise NotFoundException("Invalid template ID")
+
+        schema_path = settings.paths.templates_dir / template_id / "schema.json"
+        if not schema_path.exists() or not schema_path.is_file():
+            raise NotFoundException(f"Schema not found for template: {template_id}")
+
+        try:
+            with schema_path.open("r", encoding="utf-8") as f:
+                return json.load(f)
+        except json.JSONDecodeError as e:
+            raise HTTPException(
+                status_code=HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Invalid schema JSON for template {template_id}: {e}",
+            )
+        except Exception as e:
+            raise HTTPException(
+                status_code=HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+                detail=f"Failed to load schema for template {template_id}: {e}",
+            )
+
+    async def _get_template_detail_logic(
+        self, template_id: str, manager: TemplateManager
+    ) -> TemplateDetailSchema:
+        """Helper to get template details."""
+        try:
+            content = await manager.get_template_content(template_id)
+        except FileNotFoundError:
+            raise NotFoundException(f"Template {template_id} not found")
+
+        # Map content to schema
+        schema_data = content["schema"]
+        raw_name = schema_data.get("title") or template_id.replace("_", " ").title()
+        description = schema_data.get("description", "Template")
+
+        return TemplateDetailSchema(
+            id=template_id,
+            name=raw_name,
+            description=description,
+            schema_url=f"/v1/templates/{template_id}/schema",
+            parameters={},
+            example=content.get("example"),
+            prompt_template=content["prompt"],
+            schema_data=schema_data,
+        )
 
     @get(
         "/{template_id:str}",
@@ -777,11 +930,13 @@ class TemplatesController(Controller):
         description="Get full details of a template including prompt and schema",
         tags=["Templates"],
     )
-    async def get_template_detail(self, template_id: str, manager: TemplateManager) -> TemplateDetailSchema:
+    async def get_template_detail(
+        self, template_id: str, manager: TemplateManager
+    ) -> TemplateDetailSchema:
         """
         Get full details of a template.
         """
-        return await load_template_detail(template_id, manager)
+        return await self._get_template_detail_logic(template_id, manager)
 
     @post(
         "/",
@@ -790,7 +945,9 @@ class TemplatesController(Controller):
         description="Create a new processing template",
         tags=["Templates"],
     )
-    async def create_template(self, data: TemplateCreateSchema, manager: TemplateManager) -> TemplateDetailSchema:
+    async def create_template(
+        self, data: TemplateCreateSchema, manager: TemplateManager
+    ) -> TemplateDetailSchema:
         """
         Create a new template.
         """
@@ -810,7 +967,7 @@ class TemplatesController(Controller):
             logger.error(f"Failed to create template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-        return await load_template_detail(data.id, manager)
+        return await self._get_template_detail_logic(data.id, manager)
 
     @put(
         "/{template_id:str}",
@@ -839,7 +996,7 @@ class TemplatesController(Controller):
             logger.error(f"Failed to update template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
 
-        return await load_template_detail(template_id, manager)
+        return await self._get_template_detail_logic(template_id, manager)
 
     @delete(
         "/{template_id:str}",
@@ -860,6 +1017,8 @@ class TemplatesController(Controller):
         except Exception as e:
             logger.error(f"Failed to delete template: {e}")
             raise HTTPException(status_code=500, detail=str(e))
+
+
 # Define route handlers for the app
 route_handlers: List = [
     ProcessController,

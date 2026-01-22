@@ -149,36 +149,34 @@ class RateLimitSettings(BaseModel):
     def validate_limit_format(cls, value: Tuple[str, int]) -> Tuple[str, int]:
         """Validate rate limit format."""
         valid_units = {"second", "minute", "hour", "day"}
-        
+
         if len(value) != 2:
             raise ValueError(
                 f"Rate limit must be a tuple of (unit, count), got {value}"
             )
-        
+
         unit, count = value
-        
+
         if not isinstance(unit, str):
             raise ValueError(
                 f"Rate limit unit must be a string, got {type(unit).__name__}"
             )
-        
+
         unit_lower = unit.lower()
         if unit_lower not in valid_units:
             raise ValueError(
                 f"Invalid rate limit unit '{unit}'. "
                 f"Must be one of: {', '.join(sorted(valid_units))}"
             )
-        
+
         if not isinstance(count, int):
             raise ValueError(
                 f"Rate limit count must be an integer, got {type(count).__name__}"
             )
-        
+
         if count <= 0:
-            raise ValueError(
-                f"Rate limit count must be positive, got {count}"
-            )
-        
+            raise ValueError(f"Rate limit count must be positive, got {count}")
+
         # Return with normalized unit (lowercase)
         return (unit_lower, count)
 
@@ -213,10 +211,10 @@ class HallucinationSettings(BaseModel):
         description="Minimum average word probability threshold for segments",
     )
     pattern_file: str | None = Field(
-        default="data/asr_hallucinations.json",
+        default="src/config/llm_hallucinations.json",
         description=(
             "Path to JSON file containing ASR hallucination patterns. "
-            "Defaults to `data/asr_hallucinations.json`. Note: the LLM processor "
+            "Defaults to `src/config/llm_hallucinations.json`. Note: the LLM processor "
             "uses an independent exact-match config at `src/config/llm_hallucinations.json`."
         ),
     )
@@ -312,8 +310,8 @@ class ChunkformerSettings(BaseModel):
 
 class LlmEnhanceSettings(BaseModel):
     model: str = Field(default="data/models/qwen3-4b-instruct-2507-awq")
-    gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    gpu_memory_utilization: float = Field(default=0.6, ge=0.1, le=1.0)
+    max_model_len: int = Field(default=12500)
     temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
@@ -353,8 +351,8 @@ class LlmEnhanceSettings(BaseModel):
 
 class LlmSumSettings(BaseModel):
     model: str = Field(default="cpatonn/Qwen3-4B-Instruct-2507-AWQ-4bit")
-    gpu_memory_utilization: float = Field(default=0.9, ge=0.1, le=1.0)
-    max_model_len: int = Field(default=32768)
+    gpu_memory_utilization: float = Field(default=0.6, ge=0.1, le=1.0)
+    max_model_len: int = Field(default=12500)
     temperature: float = Field(default=0.5, ge=0.0, le=2.0)
     top_p: float | None = Field(default=None, ge=0.0, le=1.0)
     top_k: int | None = Field(default=None, ge=1)
@@ -378,15 +376,6 @@ class LlmSumSettings(BaseModel):
     structured_outputs_enabled: bool = Field(
         default=False,
         description="Enable structured output generation for summary (slower but more reliable)",
-    )
-    structured_outputs_backend: Literal[
-        "xgrammar", "guidance", "outlines", "lm-format-enforcer", "auto"
-    ] = Field(
-        default="xgrammar",
-        description=(
-            "Structured outputs backend to use for summary tasks. "
-            "See vLLM structured outputs docs for supported backends."
-        ),
     )
 
     model_config = ConfigDict(validate_assignment=True)
@@ -431,7 +420,7 @@ class WorkerSettings(BaseModel):
 
 
 class DiarizationSettings(BaseModel):
-    enabled: bool = Field(default=False, description="Enable speaker diarization")
+    enabled: bool = Field(default=True, description="Enable speaker diarization")
     model_path: str = Field(
         default="data/models/pyannote-speaker-diarization-community-1",
         description="LOCAL PATH to pyannote speaker diarization model for FULLY OFFLINE operation (no HuggingFace/network calls)",
@@ -580,7 +569,7 @@ class VADSettings(BaseModel):
         description="Maximum continuous speech duration in milliseconds",
     )
     min_silence_duration_ms: int = Field(
-        default=500,
+        default=2000,
         ge=0,
         description="Minimum silence duration between speech segments in milliseconds",
     )
@@ -703,6 +692,7 @@ class AppSettings(BaseSettings):
 
     def get_model_path(self, model_type: str) -> Path:
         return self.paths.models_dir / model_type
+
     def apply_profile(self, profile: Mapping[str, Any]) -> "AppSettings":
         """
         Apply a profile to the settings instance, respecting fields set via environment variables.
@@ -734,4 +724,3 @@ class AppSettings(BaseSettings):
 
         updated = _apply(self, profile)
         return cast(AppSettings, updated)
-

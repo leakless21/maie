@@ -40,6 +40,8 @@ def test_enums_have_expected_members():
     members = {m.value for m in schemas.TaskStatus}
     assert "PENDING" in members
     assert "COMPLETE" in members
+    assert "PROCESSING_VAD" in members
+    assert "PROCESSING_DIARIZATION" in members
     features = {f.value for f in schemas.Feature}
     assert "raw_transcript" in features
     assert "summary" in features
@@ -62,6 +64,31 @@ def test_process_request_defaults_and_template_validation():
         template_id="nonexistent_template",
     )
     assert req2.template_id == "nonexistent_template"
+
+
+def test_process_request_accepts_comma_delimited_features():
+    """RED: ProcessRequestSchema splits comma-delimited feature strings into enums."""
+    req = schemas.ProcessRequestSchema(
+        file="audio.wav",
+        features="summary,raw_transcript",
+        template_id="meeting_notes_v1",
+    )
+
+    assert req.features == [schemas.Feature.SUMMARY, schemas.Feature.RAW_TRANSCRIPT]
+
+
+def test_text_process_request_accepts_comma_delimited_features():
+    """RED: TextProcessRequestSchema splits comma-delimited feature strings into enums."""
+    req = schemas.TextProcessRequestSchema(
+        text="hello",
+        features="summary,clean_transcript",
+        template_id="meeting_notes_v1",
+    )
+
+    assert req.features == [
+        schemas.Feature.SUMMARY,
+        schemas.Feature.CLEAN_TRANSCRIPT,
+    ]
 
 
 def test_process_response_and_status_response_roundtrip():
@@ -151,13 +178,13 @@ def test_results_schema_smoke():
     assert r.clean_transcript == "clean"
 
 
-def test_enable_diarization_defaults_to_false():
-    """RED: ProcessRequestSchema.enable_diarization defaults to False."""
+def test_enable_diarization_defaults_to_true():
+    """RED: ProcessRequestSchema.enable_diarization defaults to True."""
     req = schemas.ProcessRequestSchema(
         file="audio.wav",
         features=[schemas.Feature.RAW_TRANSCRIPT],
     )
-    assert req.enable_diarization is False
+    assert req.enable_diarization is True
 
 
 def test_enable_diarization_accepts_true():

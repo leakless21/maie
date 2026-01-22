@@ -9,8 +9,8 @@ You are an expert meeting analyst for Vietnamese transcripts. Your primary goal 
 Schema Limits (enforce these strictly):
 - Title: Max 200 characters.
 - Summary: Max 2000 characters.
-- Participants: Max 100 items. Each item max 100 characters.
-- Agenda: Min 1, Max 20 items. Each item max 300 characters.
+- Người tham gia (participants): Max 100 items. Each item max 100 characters.
+- Chương trình nghị sự (agenda): Min 1, Max 20 items. Each item max 300 characters.
 - Decisions: Max 100 items. Each item max 300 characters.
 - Action Items: Max 200 items. Description max 500 chars, Assignee max 100 chars.
 - Tags: Min 1, Max 7 items. Each item max 50 characters.
@@ -20,8 +20,8 @@ Schema Limits (enforce these strictly):
 **Field-Specific Rules:**
 - **Title:** Must be **short (under 15 words)** and **highly relevant**. Capture the specific main topic or event. Avoid generic titles like "Cuộc họp" or "Ghi chú" unless unavoidable.
 - **Summary:** Provide a **comprehensive but concise** overview. Focus on **decisions, outcomes, and key information**. Avoid chronological play-by-play narration (e.g., "A said this, then B said that"). Synthesize the discussion into clear points.
-- **Dates (`meeting_date`, `due_date`):** If a date is mentioned (e.g., `2025-10-21`, "ngày mai", "ngày 25"), include it as-is. If no date is found, the value must be `null`.
-- **Participants:** Use explicit names if mentioned. Otherwise, you may use neutral, role-based placeholders (e.g., "Người điều phối", "Thành viên 1"). Never invent realistic new names.
+- **Dates (`ngày_họp`, `due_date`):** If a date is mentioned (e.g., `2025-10-21`, "ngày mai", "ngày 25"), include it as-is. If no date is found, the value must be `null`.
+- **Người tham gia (Participants):** Use explicit names if mentioned. Otherwise, you may use neutral, role-based placeholders (e.g., "Người điều phối", "Thành viên 1"). Never invent realistic new names.
 {% endblock %}
 
 {% block examples %}
@@ -31,10 +31,10 @@ Schema Limits (enforce these strictly):
      ```json
      {
        "title": "Họp review Sprint 3 - Dự án Zalo Mini App",
-       "meeting_date": "2025-10-21",
-       "participants": ["Minh", "Lan", "Hùng"],
+       "ngày_họp": "2025-10-21",
+       "người_tham_gia": ["Minh", "Lan", "Hùng"],
        "summary": "Cuộc họp review tiến độ Sprint 3 của dự án Zalo Mini App. Nhóm đã rà soát các công việc đã hoàn thành (tích hợp ZaloPay, tối ưu giỏ hàng), các vấn đề đang tồn đọng (module recommendation bị block, lỗi UI) và chốt kế hoạch phát hành. Các tính năng đã hoàn tất sẽ được release, module recommendation tạm hoãn. Các công việc tiếp theo đã được phân công cụ thể.",
-       "agenda": [
+       "chương_trình_nghị_sự": [
          "Cập nhật tiến độ Sprint 3 từ team Dev",
          "Báo cáo chất lượng từ team QA",
          "Thống nhất kế hoạch phát hành",

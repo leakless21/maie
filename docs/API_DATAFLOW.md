@@ -164,6 +164,12 @@ Location: `src/worker/pipeline.py`
 4. Choose `processing_audio_path` (normalized if present), `audio_duration = metadata.duration`
 5. Errors handled and recorded via `handle_processing_error(..., stage="preprocessing")` with `TaskStatus.FAILED`
 
+#### Stage 1.5: PROCESSING_VAD (optional)
+1. `_update_status(..., PROCESSING_VAD)` when VAD is enabled
+2. Run VAD backend `detect_speech(processing_audio_path)`
+3. Store VAD metrics for downstream reporting
+4. Errors are logged; pipeline continues without VAD
+
 #### Stage 2: PROCESSING_ASR
 1. `_update_status(..., PROCESSING_ASR)`
 2. `load_asr_model(asr_backend, **config)` using `ASRFactory.create(...)`
@@ -171,7 +177,14 @@ Location: `src/worker/pipeline.py`
 4. Always `unload_asr_model(asr_model)` in `finally` (GPU memory cleanup)
 5. On errors, raise `ASRProcessingError` and mark FAILED via `handle_processing_error`
 
-#### Stage 3: PROCESSING_LLM
+#### Stage 3: PROCESSING_DIARIZATION (optional)
+1. `_update_status(..., PROCESSING_DIARIZATION)` when diarization is enabled
+2. `get_diarizer(...)` and `diarizer.diarize(processing_audio_path, ...)`
+3. Assign speakers to ASR segments and render speaker-attributed transcript when possible
+4. Always unload diarization model (delete and clear GPU cache)
+5. Errors are logged; pipeline continues with plain transcript
+
+#### Stage 4: PROCESSING_LLM
 1. `_update_status(..., PROCESSING_LLM, {transcription_length})`
 2. Guard: non-empty `transcription` or raise `LLMProcessingError`
 3. `load_llm_model()` (lazy load)
@@ -182,7 +195,7 @@ Location: `src/worker/pipeline.py`
 6. Always `unload_llm_model(llm_model)` in `finally`
 7. Errors raise `LLMProcessingError` and mark FAILED
 
-#### Stage 4: COMPLETE
+#### Stage 5: COMPLETE
 1. `metrics = calculate_metrics(transcription, clean_transcript, start_time, audio_duration, asr_rtf)`
 2. Ensure `version_metadata` present via `get_version_metadata(asr_metadata, None)` if needed
 3. Build `result = { versions, metrics, results: {} }` and include requested features only:
@@ -196,7 +209,7 @@ Location: `src/worker/pipeline.py`
 - Key format: `task:{uuid}` (Hash in results DB)
 - Fields (subset, may be updated over time):
   - `task_id`: string
-  - `status`: one of `PENDING`, `PREPROCESSING`, `PROCESSING_ASR`, `PROCESSING_LLM`, `COMPLETE`, `FAILED`
+  - `status`: one of `PENDING`, `PREPROCESSING`, `PROCESSING_VAD`, `PROCESSING_ASR`, `PROCESSING_DIARIZATION`, `PROCESSING_LLM`, `COMPLETE`, `FAILED`
   - `submitted_at`, `updated_at`, `completed_at`: timestamps
   - `features`: JSON string (array)
   - `template_id`: string

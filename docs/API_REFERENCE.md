@@ -196,7 +196,7 @@ X-API-Key: your_api_key_here
 | `features`           | array   | No          | List of desired outputs (default: `["clean_transcript", "summary"]`) |
 | `template_id`        | string  | Conditional | Template ID for summary format (required if `summary` in features)   |
 | `asr_backend`        | string  | No          | ASR backend selection (default: `"chunkformer"`)                     |
-| `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `false`) |
+| `enable_diarization` | boolean | No          | Enable speaker diarization for multi-speaker content (default: `true`) |
 | `enable_vad`         | boolean | No          | Enable Voice Activity Detection (default: system setting)            |
 | `vad_threshold`      | float   | No          | VAD confidence threshold 0.0-1.0 (default: 0.5)                      |
 
@@ -336,7 +336,9 @@ Check the processing status of a previously submitted task. Returns comprehensiv
 
 - `PENDING` - Task queued, awaiting processing
 - `PREPROCESSING` - Audio preprocessing in progress
+- `PROCESSING_VAD` - Voice activity detection running (when enabled)
 - `PROCESSING_ASR` - ASR transcription running
+- `PROCESSING_DIARIZATION` - Speaker diarization running (when enabled)
 - `PROCESSING_LLM` - LLM processing (summary/enhancement) running
 - `COMPLETE` - Processing finished successfully
 - `FAILED` - Processing failed with error

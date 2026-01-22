@@ -7,7 +7,9 @@ import json
 import time
 from pathlib import Path
 import unicodedata
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
+
+from .chunking import TextChunker
 
 from Levenshtein import distance as levenshtein_distance
 
@@ -76,6 +78,8 @@ class LLMProcessor(LLMBackend):
         self.model_info = None
         self.current_template_id = None
         self.current_schema_hash = None
+        self.chunker_enhance: Optional[TextChunker] = None
+        self.chunker_summary: Optional[TextChunker] = None
 
         # Initialize prompt rendering system
         template_loader = TemplateLoader(settings.paths.templates_dir)
@@ -348,7 +352,8 @@ class LLMProcessor(LLMBackend):
         except ImportError:
             logger.warning("vLLM not installed, LLM features will be unavailable")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = "vllm_not_installed"
             self.model_info = {
                 "model_name": "unavailable",
@@ -357,7 +362,8 @@ class LLMProcessor(LLMBackend):
         except (RuntimeError, OSError, MemoryError) as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -367,7 +373,8 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             logger.error(f"Failed to load LLM model: {e}")
             self.model = None
-            self.client = None
+            self.client_enhance = None
+            self.client_summary = None
             self.checkpoint_hash = f"load_error:{str(e)[:50]}"
             self.model_info = {
                 "model_name": "unavailable",
@@ -441,8 +448,31 @@ class LLMProcessor(LLMBackend):
             except Exception:
                 # Best-effort only; don't fail the pipeline on strange types
                 continue
-
         return data
+
+    def _estimate_tokens(self, text: str) -> int:
+        """
+        Estimate the number of tokens in a text string.
+        Uses the tokenizer if available, otherwise falls back to character-based estimation.
+        
+        Args:
+            text: Input text string
+            
+        Returns:
+            Estimated token count
+        """
+        if self.tokenizer is not None:
+            try:
+                return len(self.tokenizer.encode(text, add_special_tokens=False))
+            except Exception as e:
+                logger.warning(f"Tokenizer encoding failed: {e}")
+        
+        # Fallback: character-based estimation
+        # For multilingual text (Vietnamese, Chinese, etc.), 3.5 chars/token is a safe middle ground.
+        # For primarily Latin text, it's closer to 4.
+        estimated = int(len(text) / 3.5)
+        logger.debug(f"Using character-based token estimation: {estimated} tokens (text length: {len(text)})")
+        return estimated
 
     def _ensure_tokenizer(self, model_name: str) -> None:
         """
@@ -474,9 +504,37 @@ class LLMProcessor(LLMBackend):
         except Exception as e:
             logger.debug(f"Unable to obtain tokenizer from vLLM model: {e}")
 
-        # Fallback to Hugging Face tokenizer
+        # Fallback 1: Local cache (setup via scripts/download_tokenizer.py)
         try:
-            logger.debug(f"Falling back to Hugging Face tokenizer for {model_name}")
+            cache_dir = Path("data/tokenizers")
+            if cache_dir.exists():
+                # Try known model names that we might have cached
+                # Currently we only cache Qwen3-4B
+                cached_models = ["Qwen/Qwen3-4B"]
+                
+                from transformers import AutoTokenizer
+                for m_name in cached_models:
+                    # Check if this model exists in cache (look for the directory structure)
+                    safe_m_name = m_name.replace("/", "--")
+                    if list(cache_dir.glob(f"models--{safe_m_name}")):
+                        logger.debug(f"Attempting to load tokenizer {m_name} from local cache: {cache_dir}")
+                        try:
+                            self.tokenizer = AutoTokenizer.from_pretrained(
+                                m_name,
+                                cache_dir=str(cache_dir),
+                                local_files_only=True,
+                                trust_remote_code=True
+                            )
+                            logger.debug(f"Successfully loaded tokenizer {m_name} from local cache")
+                            return
+                        except Exception as e:
+                            logger.debug(f"Failed to load {m_name} from cache: {e}")
+        except Exception as e:
+            logger.debug(f"Error during local cache tokenizer search: {e}")
+
+        # Fallback 2: Hugging Face tokenizer (online or existing HF cache)
+        try:
+            logger.debug(f"Attempting to load tokenizer for {model_name} from Hugging Face")
             from transformers import (
                 AutoTokenizer,
             )  # local import to avoid hard dep when unused
@@ -484,10 +542,11 @@ class LLMProcessor(LLMBackend):
             self.tokenizer = AutoTokenizer.from_pretrained(
                 model_name, trust_remote_code=True
             )
-            logger.debug(f"Successfully loaded Hugging Face tokenizer for {model_name}")
+            logger.debug(f"Successfully loaded tokenizer for {model_name}")
         except Exception as e:
             logger.warning(
-                f"Failed to load Hugging Face tokenizer for {model_name}: {e}"
+                f"Failed to load tokenizer for {model_name}: {e}. "
+                "Will use character-based estimation for chunking."
             )
             self.tokenizer = None
 
@@ -511,7 +570,7 @@ class LLMProcessor(LLMBackend):
 
         # Ensure model is loaded
         if not self._model_loaded:
-            self._load_model(**kwargs)  # Keep original kwargs for _load_model
+            self._load_model(**kwargs)
 
         # Select client based on task type
         if task == "summary":
@@ -540,9 +599,6 @@ class LLMProcessor(LLMBackend):
             kwargs=kwargs,
         )
 
-        # Load model if not already loaded
-        if not self._model_loaded:
-            self._load_model(**kwargs)
 
         # Initialize variables for different code paths
         use_chat_api = False
@@ -643,9 +699,29 @@ class LLMProcessor(LLMBackend):
         elif task == "enhancement":
             # Handle enhancement task with chat API (matching summary pattern)
             try:
+                # Load schema for structured outputs enforcement
+                schema = load_template_schema(
+                    "text_enhancement_v1", Path(settings.paths.templates_dir)
+                )
+
                 # Render system prompt (contains instructions and examples)
                 system_prompt = self.prompt_renderer.render("text_enhancement_v1")
                 logger.debug("Rendered enhancement system prompt")
+                use_chat_api = True
+
+                # Set up structured outputs (JSON schema enforcement) if enabled
+                if settings.llm_sum.structured_outputs_enabled:
+                    try:
+                        from vllm.sampling_params import StructuredOutputsParams
+
+                        kwargs["structured_outputs"] = StructuredOutputsParams(
+                            json=json.dumps(schema)
+                        )
+                        logger.debug("Set up structured output (JSON) for enhancement")
+                    except Exception as e:
+                        logger.warning(
+                            f"Failed to set up structured outputs for enhancement: {e}"
+                        )
             except Exception as e:
                 logger.error(f"Failed to render enhancement template: {e}")
                 return LLMResult(
@@ -719,29 +795,16 @@ class LLMProcessor(LLMBackend):
             elif final_prompt is not None:
                 input_text_for_calc = final_prompt
 
-            if self.tokenizer is not None and input_text_for_calc is not None:
+            if input_text_for_calc is not None:
                 try:
-                    # Normalize task name for settings lookup (summary -> sum)
-                    task_key = (
-                        "sum"
-                        if task == "summary"
-                        else task.replace("enhancement", "enhance")
-                    )
-
-                    # Get model's max_model_len from settings
-                    max_model_len = getattr(
-                        settings, f"llm_{task_key}_max_model_len", 32768
-                    )
-                    if hasattr(settings, f"llm_{task_key}_max_model_len"):
-                        max_model_len = getattr(
-                            settings, f"llm_{task_key}_max_model_len"
-                        )
-                    elif hasattr(settings, "llm_enhance_max_model_len"):
-                        max_model_len = getattr(settings, "llm_enhance_max_model_len")
+                    # Get model's max_model_len from settings using correct nested path
+                    if task == "summary":
+                        max_model_len = getattr(settings.llm_sum, "max_model_len", 12500)
                     else:
-                        max_model_len = 32768  # fallback
+                        max_model_len = getattr(settings.llm_enhance, "max_model_len", 12500)
 
                     # Calculate dynamic max_tokens using input text
+                    # This now handles tokenizer=None gracefully
                     dynamic_max_tokens = calculate_dynamic_max_tokens(
                         input_text=input_text_for_calc,
                         tokenizer=self.tokenizer,
@@ -759,19 +822,13 @@ class LLMProcessor(LLMBackend):
                     )
             else:
                 logger.debug(
-                    "Tokenizer or input text not available, skipping dynamic max_tokens calculation"
+                    "Input text not available, skipping dynamic max_tokens calculation"
                 )
 
-        # Safety fallback: ensure max_tokens is always set for summary tasks
+        # Safety fallback: ensure max_tokens is always set for summary tasks if calculation was skipped
         if task == "summary" and "max_tokens" not in runtime_overrides_dict:
-            fallback_max_tokens = (
-                8192  # Increased from 4096 to handle complete JSON generation
-            )
-            runtime_overrides_dict["max_tokens"] = fallback_max_tokens
-            logger.warning(
-                f"max_tokens not set for {task} task, using fallback: {fallback_max_tokens}. "
-                "Consider setting --max-tokens explicitly for better control."
-            )
+            runtime_overrides_dict["max_tokens"] = 8192
+            logger.warning("max_tokens not set for summary task, using fallback 8192")
 
         runtime_config = GenerationConfig(**runtime_overrides_dict)
 
@@ -899,6 +956,7 @@ class LLMProcessor(LLMBackend):
                 )
 
                 generated_text = outputs[0].outputs[0].text if outputs else ""
+                logger.debug(f"Extracted generated_text from chat API (length={len(generated_text) if generated_text else 0}): {repr(generated_text[:200] if generated_text else '<empty>')}")
                 tokens_used = (
                     len(outputs[0].prompt_token_ids)
                     if outputs
@@ -1060,6 +1118,22 @@ class LLMProcessor(LLMBackend):
                     result_metadata["validation"] = "error"
                     result_metadata["error"] = str(e)
 
+            elif task == "enhancement":
+                try:
+                    # Parse JSON output using safe utility
+                    structured_output, parse_error = safe_parse_json(generated_text)
+
+                    if structured_output is not None:
+                        result_metadata["structured_enhancement"] = structured_output
+                        logger.debug("Enhancement JSON parsed successfully")
+                    else:
+                        logger.error(f"Failed to parse enhancement JSON: {parse_error}")
+                        result_metadata["parse_error"] = parse_error
+
+                except Exception as e:
+                    logger.error(f"Enhancement parsing error: {e}")
+                    result_metadata["error"] = str(e)
+
             # DEBUG: Log LLM output preview
             output_text = generated_text or text
             output_preview = (
@@ -1151,16 +1225,73 @@ class LLMProcessor(LLMBackend):
                 "model_info": self.model_info or {"model_name": "unavailable"},
             }
 
+        # Check if text is too long for single-pass enhancement
+        # Use enhancement-specific max_model_len if available
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        token_count = self._estimate_tokens(text)
+        max_model_len = settings.llm_enhance.max_model_len
+        
+        if token_count > max_model_len * 0.40:
+            logger.info(
+                f"Text too long for single-pass enhancement ({token_count} tokens, max: {max_model_len}), using chunked enhancement"
+            )
+            return self._chunked_enhance_text(text, **kwargs)
+
         # Generate enhanced text (execute() will render the chat template)
         result = self.execute(text, task="enhancement", **kwargs)
-        enhanced_text = result.text.strip()
+
+        # Extract enhanced text and metadata from structured output if available
+        enhanced_text = text  # Default fallback
+        metadata = {}
+        if result.metadata and "structured_enhancement" in result.metadata:
+            structured = result.metadata["structured_enhancement"]
+            # Try both Vietnamese and English keys for enhanced text
+            enhanced_text = (
+                structured.get("văn_bản_cải_thiện")
+                or structured.get("enhanced_text")
+                or result.text
+            )
+            # Extract universal fields (with Vietnamese key support)
+            metadata["title"] = structured.get("title")
+            # Map Vietnamese keys to English for backward compatibility
+            metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+            metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+            metadata["tags"] = structured.get("tags")
+        else:
+            # Fallback: try to parse result.text as JSON manually if execute didn't do it
+            try:
+                structured, _ = safe_parse_json(result.text)
+                if structured and isinstance(structured, dict):
+                    enhanced_text = (
+                        structured.get("văn_bản_cải_thiện")
+                        or structured.get("enhanced_text")
+                        or result.text
+                    )
+                    # Extract universal fields (with Vietnamese key support)
+                    metadata["title"] = structured.get("title")
+                    # Map Vietnamese keys to English for backward compatibility
+                    logger.debug(f"Structured keys: {list(structured.keys())}")
+                    logger.debug(f"điểm_chất_lượng value: {structured.get('điểm_chất_lượng')}")
+                    logger.debug(f"ngôn_ngữ value: {structured.get('ngôn_ngữ')}")
+                    metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                    metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+                    metadata["tags"] = structured.get("tags")
+                else:
+                    enhanced_text = result.text
+            except Exception:
+                enhanced_text = result.text
+
+        enhanced_text = enhanced_text.strip()
 
         # Calculate edit distance for metrics
         edit_distance = levenshtein_distance(text, enhanced_text)
         max_length = max(len(text), len(enhanced_text))
         edit_rate = edit_distance / max_length if max_length > 0 else 0
 
-        return {
+        # Build final result dictionary
+        res = {
             "enhanced_text": enhanced_text,
             "original_text": text,
             "enhancement_applied": True,
@@ -1168,6 +1299,187 @@ class LLMProcessor(LLMBackend):
             "edit_rate": edit_rate,
             "model_info": result.model_info,
         }
+
+        # Include universal fields directly at top level if available
+        if metadata:
+            res.update(metadata)
+
+        return res
+
+    def _chunked_enhance_text(self, text: str, **kwargs) -> Dict[str, Any]:
+        """
+        Enhance long text by splitting into overlapping chunks and deduplicating.
+        
+        Args:
+            text: Long text to enhance
+            **kwargs: Additional parameters for enhancement
+            
+        Returns:
+            Dictionary containing enhanced text and metrics
+        """
+        logger.info("Starting chunked text enhancement")
+        
+        # Ensure chunker is ready
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        if self.chunker_enhance is None:
+            max_model_len = settings.llm_enhance.max_model_len
+            # For enhancement, input + output is ~2x input. 
+            # Use 40% of context for input to leave 60% for output + system prompt.
+            chunk_size = int(max_model_len * 0.40)
+            overlap_tokens = int(chunk_size * 0.10)  # 10% overlap
+            logger.info(f"Initializing TextChunker for enhancement with chunk_size={chunk_size}, overlap={overlap_tokens}")
+            self.chunker_enhance = TextChunker(self.model_path, max_tokens=chunk_size, overlap_tokens=overlap_tokens)
+            
+        # Inject tokenizer
+        self.chunker_enhance.tokenizer = self.tokenizer
+        
+        # Split text into overlapping chunks
+        chunks = self.chunker_enhance.split(text)
+        logger.info(f"Split text into {len(chunks)} chunks for enhancement")
+        
+        # Enhance each chunk
+        enhanced_chunks = []
+        all_metadata = {}
+        
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Enhancing chunk {i+1}/{len(chunks)}")
+            
+            result = self.execute(chunk, task="enhancement", **kwargs)
+            
+            # Extract enhanced text
+            enhanced_text = chunk  # Default fallback
+            if result.metadata and "structured_enhancement" in result.metadata:
+                structured = result.metadata["structured_enhancement"]
+                enhanced_text = (
+                    structured.get("văn_bản_cải_thiện")
+                    or structured.get("enhanced_text")
+                    or result.text
+                )
+                # Collect metadata from first chunk only (title, tags, etc.)
+                if i == 0:
+                    all_metadata["title"] = structured.get("title")
+                    all_metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                    all_metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+                    all_metadata["tags"] = structured.get("tags")
+            else:
+                # Try parsing result.text as JSON
+                try:
+                    structured, _ = safe_parse_json(result.text)
+                    if structured and isinstance(structured, dict):
+                        enhanced_text = (
+                            structured.get("văn_bản_cải_thiện")
+                            or structured.get("enhanced_text")
+                            or result.text
+                        )
+                        if i == 0:
+                            all_metadata["title"] = structured.get("title")
+                            all_metadata["quality_score"] = structured.get("điểm_chất_lượng") or structured.get("quality_score")
+                            all_metadata["language"] = structured.get("ngôn_ngữ") or structured.get("language")
+                            all_metadata["tags"] = structured.get("tags")
+                    else:
+                        enhanced_text = result.text
+                except Exception:
+                    enhanced_text = result.text
+            
+            enhanced_chunks.append(enhanced_text.strip())
+        
+        # Deduplicate overlapping regions and concatenate
+        final_text = self._deduplicate_overlap(enhanced_chunks)
+        
+        # Calculate metrics
+        edit_distance = levenshtein_distance(text, final_text)
+        max_length = max(len(text), len(final_text))
+        edit_rate = edit_distance / max_length if max_length > 0 else 0
+        
+        res = {
+            "enhanced_text": final_text,
+            "original_text": text,
+            "enhancement_applied": True,
+            "edit_distance": edit_distance,
+            "edit_rate": edit_rate,
+            "model_info": self.model_info or {"model_name": "unknown"},
+            "chunked_processing": True,
+            "chunk_count": len(chunks),
+        }
+        
+        if all_metadata:
+            res.update(all_metadata)
+            
+        logger.info(f"Chunked enhancement complete: {len(chunks)} chunks, edit_rate={edit_rate:.2%}")
+        return res
+
+    def _deduplicate_overlap(self, chunks: list) -> str:
+        """
+        Deduplicate overlapping regions between adjacent chunks.
+        
+        Uses sentence-level comparison to find and remove duplicate content
+        at chunk boundaries.
+        
+        Args:
+            chunks: List of enhanced text chunks
+            
+        Returns:
+            Concatenated text with overlap removed
+        """
+        if not chunks:
+            return ""
+        if len(chunks) == 1:
+            return chunks[0]
+        
+        result_parts = [chunks[0]]
+        
+        for i in range(1, len(chunks)):
+            prev_chunk = chunks[i - 1]
+            curr_chunk = chunks[i]
+            
+            # Split into sentences for comparison
+            prev_sentences = self._split_sentences(prev_chunk)
+            curr_sentences = self._split_sentences(curr_chunk)
+            
+            # Find overlap: check how many sentences at end of prev match start of curr
+            overlap_count = 0
+            max_check = min(10, len(prev_sentences), len(curr_sentences))  # Check up to 10 sentences
+            
+            for check_len in range(1, max_check + 1):
+                # Get last 'check_len' sentences from prev
+                prev_end = prev_sentences[-check_len:]
+                # Get first 'check_len' sentences from curr
+                curr_start = curr_sentences[:check_len]
+                
+                # Normalize for comparison (lowercase, strip whitespace)
+                prev_normalized = [s.lower().strip() for s in prev_end]
+                curr_normalized = [s.lower().strip() for s in curr_start]
+                
+                if prev_normalized == curr_normalized:
+                    overlap_count = check_len
+            
+            # Remove overlapping sentences from current chunk
+            if overlap_count > 0:
+                logger.debug(f"Removing {overlap_count} overlapping sentences between chunks {i} and {i+1}")
+                curr_sentences = curr_sentences[overlap_count:]
+            
+            # Append non-overlapping portion
+            if curr_sentences:
+                result_parts.append(" ".join(curr_sentences))
+        
+        return " ".join(result_parts)
+
+    def _split_sentences(self, text: str) -> list:
+        """
+        Simple sentence splitting based on punctuation.
+        
+        Args:
+            text: Text to split
+            
+        Returns:
+            List of sentences
+        """
+        import re
+        # Split on sentence-ending punctuation followed by space or end of string
+        sentences = re.split(r'(?<=[.!?。！？])\s+', text.strip())
+        return [s for s in sentences if s.strip()]
 
     def needs_enhancement(self, asr_backend: str) -> bool:
         """
@@ -1217,6 +1529,45 @@ class LLMProcessor(LLMBackend):
                 "model_info": self.model_info or {"model_name": "unavailable"},
             }
 
+        # SPECIAL CASE: If template is text_enhancement_v1, route to enhance_text()
+        # for better overlap handling and sentence-level deduplication.
+        if template_id == "text_enhancement_v1":
+            logger.info("Routing text_enhancement_v1 template to enhance_text() for better overlap handling")
+            enhanced_res = self.enhance_text(transcript, **kwargs)
+            
+            # Construct a dictionary that matches the text_enhancement_v1 schema
+            # Required fields: title, enhanced_text, quality_score, language, tags
+            summary_data = {
+                "title": enhanced_res.get("title", "Cải thiện văn bản"),
+                "enhanced_text": enhanced_res.get("enhanced_text", transcript),
+                "quality_score": enhanced_res.get("quality_score", 1.0),
+                "language": enhanced_res.get("language", "vi"),
+                "tags": enhanced_res.get("tags", ["cải thiện"])
+            }
+            
+            return {
+                "summary": summary_data,
+                "metadata": enhanced_res,
+                "model_info": enhanced_res.get("model_info"),
+                "chunked_processing": enhanced_res.get("chunked_processing", False),
+                "chunk_count": enhanced_res.get("chunk_count", 0)
+            }
+
+        # Check if transcript is too long for a single pass
+        # We use a threshold of 75% of max_model_len to be safe
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        try:
+            token_count = self._estimate_tokens(transcript)
+            max_model_len = settings.llm_sum.max_model_len
+            
+            if token_count > max_model_len * 0.75:
+                logger.info(f"Transcript too long ({token_count} tokens, max: {max_model_len}), triggering map-reduce")
+                return self._map_reduce_summary(transcript, template_id, **kwargs)
+        except Exception as e:
+            logger.warning(f"Failed to check token count for map-reduce: {e}")
+
         # Load and validate template schema
         try:
             schema = load_template_schema(template_id, settings.paths.templates_dir)
@@ -1244,7 +1595,9 @@ class LLMProcessor(LLMBackend):
             try:
                 from vllm.sampling_params import StructuredOutputsParams
 
-                sampling_override = StructuredOutputsParams(json=json.dumps(schema))
+                sampling_override = StructuredOutputsParams(
+                    json=json.dumps(schema)
+                )
             except Exception as e:
                 logger.warning(f"Failed to initialize structured outputs: {e}")
 
@@ -1289,9 +1642,10 @@ class LLMProcessor(LLMBackend):
                     "stop": [
                         "<|im_end|>"
                     ],  # Prevent chat template echo (BUGFIX_LLM_CHAT_TEMPLATE_ECHO.md)
-                    "structured_outputs": sampling_override,
                     **kwargs,
                 }
+                if sampling_override is not None:
+                    sampling_kwargs["structured_outputs"] = sampling_override
 
                 # Only pass max_tokens if explicitly provided by caller
                 if "max_tokens" in kwargs:
@@ -1530,6 +1884,117 @@ class LLMProcessor(LLMBackend):
                         "model_info": self.model_info or {"model_name": "unavailable"},
                     }
 
+    def _map_reduce_summary(
+        self, transcript: str, template_id: str, **kwargs
+    ) -> Dict[str, Any]:
+        """
+        Execute map-reduce summarization for long transcripts.
+        """
+        logger.info(f"Executing map-reduce summary for template {template_id}")
+        
+        # Ensure tokenizer and chunker are ready
+        if self.tokenizer is None:
+            self._ensure_tokenizer(self.model_path)
+            
+        if self.chunker_summary is None:
+            # Calculate chunk size dynamically based on max_model_len
+            # Use ~18-20% of max_model_len for chunks to leave room for:
+            # - Prompt instructions (~1000 tokens)
+            # - Schema/examples (~500 tokens)
+            # - Output generation (~1500 tokens)
+            max_model_len = settings.llm_sum.max_model_len
+            chunk_size = int(max_model_len * 0.18)  # ~18% of context window
+            logger.info(f"Initializing TextChunker for summary with chunk_size={chunk_size} (based on max_model_len={max_model_len})")
+            self.chunker_summary = TextChunker(self.model_path, max_tokens=chunk_size)
+            
+        # Inject the current tokenizer (might be None, which is fine)
+        self.chunker_summary.tokenizer = self.tokenizer
+
+        if self.chunker_summary is None:
+            logger.error("Failed to initialize chunker for map-reduce")
+            return {"summary": None, "error": "Chunker initialization failed"}
+
+        # Step 1: Map Phase - Chunk and summarize each chunk
+        chunks = self.chunker_summary.split(transcript)
+        logger.info(f"Split transcript into {len(chunks)} chunks for map phase")
+        
+        # Get redis connection from kwargs if available (passed from pipeline)
+        redis_conn = kwargs.get("redis_conn")
+        task_key = kwargs.get("task_key")
+
+        chunk_summaries = []
+        for i, chunk in enumerate(chunks):
+            logger.info(f"Summarizing chunk {i+1}/{len(chunks)}")
+            
+            if redis_conn and task_key:
+                from src.worker.pipeline import _update_status, TaskStatus
+                _update_status(
+                    redis_conn, 
+                    task_key, 
+                    TaskStatus.PROCESSING_LLM, 
+                    {"progress_detail": f"Đang tóm tắt phần {i+1}/{len(chunks)}"}
+                )
+
+            # For map phase, use the lightweight map_reduce_notes_v1 template
+            # Pass chunk index and total chunks for context in the prompt
+            result = self.execute(
+                chunk, 
+                task="summary", 
+                template_id="map_reduce_notes_v1", 
+                chunk_index=i+1, 
+                total_chunks=len(chunks),
+                **kwargs
+            )
+            
+            if result.metadata.get("structured_summary"):
+                summary_data = result.metadata["structured_summary"]
+                # Extract the main summary text from map_reduce_notes_v1 schema (English keys)
+                chunk_summary_text = (
+                    summary_data.get("section_summary") 
+                    or summary_data.get("tóm_tắt_phần") 
+                    or summary_data.get("summary") 
+                    or str(summary_data)
+                )
+                key_points = summary_data.get("key_points") or summary_data.get("điểm_chính") or []
+                if key_points:
+                    chunk_summary_text += "\n" + "\n".join([f"• {p}" for p in key_points])
+                
+                topics = summary_data.get("topics") or summary_data.get("chủ_đề") or []
+                if topics:
+                    chunk_summary_text += "\n\n**Topics:** " + ", ".join(topics)
+
+                chunk_summaries.append(chunk_summary_text)
+            else:
+                logger.warning(f"Chunk {i+1} failed to produce structured summary, using raw text")
+                chunk_summaries.append(result.text[:1000] + "...")
+
+        # Step 2: Reduce Phase - Combine chunk summaries and generate final summary
+        combined_summaries = "\n\n".join([f"**Phần {i+1}:**\n{s}" for i, s in enumerate(chunk_summaries)])
+        logger.info("Executing reduce phase on combined chunk summaries")
+        
+        if redis_conn and task_key:
+            from src.worker.pipeline import _update_status, TaskStatus
+            _update_status(
+                redis_conn, 
+                task_key, 
+                TaskStatus.PROCESSING_LLM, 
+                {"progress_detail": "Đang tổng hợp kết quả cuối cùng"}
+            )
+
+        # Final call uses the ORIGINAL template to produce the final structured output
+        final_result = self.execute(combined_summaries, task="summary", template_id=template_id, **kwargs)
+        
+        # Add chunking metadata
+        if final_result.metadata:
+            final_result.metadata["chunked_processing"] = True
+            final_result.metadata["chunk_count"] = len(chunks)
+            
+        return {
+            "summary": final_result.metadata.get("structured_summary") if final_result.metadata else None,
+            "metadata": final_result.metadata,
+            "model_info": final_result.model_info
+        }
+
     def unload(self) -> None:
         """
         Unload the LLM model and release GPU memory.
@@ -1601,18 +2066,9 @@ class LLMProcessor(LLMBackend):
         Returns:
             Dictionary containing comprehensive version metadata
         """
-        # Determine structured outputs backend from settings, respecting enable flag.
-        # This is metadata only; actual backend selection is controlled by vLLM's
-        # structured outputs configuration (see vLLM docs).
-        try:
-            structured_backend = (
-                settings.llm_sum.structured_outputs_backend
-                if settings.llm_sum.structured_outputs_enabled
-                else "none"
-            )
-        except Exception:
-            # Fallback for legacy or partially-mocked settings
-            structured_backend = "none"
+        structured_status = (
+            "enabled" if settings.llm_sum.structured_outputs_enabled else "disabled"
+        )
 
         return {
             "name": (
@@ -1625,7 +2081,7 @@ class LLMProcessor(LLMBackend):
             "thinking": False,
             "reasoning_parser": None,
             "structured_output": {
-                "backend": structured_backend,
+                "status": structured_status,
                 "schema_id": self.current_template_id or "none",
                 "schema_hash": self.current_schema_hash or "none",
             },

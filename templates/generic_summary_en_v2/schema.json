@@ -1,19 +1,25 @@
 {
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Generic Summary (English)",
+  "description": "Structured summary format for English content with title, summary, key topics, and tags.",
   "type": "object",
   "properties": {
     "title": {
       "type": "string",
       "description": "A concise, appropriate title that captures the essence of the content",
+      "x-display-label": "Title",
       "maxLength": 200
     },
     "summary": {
       "type": "string",
       "description": "Comprehensive summary of the content",
+      "x-display-label": "Summary",
       "maxLength": 2000
     },
     "key_topics": {
       "type": "array",
       "description": "Key themes or topics identified in the content",
+      "x-display-label": "Key Topics",
       "items": {
         "type": "string",
         "maxLength": 200
@@ -24,6 +30,7 @@
     "tags": {
       "type": "array",
       "description": "Category tags for content classification (FR-6)",
+      "x-display-label": "Tags",
       "items": {
         "type": "string",
         "maxLength": 50

@@ -146,7 +146,7 @@ def sanitize_text(text: str, *, preserve_newlines: bool = False) -> str:
     text = re.sub(r"javascript:", "", text, flags=re.IGNORECASE)
 
     # Normalize unicode characters
-    text = unicodedata.normalize("NFKD", text)
+    text = unicodedata.normalize("NFC", text)
 
     # Remove or replace problematic characters
     if not preserve_newlines:

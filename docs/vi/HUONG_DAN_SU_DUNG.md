@@ -237,7 +237,9 @@ Kiểm tra trạng thái xử lý của tác vụ đã gửi trước đó. Tr�
 
 - `PENDING` - Tác vụ được xếp hàng, đang chờ xử lý
 - `PREPROCESSING` - Tiền xử lý âm thanh đang diễn ra
+- `PROCESSING_VAD` - Phát hiện đoạn có giọng nói đang chạy
 - `PROCESSING_ASR` - Chuyển đổi ASR đang chạy
+- `PROCESSING_DIARIZATION` - Phân tách người nói đang chạy
 - `PROCESSING_LLM` - Xử lý LLM (tóm tắt/tăng cường) đang chạy
 - `COMPLETE` - Xử lý hoàn thành thành công
 - `FAILED` - Xử lý thất bại với lỗi

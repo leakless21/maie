@@ -1,0 +1,78 @@
+{# Map-Reduce Intermediate Notes Template v1 - English Prompt #}
+{% extends "base/structured_output_v1.jinja" %}
+
+{% block role_definition %}
+You are an expert content analyst. Your task is to provide a **concise summary** of a specific section of a longer text. This is an intermediate step in a Map-Reduce summarization process—you only need to extract the core ideas, not create a full title or tags.
+{% endblock %}
+
+{% block specific_guidelines %}
+**Specific Guidelines:**
+- This is ONE PART of a larger document, not the whole thing.
+- Focus on **retaining critical information** that will be useful for a final synthesis later.
+- **Summary**: Provide a detailed summary of this section in 5-10 sentences (approx. 150-250 words).
+- **Key Points**: List 8-15 most important points, including specific facts, figures, and decisions.
+- **Topics**: Provide 5-10 main keywords or topics.
+- **Tags**: Provide 3-5 concise tags summarizing the main themes of this section.
+- **Language**: You MUST generate the output in the **SAME LANGUAGE** as the input text. If the input is in Vietnamese, the summary and points must be in Vietnamese. If the input is in English, use English.
+
+**Important Notes:**
+- DO NOT add information not present in the source text.
+- DO NOT provide a global conclusion (as this is only one part).
+- Prioritize specific details: figures, names, events, decisions.
+{% endblock %}
+
+{% block examples %}
+1. **Example - Middle of a meeting (Input: Vietnamese)**:
+   - **Input**: "Về dự án website mới, team dev đã hoàn thành 70% backend, còn frontend đang gặp khó khăn với responsive design. Deadline là cuối tháng 3. Cần thêm 2 frontend developer để đảm bảo tiến độ. Chi phí dự kiến tăng 15% so với budget ban đầu. Chúng ta cũng cần xem lại SEO strategy vì traffic giảm 20% tháng qua. Anh Bình đề xuất dùng Next.js cho frontend để tối ưu tốc độ."
+   - **Output**:
+     ```json
+     {
+       "section_summary": "Cập nhật tiến độ dự án website: backend hoàn thành 70%, frontend gặp khó khăn về responsive design. Team đề xuất bổ sung 2 developer và sử dụng Next.js để tối ưu tốc độ. Ngân sách dự kiến tăng 15%. Ngoài ra, cần điều chỉnh chiến lược SEO do lưu lượng truy cập giảm 20% trong tháng qua.",
+       "key_points": [
+         "Backend đã hoàn thành 70% khối lượng công việc",
+         "Frontend đang gặp trở ngại với thiết kế responsive",
+         "Thời hạn hoàn thành dự án (deadline) là cuối tháng 3",
+         "Cần tuyển thêm 2 frontend developer để kịp tiến độ",
+         "Chi phí dự kiến tăng 15% so với ngân sách ban đầu",
+         "Lưu lượng truy cập (traffic) giảm 20% trong tháng gần nhất",
+         "Cần đánh giá và điều chỉnh lại chiến lược SEO",
+         "Đề xuất sử dụng framework Next.js cho phần frontend",
+         "Mục tiêu của việc dùng Next.js là để tối ưu hóa tốc độ tải trang"
+       ],
+       "topics": ["dự án website", "tiến độ", "nhân lực", "ngân sách", "SEO", "Next.js", "responsive design"],
+       "tags": ["website", "frontend", "budget", "SEO", "Next.js"]
+     }
+     ```
+
+2. **Example - End of a discussion (Input: English)**:
+   - **Input**: "To wrap up, we've agreed to implement Option B in Q2. Nam will handle marketing, and Hoa will manage logistics. Next meeting is next Friday. We also discussed the feedback from the pilot program. 85% of users found the new interface intuitive, but 10% reported slow loading times on mobile. We need to address the performance issues before the full rollout. The budget for the marketing campaign is set at $50,000."
+   - **Output**:
+     ```json
+     {
+       "section_summary": "The team decided to implement Option B starting in Q2, with Nam and Hoa leading marketing and logistics respectively. Pilot program feedback was largely positive with an 85% intuition rate, though 10% of users noted mobile performance issues. These technical hurdles must be resolved before the official launch. The marketing budget has been finalized at $50,000, and a follow-up meeting is scheduled for next Friday.",
+       "key_points": [
+         "Agreement to proceed with Option B in the second quarter",
+         "Nam assigned to lead the marketing efforts",
+         "Hoa assigned to oversee logistics and operations",
+         "Next synchronization meeting scheduled for next Friday",
+         "Pilot program results show 85% user satisfaction with the UI",
+         "10% of pilot users experienced slow loading times on mobile devices",
+         "Performance optimization is a prerequisite for the full rollout",
+         "Marketing campaign budget officially set at $50,000",
+         "Focus on resolving technical debt before Q2 launch"
+       ],
+       "topics": ["decision", "assignments", "implementation", "pilot feedback", "UI/UX", "performance", "budget", "marketing"],
+       "tags": ["Q2 launch", "marketing", "pilot feedback", "performance", "budget"]
+     }
+     ```
+{% endblock %}
+
+{# --- INPUT DATA --- #}
+**This is PART {{ chunk_index | default(1) }} of {{ total_chunks | default('?') }} parts of the original text.**
+
+**Section Content:**
+{{ input_text }}
+
+**JSON Output:**
+
+```

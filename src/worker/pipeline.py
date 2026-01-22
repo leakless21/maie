@@ -259,11 +259,9 @@ def get_version_metadata(
         }
 
     version_metadata: Dict[str, Any] = {
-        # API schema key
+        # English keys for ASCII-safe storage
         "pipeline_version": settings.pipeline_version,
-        # Standardized ASR backend information
         "asr_backend": asr_backend,
-        # LLM block may be None per tests
         "llm": llm_block,
     }
 
@@ -278,10 +276,11 @@ def calculate_metrics(
     asr_rtf: float,
     vad_result: Optional[Dict[str, Any]] = None,
     asr_confidence_avg: Optional[float] = None,
+    llm_metadata: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
     Calculate runtime metrics for the processing per MetricsSchema and FR-5.
-    
+
     asr_confidence_avg is None if the ASR backend does not support confidence scores.
     """
     total_processing_time = time.time() - start_time
@@ -302,7 +301,7 @@ def calculate_metrics(
     except Exception:
         transcription_length = 0
 
-    # API schema compatible fields
+    # English keys for ASCII-safe storage
     metrics: Dict[str, Any] = {
         "input_duration_seconds": audio_duration,
         "processing_time_seconds": total_processing_time,
@@ -324,6 +323,12 @@ def calculate_metrics(
         edit_rate = _calculate_edit_rate(original_text, enhanced_text)
         metrics["edit_rate_cleaning"] = edit_rate
 
+    # Add chunking metadata if available
+    if llm_metadata:
+        if llm_metadata.get("chunked_processing"):
+            metrics["chunked_processing"] = True
+            metrics["chunk_count"] = llm_metadata.get("chunk_count")
+
     return metrics
 
 
@@ -334,10 +339,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     Follows the sequential processing pattern per TDD.md section 3.2:
     1. Redis Connection (DB 1 for results)
     2. Status: PREPROCESSING - Audio validation & normalization
-    3. Status: PROCESSING_ASR - Load → Transcribe → Unload → Clear GPU
-    4. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
-    5. Collect versions and metrics
-    6. Status: COMPLETE - Store final results
+    3. Status: PROCESSING_VAD - Voice activity detection (optional)
+    4. Status: PROCESSING_ASR - Load → Transcribe → Unload → Clear GPU
+    5. Status: PROCESSING_DIARIZATION - Speaker attribution (optional)
+    6. Status: PROCESSING_LLM - Load → Enhance/Summarize → Unload → Clear GPU
+    7. Collect versions and metrics
+    8. Status: COMPLETE - Store final results
 
     Args:
         task_params: Dictionary containing task parameters including:
@@ -371,7 +378,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     template_id = task_params.get("template_id")
     config = task_params.get("config", {})
     enable_diarization = task_params.get("enable_diarization", False)
-    
+
     # VAD parameters (can override system defaults)
     enable_vad_override = task_params.get("enable_vad")
     vad_threshold_override = task_params.get("vad_threshold")
@@ -394,6 +401,7 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     processing_audio_path = audio_path  # Path to use for ASR (normalized or raw)
     version_metadata: Optional[Dict[str, Any]] = None
     vad_result: Optional[Dict[str, Any]] = None  # Track VAD processing results
+    enhanced_result: Optional[Dict[str, Any]] = None  # Track enhancement results
 
     try:
         # =====================================================================
@@ -667,9 +675,15 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         # =====================================================================
         try:
             # Use request-level override if provided, otherwise use system settings
-            vad_enabled = enable_vad_override if enable_vad_override is not None else settings.vad.enabled
-            
+            vad_enabled = (
+                enable_vad_override
+                if enable_vad_override is not None
+                else settings.vad.enabled
+            )
+
             if vad_enabled:
+                if redis_conn:
+                    _update_status(redis_conn, task_key, TaskStatus.PROCESSING_VAD)
                 logger.info(
                     "Starting VAD processing",
                     task_id=job_id,
@@ -685,7 +699,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     enabled=True,
                     backend=settings.vad.backend,
                     silero_model_path=settings.vad.silero_model_path,
-                    silero_threshold=vad_threshold_override if vad_threshold_override is not None else settings.vad.silero_threshold,
+                    silero_threshold=vad_threshold_override
+                    if vad_threshold_override is not None
+                    else settings.vad.silero_threshold,
                     silero_sampling_rate=settings.vad.silero_sampling_rate,
                     min_speech_duration_ms=settings.vad.min_speech_duration_ms,
                     max_speech_duration_ms=settings.vad.max_speech_duration_ms,
@@ -709,8 +725,12 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                             "speech_ratio": vad_result_obj.speech_ratio,
                             "non_speech_duration": vad_result_obj.non_speech_duration(),
                             "num_segments": len(vad_result_obj.segments),
-                            "num_speech_segments": len(vad_result_obj.get_speech_segments()),
-                            "num_silence_segments": len(vad_result_obj.get_silence_segments()),
+                            "num_speech_segments": len(
+                                vad_result_obj.get_speech_segments()
+                            ),
+                            "num_silence_segments": len(
+                                vad_result_obj.get_silence_segments()
+                            ),
                             "processing_time": vad_result_obj.processing_time,
                             "backend_info": vad_result_obj.backend_info,
                         }
@@ -927,7 +947,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         torch.cuda.empty_cache()
                         alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
                         reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
-                        logger.info("VAD unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
+                        logger.info(
+                            "VAD unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB",
+                            alloc_before,
+                            alloc_after,
+                            reserved_before,
+                            reserved_after,
+                        )
                     else:
                         logger.info("VAD model unloaded")
                 except (AttributeError, RuntimeError, OSError) as e:
@@ -952,7 +978,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         torch.cuda.empty_cache()
                         alloc_after = torch.cuda.memory_allocated(0) / (1024**3)
                         reserved_after = torch.cuda.memory_reserved(0) / (1024**3)
-                        logger.info("ASR unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB", alloc_before, alloc_after, reserved_before, reserved_after)
+                        logger.info(
+                            "ASR unload GPU mem: alloc {:.2f}GB→{:.2f}GB, reserved {:.2f}GB→{:.2f}GB",
+                            alloc_before,
+                            alloc_after,
+                            reserved_before,
+                            reserved_after,
+                        )
                     else:
                         logger.info("ASR model unloaded")
                 except (AttributeError, RuntimeError, OSError) as e:
@@ -970,6 +1002,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         try:
             # Apply diarization if enabled globally AND requested for this task
             if settings.diarization.enabled and enable_diarization:
+                if redis_conn:
+                    _update_status(
+                        redis_conn, task_key, TaskStatus.PROCESSING_DIARIZATION
+                    )
                 logger.info("Starting speaker diarization")
                 try:
                     from src.processors.audio.diarizer import get_diarizer
@@ -1372,7 +1408,10 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                     summary_result = llm_model.generate_summary(
-                        transcript=clean_transcript, template_id=template_id
+                        transcript=clean_transcript, 
+                        template_id=template_id,
+                        redis_conn=redis_conn,
+                        task_key=task_key
                     )
                     if summary_result.get("summary"):
                         structured_summary = summary_result["summary"]
@@ -1474,36 +1513,51 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
             asr_rtf,
             vad_result,
             asr_confidence_avg=confidence,
+            llm_metadata=summary_result.get("metadata") if "summary" in features and summary_result else None,
         )
 
         # Collect version metadata if not already resolved
         if version_metadata is None:
             version_metadata = get_version_metadata(asr_metadata, None)
 
-        # Prepare result - only include requested features
-        result = {"versions": version_metadata, "metrics": metrics, "results": {}}
-
-        # Include requested features in results per ResultsSchema
-        # Always include legacy 'transcript' key for compatibility
-        result["results"]["transcript"] = transcription
-        if "raw_transcript" in features:
-            result["results"]["raw_transcript"] = transcription
-
-        if "clean_transcript" in features:
-            result["results"]["clean_transcript"] = clean_transcript or transcription
+        # Prepare result - important fields first, transcripts/metrics later
+        results_payload: Dict[str, Any] = {}
 
         if "summary" in features and structured_summary:
-            result["results"]["summary"] = structured_summary
+            results_payload["summary"] = structured_summary
+        elif "clean_transcript" in features and enhanced_result:
+            # If no explicit summary but we have enhancement metadata, use it as summary
+            # so the web app can display universal fields (title, tags, etc.)
+            universal_fields = ["title", "tags", "quality_score", "language"]
+            extracted_meta = {
+                k: enhanced_result[k] for k in universal_fields if k in enhanced_result
+            }
+            if extracted_meta:
+                results_payload["summary"] = extracted_meta
 
-        # Phase 1: Include ASR segments for future use (timestamps, confidence per segment)
-        # This preserves rich ASR data without breaking existing API consumers
+        if "clean_transcript" in features:
+            results_payload["clean_transcript"] = clean_transcript or transcription
+
+        if "raw_transcript" in features:
+            results_payload["raw_transcript"] = transcription
+
+        # Legacy transcript for compatibility; keep near bottom
+        results_payload["transcript"] = transcription
+
         if asr_result.segments:
-            result["results"]["segments"] = asr_result.segments
+            results_payload["segments"] = asr_result.segments
             logger.debug(
                 "ASR segments preserved in results",
                 task_id=job_id,
                 segment_count=len(asr_result.segments),
             )
+
+        # Assemble final result with results first, metrics last
+        result = {
+            "results": results_payload,
+            "versions": version_metadata,
+            "metrics": metrics,
+        }
 
         # Update status to COMPLETE and store final results
         if redis_conn:
@@ -1513,9 +1567,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 TaskStatus.COMPLETE,
                 {
                     "completed_at": datetime.now(timezone.utc).isoformat(),
+                    "results": result["results"],
                     "versions": version_metadata,
                     "metrics": metrics,
-                    "results": result["results"],
                 },
             )
 
@@ -1709,26 +1763,27 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         "error": {"message": "Unexpected error path taken"},
     }
 
+
 def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     """
     Pipeline function for text-only processing (summary/enhancement).
-    
+
     Skips audio preprocessing and ASR stages, directly invoking the LLM.
-    
+
     Args:
         task_params: Dictionary containing:
             - text: Input text to process
             - features: List of features (summary, clean_transcript)
             - template_id: Template ID for summary
             - redis_host, redis_port, redis_db: Redis connection params
-            
+
     Returns:
         Dictionary containing processing results
     """
     job = get_current_job()
     job_id = job.id if job else "unknown"
     task_key = f"task:{job_id}"
-    
+
     # Bind correlation ID
     _cid = task_params.get("correlation_id")
     if _cid:
@@ -1741,7 +1796,7 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     text = task_params.get("text", "")
     features = task_params.get("features", ["summary"])
     template_id = task_params.get("template_id")
-    
+
     # Connect to Redis results DB
     redis_host = task_params.get("redis_host", "localhost")
     redis_port = task_params.get("redis_port", 6379)
@@ -1751,32 +1806,33 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
         if job
         else None
     )
-    
+
     start_time = time.time()
     llm_model = None
     version_metadata: Optional[Dict[str, Any]] = None
-    
+    enhanced_result = None  # Track enhancement results for metrics
+
     try:
         logger.info(
             "Starting text processing",
             task_id=job_id,
             text_length=len(text),
-            features=features
+            features=features,
         )
-        
+
         if redis_conn:
             _update_status(redis_conn, task_key, TaskStatus.PROCESSING_LLM)
-            
+
         # Validate input
         if not text or not isinstance(text, str) or not text.strip():
-             raise LLMProcessingError(
+            raise LLMProcessingError(
                 message="Input text is empty or invalid",
-                details={"text_length": len(text) if text else 0}
-             )
+                details={"text_length": len(text) if text else 0},
+            )
 
         # Load LLM
         logger.info("Loading LLM model", task_id=job_id)
-        
+
         # Clear GPU cache if local vLLM
         if (
             TORCH_AVAILABLE
@@ -1789,15 +1845,16 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                 torch.cuda.synchronize()
             except Exception:
                 pass
-                
+
         from src.processors.llm import LLMProcessor
+
         llm_model = LLMProcessor()
         llm_model._load_model()
-        
+
         # Process features
         clean_transcript = text
         structured_summary = None
-        
+
         # Enhancement
         if "clean_transcript" in features:
             try:
@@ -1806,65 +1863,94 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     clean_transcript = enhanced_result["enhanced_text"]
                 logger.info("Text enhancement complete", task_id=job_id)
             except Exception as e:
-                logger.warning("Text enhancement failed, using original text", error=str(e))
-                
+                logger.warning(
+                    "Text enhancement failed, using original text", error=str(e)
+                )
+
         # Summary
         if "summary" in features:
             if not template_id:
                 raise LLMProcessingError("template_id required for summary")
-                
+
             try:
                 summary_result = llm_model.generate_summary(
                     transcript=clean_transcript, 
-                    template_id=template_id
+                    template_id=template_id,
+                    redis_conn=redis_conn,
+                    task_key=task_key
                 )
                 if summary_result.get("summary"):
                     structured_summary = summary_result["summary"]
                 else:
-                    raise LLMProcessingError(f"Summary generation failed: {summary_result.get('error')}")
+                    raise LLMProcessingError(
+                        f"Summary generation failed: {summary_result.get('error')}"
+                    )
             except Exception as e:
                 logger.error("Summary generation failed", error=str(e))
                 raise LLMProcessingError(f"Summary generation failed: {str(e)}")
-        
+
         # Collect metadata
         try:
             # Create dummy ASR metadata for compatibility
             asr_metadata = {
                 "name": "text_input",
                 "model_variant": "none",
-                "model_path": "none", 
+                "model_path": "none",
                 "checkpoint_hash": "none",
                 "compute_type": "none",
-                "decoding_params": {}
+                "decoding_params": {},
             }
             version_metadata = get_version_metadata(asr_metadata, llm_model)
         except Exception:
             version_metadata = None
-            
+
         # Calculate metrics
         processing_time = time.time() - start_time
         metrics = {
-            "input_duration_seconds": 0.0, # Text input has no duration
+            "input_duration_seconds": 0.0,  # Text input has no duration
             "processing_time_seconds": processing_time,
             "rtf": 0.0,
             "vad_coverage": 0.0,
             "asr_confidence_avg": 1.0,
-            "transcription_length": len(text)
+            "transcription_length": len(text),
         }
-        
+
+        # Add chunking metadata if available
+        if summary_result and summary_result.get("metadata"):
+            llm_meta = summary_result["metadata"]
+            if llm_meta.get("chunked_processing"):
+                metrics["chunked_processing"] = True
+                metrics["chunk_count"] = llm_meta.get("chunk_count")
+
+        # Add enhancement metrics if available
+        if "enhancement_metrics" in features and enhanced_result is not None:
+            edit_rate = enhanced_result.get("edit_rate", 0.0)
+            metrics["edit_rate_cleaning"] = edit_rate
+
         # Prepare results
+        results_payload = {"clean_transcript": clean_transcript}
+
+        # If no explicit summary but we have enhancement metadata, use it as summary
+        # so the web app can display universal fields (title, tags, etc.)
+        if not structured_summary and enhanced_result:
+            # Extract universal fields if any are present
+            universal_fields = ["title", "tags", "quality_score", "language"]
+            extracted_meta = {
+                k: enhanced_result[k] for k in universal_fields if k in enhanced_result
+            }
+            if extracted_meta:
+                structured_summary = extracted_meta
+
+        if structured_summary:
+            results_payload["summary"] = structured_summary
+        results_payload["raw_transcript"] = text
+
         result = {
             "versions": version_metadata,
             "metrics": metrics,
-            "results": {
-                "raw_transcript": text,
-                "clean_transcript": clean_transcript
-            }
+            "results": results_payload,
         }
-        
-        if structured_summary:
-            result["results"]["summary"] = structured_summary
-            
+
         # Update status to COMPLETE
         if redis_conn:
             _update_status(
@@ -1875,41 +1961,37 @@ def process_text_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     "completed_at": datetime.now(timezone.utc).isoformat(),
                     "versions": version_metadata,
                     "metrics": metrics,
-                    "results": result["results"]
-                }
+                    "results": result["results"],
+                },
             )
-            
+
         logger.info("Text processing completed successfully", task_id=job_id)
-        
+
         try:
             clear_correlation_id()
         except Exception:
             pass
-            
+
         return result
 
     except Exception as e:
         logger.error(f"Text processing failed: {e}", task_id=job_id)
-        
+
         if redis_conn:
             error_details = {
                 "status": TaskStatus.FAILED.value,
                 "error": str(e),
                 "stage": "text_processing",
-                "updated_at": datetime.now(timezone.utc).isoformat()
+                "updated_at": datetime.now(timezone.utc).isoformat(),
             }
             redis_conn.hset(task_key, mapping=error_details)
-            
+
         try:
             clear_correlation_id()
         except Exception:
             pass
-            
-        return {
-            "status": "error",
-            "error": {"message": str(e)},
-            "task_id": job_id
-        }
+
+        return {"status": "error", "error": {"message": str(e)}, "task_id": job_id}
     finally:
         # Unload LLM
         if llm_model:

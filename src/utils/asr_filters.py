@@ -122,6 +122,16 @@ class HallucinationFilter:
                         for regex in patterns.get("regex", []):
                             self._regex_patterns.append(re.compile(regex, re.IGNORECASE))
 
+                    # Load root-level patterns (if any, e.g. llm_hallucinations.json format)
+                    if "exact" in data and isinstance(data["exact"], list):
+                        self._hallucination_patterns.update(
+                            p.lower() for p in data["exact"] if isinstance(p, str)
+                        )
+                    if "regex" in data and isinstance(data["regex"], list):
+                        for regex in data["regex"]:
+                            if isinstance(regex, str):
+                                self._regex_patterns.append(re.compile(regex, re.IGNORECASE))
+
                     logger.info(
                         "Loaded hallucination patterns from file",
                         file=str(pattern_path),

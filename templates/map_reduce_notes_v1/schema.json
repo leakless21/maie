@@ -1,0 +1,39 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "section_summary": {
+      "type": "string",
+      "description": "A concise summary of this section's content, focusing on the main points."
+    },
+    "key_points": {
+      "type": "array",
+      "description": "8-15 most important key points from this section",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 15
+    },
+    "topics": {
+      "type": "array",
+      "description": "5-10 main topics or keywords for this section",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 10
+    },
+    "tags": {
+      "type": "array",
+      "description": "3-5 concise tags summarizing this section",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "maxItems": 10
+    }
+  },
+  "required": ["section_summary", "key_points", "topics", "tags"],
+  "additionalProperties": false
+}
