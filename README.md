@@ -378,7 +378,27 @@ docker run --gpus all -p 8001:8001 vllm/vllm-openai:latest \
   --port 8001
 ```
 
-For detailed configuration, see [docs/LLM_BACKEND_CONFIGURATION.md](docs/LLM_BACKEND_CONFIGURATION.md).
+**Ollama (Recommended for Edge/Jetson):**
+
+Ollama provides a lightweight alternative, especially useful on edge devices:
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.ai/install.sh | sh
+
+# Start and configure for MAIE
+./scripts/start-ollama.sh
+
+# Configure MAIE to use Ollama
+export APP_LLM_BACKEND=vllm_server
+export APP_LLM_SERVER__ENHANCE_BASE_URL=http://localhost:11434/v1
+export APP_LLM_SERVER__ENHANCE_MODEL_NAME=ministral-3:3b
+export APP_LLM_SUM__STRUCTURED_OUTPUTS_ENABLED=false
+```
+
+For detailed Ollama setup, see [docs/OLLAMA_INTEGRATION.md](docs/OLLAMA_INTEGRATION.md).
+
+For detailed vLLM configuration, see [docs/LLM_BACKEND_CONFIGURATION.md](docs/LLM_BACKEND_CONFIGURATION.md).
 
 ### Performance Tuning
 

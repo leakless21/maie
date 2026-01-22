@@ -1330,7 +1330,9 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                         word_count=input_word_count,
                     )
 
-                    enhanced_result = llm_model.enhance_text(transcription)
+                    enhanced_result = llm_model.enhance_text(
+                        transcription, keep_alive=settings.llm_server.keep_alive
+                    )
                     if enhanced_result.get("enhancement_applied", False):
                         clean_transcript = enhanced_result["enhanced_text"]
                         logger.info(
@@ -1408,10 +1410,11 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
                     )
 
                     summary_result = llm_model.generate_summary(
-                        transcript=clean_transcript, 
+                        transcript=clean_transcript,
                         template_id=template_id,
                         redis_conn=redis_conn,
-                        task_key=task_key
+                        task_key=task_key,
+                        keep_alive=settings.llm_server.keep_alive,
                     )
                     if summary_result.get("summary"):
                         structured_summary = summary_result["summary"]

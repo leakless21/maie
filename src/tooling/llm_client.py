@@ -98,6 +98,10 @@ class VllmServerClient:
             "model": self.model_name or "default",  # Server often requires a model name
         }
 
+        # Support Ollama keep_alive parameter (passed via kwargs)
+        if "keep_alive" in kwargs:
+            payload["keep_alive"] = kwargs["keep_alive"]
+
         if sampling_params:
             # Extract attributes from SamplingParams object
             # We iterate over common OpenAI params and extract them if present

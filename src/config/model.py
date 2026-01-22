@@ -40,6 +40,10 @@ class LlmServerSettings(BaseModel):
 
     # Common settings
     request_timeout_seconds: float = Field(default=300.0)
+    keep_alive: str | int | None = Field(
+        default=None,
+        description="Duration to keep model loaded (e.g. '5m', 0). Specific to Ollama.",
+    )
 
     model_config = ConfigDict(validate_assignment=True)
 

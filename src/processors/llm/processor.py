@@ -901,11 +901,18 @@ class LLMProcessor(LLMBackend):
                 except Exception:
                     base_sampling = None
 
-            if base_sampling is None:
+            # For server mode (Ollama, vLLM server), use a simple dict
+            # For local vLLM mode, create SamplingParams object
+            if settings.llm_backend == LlmBackendType.VLLM_SERVER:
+                # Server mode: pass overrides as dict (compatible with OpenAI API)
+                sampling = overrides
+            elif base_sampling is None:
+                # Local vLLM mode: create SamplingParams object
                 from vllm import SamplingParams
 
                 sampling = SamplingParams(**overrides)
             else:
+                # Local vLLM mode with existing sampling params
                 sampling = apply_overrides_to_sampling(base_sampling, overrides)
 
             # Use chat() API for tasks with messages (summary, enhancement), or generate() for others
