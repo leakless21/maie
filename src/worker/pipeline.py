@@ -25,8 +25,19 @@ except ImportError:
     torch = None  # type: ignore
     TORCH_AVAILABLE = False
 
-from redis import Redis
-from rq import get_current_job
+# Optional redis import (for Jetson edge deployment, may not be needed)
+try:
+    from redis import Redis
+    REDIS_AVAILABLE = True
+except ImportError:
+    Redis = None  # type: ignore
+    REDIS_AVAILABLE = False
+
+# Optional rq import (depends on redis)
+try:
+    from rq import get_current_job
+except ImportError:
+    get_current_job = None  # type: ignore
 
 from src.config.logging import (
     get_module_logger,
@@ -358,7 +369,13 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     Returns:
         Dictionary containing the processing result with versions, metrics, and results
     """
-    job = get_current_job()
+    job = None
+    if get_current_job:
+        try:
+            job = get_current_job()
+        except Exception:
+            # Not running in RQ worker context (e.g., local testing or Jetson edge mode)
+            pass
     job_id = job.id if job else "unknown"
     task_key = f"task:{job_id}"
 
@@ -384,14 +401,23 @@ def process_audio_task(task_params: Dict[str, Any]) -> Dict[str, Any]:
     vad_threshold_override = task_params.get("vad_threshold")
 
     # Connect to Redis results database (DB 1 per TDD.md section 3.6)
-    redis_host = task_params.get("redis_host", "localhost")
-    redis_port = task_params.get("redis_port", 6379)
-    redis_db = task_params.get("redis_db", 1)  # Use DB 1 for results per TDD
-    redis_conn = (
-        Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=False)
-        if job
-        else None
-    )
+    # Redis is optional - for Jetson edge deployment, redis may not be available
+    redis_conn = None
+    if REDIS_AVAILABLE:
+        try:
+            redis_host = task_params.get("redis_host", "localhost")
+            redis_port = task_params.get("redis_port", 6379)
+            redis_db = task_params.get("redis_db", 1)  # Use DB 1 for results per TDD
+            redis_conn = (
+                Redis(host=redis_host, port=redis_port, db=redis_db, decode_responses=False)
+                if job
+                else None
+            )
+        except Exception as e:
+            logger.warning(f"Failed to connect to Redis: {e}. Continuing without Redis.")
+            redis_conn = None
+    else:
+        logger.debug("Redis not available, continuing without task status tracking")
 
     start_time = time.time()
     asr_model = None  # Track loaded ASR model for cleanup
